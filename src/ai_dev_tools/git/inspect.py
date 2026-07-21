@@ -9,6 +9,8 @@ from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.security.secrets import scan_paths_for_secrets
 from ai_dev_tools.utils.subprocess import run_command
 
+CONFLICT_CODES = {"UU", "AA", "DD", "AU", "UA", "DU", "UD"}
+
 
 def inspect_git(project_root: Path, detailed: bool = False) -> Report:
     settings = load_settings(project_root)
@@ -20,18 +22,29 @@ def inspect_git(project_root: Path, detailed: bool = False) -> Report:
         report.status = "warning"
         report.summary = {"state": "NOT_A_GIT_REPOSITORY"}
         return report
+
     branch = _text(["git", "branch", "--show-current"], settings.project_root) or None
-    upstream = (
-        _text(
-            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-            settings.project_root,
-        )
-        or None
-    )
+    upstream = _upstream(settings.project_root)
     porcelain = _text(["git", "status", "--porcelain=v1", "--branch"], settings.project_root)
-    states = _states(porcelain, upstream, branch is None)
     ahead_count, behind_count = _ahead_behind_counts(porcelain)
-    changed = _changed_files(porcelain)
+    staged_entries = _name_status(
+        ["git", "diff", "--cached", "--name-status", "-z"], settings.project_root
+    )
+    unstaged_entries = _name_status(["git", "diff", "--name-status", "-z"], settings.project_root)
+    untracked_files = _nul_output(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"], settings.project_root
+    )
+    conflicted_files = _conflicted_files(porcelain)
+    staged_files = _entry_paths(staged_entries)
+    unstaged_files = _entry_paths(unstaged_entries)
+    changed = sorted({*staged_files, *unstaged_files, *untracked_files, *conflicted_files})
+    states = _states(
+        porcelain=porcelain,
+        upstream=upstream,
+        detached=branch is None,
+        has_changes=bool(changed),
+        has_conflicts=bool(conflicted_files),
+    )
     summary: dict[str, object] = {
         "state": states[0],
         "states": states,
@@ -42,14 +55,20 @@ def inspect_git(project_root: Path, detailed: bool = False) -> Report:
         "diverged": ahead_count > 0 and behind_count > 0,
         "detached_head": branch is None,
         "changed_files": changed,
-        "staged_files": [
-            item[3:] for item in porcelain.splitlines() if item and item[0] not in {" ", "?", "#"}
+        "staged_files": staged_files,
+        "unstaged_files": unstaged_files,
+        "untracked_files": untracked_files,
+        "conflicted_files": conflicted_files,
+        "conflicts": conflicted_files,
+        "renamed_files": [
+            entry
+            for entry in [*staged_entries, *unstaged_entries]
+            if entry["status"].startswith("R")
         ],
-        "untracked_files": [item[3:] for item in porcelain.splitlines() if item.startswith("?? ")],
-        "conflicts": [
-            item[3:]
-            for item in porcelain.splitlines()
-            if item[:2] in {"UU", "AA", "DD", "AU", "UA", "DU", "UD"}
+        "deleted_files": [
+            entry["path"]
+            for entry in [*staged_entries, *unstaged_entries]
+            if entry["status"].startswith("D")
         ],
         "stash_count": len(
             [
@@ -60,21 +79,28 @@ def inspect_git(project_root: Path, detailed: bool = False) -> Report:
         ),
     }
     if detailed:
+        upstream_diff_bytes = (
+            _diff_bytes(settings.project_root, ["git", "diff", upstream + "...HEAD"])
+            if upstream
+            else 0
+        )
+        scan_paths = [settings.project_root / item for item in changed]
         summary.update(
             {
                 "recent_commits": _text(
                     ["git", "log", "--oneline", "-5"], settings.project_root
                 ).splitlines(),
                 "diff_stat": _text(["git", "diff", "--stat"], settings.project_root),
-                "diff_size_bytes": len(
-                    _text(["git", "diff"], settings.project_root).encode("utf-8")
+                "diff_size_bytes": _diff_bytes(settings.project_root, ["git", "diff"]),
+                "unstaged_diff_bytes": _diff_bytes(settings.project_root, ["git", "diff"]),
+                "staged_diff_bytes": _diff_bytes(
+                    settings.project_root, ["git", "diff", "--cached"]
                 ),
+                "upstream_diff_bytes": upstream_diff_bytes,
                 "large_changed_files": _large_files(settings.project_root, changed),
                 "secret_findings": [
                     finding.masked_dict()
-                    for finding in scan_paths_for_secrets(
-                        settings.project_root, [settings.project_root / p for p in changed]
-                    )
+                    for finding in scan_paths_for_secrets(settings.project_root, scan_paths)
                 ],
             }
         )
@@ -91,9 +117,48 @@ def inspect_git(project_root: Path, detailed: bool = False) -> Report:
     return report
 
 
+def _upstream(root: Path) -> str | None:
+    value = _text(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root)
+    return value or None
+
+
 def _text(command: list[str], root: Path) -> str:
     result = run_command(command, root, 30)
     return result.stdout.strip() if result.exit_code == 0 else ""
+
+
+def _nul_output(command: list[str], root: Path) -> list[str]:
+    result = run_command(command, root, 30)
+    if result.exit_code != 0:
+        return []
+    return [item for item in result.stdout.split("\0") if item]
+
+
+def _name_status(command: list[str], root: Path) -> list[dict[str, str]]:
+    items = _nul_output(command, root)
+    entries: list[dict[str, str]] = []
+    index = 0
+    while index < len(items):
+        status = items[index]
+        index += 1
+        if status.startswith("R") or status.startswith("C"):
+            if index + 1 > len(items):
+                break
+            old_path = items[index]
+            new_path = items[index + 1]
+            index += 2
+            entries.append({"status": status, "path": new_path, "old_path": old_path})
+            continue
+        if index > len(items):
+            break
+        path = items[index]
+        index += 1
+        entries.append({"status": status, "path": path})
+    return entries
+
+
+def _entry_paths(entries: list[dict[str, str]]) -> list[str]:
+    return sorted({entry["path"] for entry in entries})
 
 
 def _ahead_behind_counts(porcelain: str) -> tuple[int, int]:
@@ -103,7 +168,13 @@ def _ahead_behind_counts(porcelain: str) -> tuple[int, int]:
     return (int(ahead.group(1)) if ahead else 0, int(behind.group(1)) if behind else 0)
 
 
-def _states(porcelain: str, upstream: str | None, detached: bool) -> list[str]:
+def _states(
+    porcelain: str,
+    upstream: str | None,
+    detached: bool,
+    has_changes: bool,
+    has_conflicts: bool,
+) -> list[str]:
     states: list[str] = []
     if detached:
         states.append("DETACHED_HEAD")
@@ -116,18 +187,26 @@ def _states(porcelain: str, upstream: str | None, detached: bool) -> list[str]:
         states.append("AHEAD")
     elif behind_count:
         states.append("BEHIND")
-    body = porcelain.splitlines()[1:]
-    if any(line[:2] in {"UU", "AA", "DD", "AU", "UA", "DU", "UD"} for line in body):
+    if has_conflicts:
         states.append("CONFLICT")
-    if body:
+    if has_changes:
         states.append("DIRTY")
     if not states:
         states.append("UP_TO_DATE")
     return states
 
 
-def _changed_files(porcelain: str) -> list[str]:
-    return [line[3:] for line in porcelain.splitlines()[1:] if len(line) > 3]
+def _conflicted_files(porcelain: str) -> list[str]:
+    return sorted(
+        line[3:]
+        for line in porcelain.splitlines()[1:]
+        if len(line) > 3 and line[:2] in CONFLICT_CODES
+    )
+
+
+def _diff_bytes(root: Path, command: list[str]) -> int:
+    result = run_command(command, root, 60)
+    return len(result.stdout.encode("utf-8")) if result.exit_code == 0 else 0
 
 
 def _large_files(root: Path, files: list[str]) -> list[str]:

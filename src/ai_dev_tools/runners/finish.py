@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from ai_dev_tools.config import load_settings
@@ -8,6 +9,8 @@ from ai_dev_tools.models.report import Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.runners.check import run_check
 from ai_dev_tools.security.secrets import scan_paths_for_secrets
+
+UNSAFE_REPO_STATES = {"CONFLICT", "DETACHED_HEAD", "DIVERGED"}
 
 
 def run_finish(project_root: Path) -> Report:
@@ -18,7 +21,8 @@ def run_finish(project_root: Path) -> Report:
     findings = scan_paths_for_secrets(
         settings.project_root, [settings.project_root / path for path in changed]
     )
-    ready = check_report.status != "failed" and not findings
+    blocking_reasons = _blocking_reasons(git_report, check_report, findings, changed)
+    ready = not blocking_reasons
     report = Report(
         command="finish",
         project_root=settings.project_root,
@@ -26,6 +30,7 @@ def run_finish(project_root: Path) -> Report:
     )
     report.summary = {
         "ready_to_commit": ready,
+        "blocking_reasons": blocking_reasons,
         "changed": _classify_changed(changed),
         "validation": {
             "checks": check_report.status,
@@ -41,6 +46,33 @@ def run_finish(project_root: Path) -> Report:
     write_markdown(report, settings.reports_directory / "finish-latest.md")
     write_json(report, settings.reports_directory / "finish-latest.json")
     return report
+
+
+def _blocking_reasons(
+    git_report: Report,
+    check_report: Report,
+    findings: Sequence[object],
+    changed: list[str],
+) -> list[str]:
+    reasons: list[str] = []
+    states = set(str(item) for item in git_report.summary.get("states", []))
+    conflicts = git_report.summary.get("conflicted_files", [])
+    if not changed:
+        reasons.append("no_changes")
+    if conflicts:
+        reasons.append("repository has merge conflicts")
+    for state in sorted(states & UNSAFE_REPO_STATES):
+        if state != "CONFLICT":
+            reasons.append(f"repository state is {state}")
+    if check_report.status == "failed":
+        checks_failed = check_report.summary.get("checks_failed")
+        if isinstance(checks_failed, int) and checks_failed:
+            reasons.append(f"{checks_failed} check(s) failed")
+        else:
+            reasons.append("required checks failed")
+    if findings:
+        reasons.append(f"{len(findings)} potential secret(s) detected")
+    return reasons
 
 
 def _classify_changed(paths: list[str]) -> dict[str, int]:
