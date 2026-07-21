@@ -49,7 +49,7 @@ ai-dev doctor
 ai-dev scan
 ai-dev map
 ai-dev check --mode fast
-ai-dev check --mode changed
+ai-dev check --mode changed  # reports changed files and falls back safely when test mapping is uncertain
 ai-dev check --mode full
 ai-dev test affected
 ai-dev logs summarize
@@ -63,7 +63,7 @@ All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version`
 
 ## Reports and Logs
 
-Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git.
+Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 
 JSON reports use a stable schema with `schema_version`, `tool_version`, `status`, `command`, timestamps, `project_root`, `summary`, `issues`, and `artifacts`.
 

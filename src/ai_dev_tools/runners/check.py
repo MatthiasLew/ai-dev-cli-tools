@@ -14,10 +14,13 @@ from ai_dev_tools.utils.subprocess import CommandResult, run_command, split_comm
 def run_check(project_root: Path, mode: str = "fast") -> Report:
     settings = load_settings(project_root)
     commands = _commands_for_project(settings.project_root, settings.commands, mode)
+    changed_context = _changed_mode_context(settings.project_root) if mode == "changed" else None
     report = Report(command=f"check --mode {mode}", project_root=settings.project_root)
     if not commands:
         report.status = "warning"
         report.summary = {"mode": mode, "message": "No configured checks detected"}
+        if changed_context is not None:
+            report.summary["changed_analysis"] = changed_context
         report.finish()
         _write_check_reports(report, mode)
         return report
@@ -32,9 +35,34 @@ def run_check(project_root: Path, mode: str = "fast") -> Report:
         "exit_codes": [r.exit_code for r in results],
         "results": [_result_summary(result) for result in results],
     }
+    if changed_context is not None:
+        report.summary["changed_analysis"] = changed_context
     report.finish()
     _write_check_reports(report, mode)
     return report
+
+
+def _changed_mode_context(root: Path) -> dict[str, object]:
+    git_status = run_command(["git", "status", "--porcelain=v1"], root, 30)
+    if git_status.exit_code != 0:
+        return {
+            "strategy": "broad_fallback",
+            "confidence": "low",
+            "reason": "Git status is unavailable; running the normal detected check set.",
+            "changed_files": [],
+        }
+    changed_files = [line[3:] for line in git_status.stdout.splitlines() if len(line) > 3]
+    reason = (
+        "Changed files were detected, but no reliable test dependency map is available yet."
+        if changed_files
+        else "No changed files were detected; running the normal detected check set."
+    )
+    return {
+        "strategy": "broad_fallback",
+        "confidence": "medium" if changed_files else "high",
+        "reason": reason,
+        "changed_files": changed_files,
+    }
 
 
 def _commands_for_project(root: Path, configured: dict[str, str], mode: str) -> list[list[str]]:

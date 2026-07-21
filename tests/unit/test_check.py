@@ -31,3 +31,22 @@ def test_check_reports_failure(monkeypatch, tmp_path: Path) -> None:  # type: ig
     report = check.run_check(tmp_path, "fast")
     assert report.status == "failed"
     assert report.summary["results"][0]["first_failure_reason"] == "FAILED test_x"
+
+
+def test_changed_mode_reports_broad_fallback(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / ".ai-dev-tools.toml").write_text("[commands]\ntest='pytest'\n", encoding="utf-8")
+
+    def fake_run(command: list[str], root: Path, timeout_seconds: int = 300) -> CommandResult:
+        if command[:2] == ["git", "status"]:
+            return CommandResult(command, 0, " M src/app.py\n?? tests/test_app.py\n", "", 0.01)
+        return CommandResult(command, 0, "2 passed, 1 skipped in 0.1s", "", 0.01)
+
+    monkeypatch.setattr(check, "run_command", fake_run)
+    report = check.run_check(tmp_path, "changed")
+    changed = report.summary["changed_analysis"]
+    assert changed["strategy"] == "broad_fallback"
+    assert changed["changed_files"] == ["src/app.py", "tests/test_app.py"]
+    result = report.summary["results"][0]
+    assert result["passed"] == 2
+    assert result["skipped"] == 1
+    assert result["tests_total"] == 3
