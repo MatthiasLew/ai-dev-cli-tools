@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections.abc import Callable
+from pathlib import Path
+
+from ai_dev_tools import __version__
+from ai_dev_tools.models.report import Report
+
+CommandHandler = Callable[[Path], Report]
+
+
+EXIT_SUCCESS = 0
+EXIT_FAILED = 1
+EXIT_USAGE = 2
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="ai-dev")
+    parser.add_argument("--version", action="version", version=f"ai-dev {__version__}")
+    parser.add_argument("--project", type=Path, default=Path.cwd(), help="Project directory")
+    parser.add_argument("--json", action="store_true", help="Print JSON instead of text")
+    parser.add_argument("--quiet", action="store_true", help="Only print errors and artifact paths")
+
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ["doctor", "scan", "map", "bootstrap", "run", "stop"]:
+        sub.add_parser(name)
+
+    check = sub.add_parser("check")
+    check.add_argument("--mode", choices=["fast", "changed", "full"], default="fast")
+
+    test = sub.add_parser("test")
+    test_sub = test.add_subparsers(dest="test_command", required=True)
+    test_sub.add_parser("affected")
+
+    logs = sub.add_parser("logs")
+    logs_sub = logs.add_subparsers(dest="logs_command", required=True)
+    logs_sub.add_parser("summarize")
+
+    context = sub.add_parser("context")
+    context_sub = context.add_subparsers(dest="context_command", required=True)
+    context_sub.add_parser("build")
+
+    git = sub.add_parser("git")
+    git_sub = git.add_subparsers(dest="git_command", required=True)
+    git_sub.add_parser("status")
+    git_sub.add_parser("inspect")
+
+    sub.add_parser("finish")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    project_root = args.project.resolve()
+    report = _dispatch(args, project_root).finish()
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    elif not args.quiet:
+        _print_text(report)
+    else:
+        for artifact in report.artifacts:
+            print(artifact.path)
+    return EXIT_SUCCESS if report.status in {"success", "warning"} else EXIT_FAILED
+
+
+def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
+    command = args.command
+    if command in {"bootstrap", "run", "stop"}:
+        report = Report(command=command, project_root=project_root, status="warning")
+        report.summary = {
+            "message": "Command reserved for a future non-destructive implementation."
+        }
+        return report
+    if command == "test" and args.test_command == "affected":
+        command = "check"
+        args.mode = "changed"
+    if command == "logs" and args.logs_command == "summarize":
+        from ai_dev_tools.parsers.logs import summarize_latest_log
+
+        return summarize_latest_log(project_root)
+    if command == "context" and args.context_command == "build":
+        report = Report(command="context build", project_root=project_root, status="warning")
+        report.summary = {
+            "message": "Context building is intentionally deferred after version 0.1.0."
+        }
+        return report
+    if command == "doctor":
+        from ai_dev_tools.detectors.environment import run_doctor
+
+        return run_doctor(project_root)
+    if command == "scan":
+        from ai_dev_tools.detectors.project import scan_project
+
+        return scan_project(project_root)
+    if command == "map":
+        from ai_dev_tools.detectors.repository_map import map_repository
+
+        return map_repository(project_root)
+    if command == "check":
+        from ai_dev_tools.runners.check import run_check
+
+        return run_check(project_root, mode=args.mode)
+    if command == "git":
+        from ai_dev_tools.git.inspect import inspect_git
+
+        return inspect_git(project_root, detailed=args.git_command == "inspect")
+    if command == "finish":
+        from ai_dev_tools.runners.finish import run_finish
+
+        return run_finish(project_root)
+    raise SystemExit(EXIT_USAGE)
+
+
+def _print_text(report: Report) -> None:
+    print(f"STATUS: {report.status.upper()}")
+    print(f"COMMAND: {report.command}")
+    print(f"DURATION: {report.duration_seconds}s")
+    for key, value in report.summary.items():
+        print(f"{key.upper()}: {value}")
+    if report.issues:
+        print("ISSUES:")
+        for issue in report.issues:
+            location = f" [{issue.location}]" if issue.location else ""
+            print(f"- {issue.severity}: {issue.message}{location}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
