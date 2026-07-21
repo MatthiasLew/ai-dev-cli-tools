@@ -26,3 +26,13 @@ def test_subprocess_helpers(tmp_path: Path) -> None:
     result = run_command(["definitely-not-a-real-ai-dev-command"], tmp_path, 1)
     assert result.exit_code == 127
     assert result.combined_output
+
+
+def test_windows_batch_command_wrapper() -> None:
+    from ai_dev_tools.utils.subprocess import _windows_batch_command
+
+    wrapped = _windows_batch_command(["npm.CMD", "--version"])
+    if wrapped[0].lower().endswith("cmd.exe"):
+        assert wrapped[1:3] == ["/d", "/c"]
+    else:
+        assert wrapped == ["npm.CMD", "--version"]

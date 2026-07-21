@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -30,9 +31,10 @@ def split_command(command: str) -> list[str]:
 
 def run_command(command: list[str], cwd: Path, timeout_seconds: int = 300) -> CommandResult:
     started = time.monotonic()
+    executable_command = _windows_batch_command(command)
     try:
         completed = subprocess.run(
-            command,
+            executable_command,
             cwd=cwd,
             text=True,
             encoding="utf-8",
@@ -57,3 +59,15 @@ def run_command(command: list[str], cwd: Path, timeout_seconds: int = 300) -> Co
         return CommandResult(
             command, 124, stdout, stderr, round(time.monotonic() - started, 3), True
         )
+
+
+def _windows_batch_command(command: list[str]) -> list[str]:
+    if os.name != "nt" or not command:
+        return command
+    resolved = shutil.which(command[0]) or command[0]
+    executable = resolved.lower()
+    if executable.endswith((".cmd", ".bat")):
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        executable_command = [resolved, *command[1:]]
+        return [comspec, "/d", "/c", *executable_command]
+    return command
