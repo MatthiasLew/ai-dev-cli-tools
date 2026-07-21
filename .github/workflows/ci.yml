@@ -28,4 +28,13 @@ jobs:
       - run: ai-dev --version
       - run: ai-dev doctor --json
       - run: ai-dev scan --json
+      - run: ai-dev capabilities --json
       - run: ai-dev git inspect --json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-dev-reports-${{ matrix.os }}-${{ matrix.python-version }}
+          path: |
+            .ai/reports
+            .ai/logs
+          if-no-files-found: ignore

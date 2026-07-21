@@ -65,7 +65,7 @@ All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version`
 
 Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 
-JSON reports use a stable schema with `schema_version`, `tool_version`, `status`, `command`, timestamps, `project_root`, `summary`, `issues`, and `artifacts`.
+JSON reports use schema `1.1` with `schema_version`, `tool_version`, `command`, `status`, `exit_code`, timestamps, `project_root`, `summary`, `issues`, `artifacts`, and `metadata`.
 
 ## Auto Detection
 
@@ -100,7 +100,7 @@ directory = ".ai/reports"
 logs_directory = ".ai/logs"
 ```
 
-Configuration takes precedence over auto detection.
+Configuration takes precedence over auto detection. Invalid or unknown configuration is reported through `config_warnings` instead of crashing normal scans.
 
 ## Command Status
 
@@ -110,8 +110,10 @@ Configuration takes precedence over auto detection.
 | scan | implemented |
 | map | implemented |
 | check | implemented |
+| check --explain | implemented |
 | test affected | implemented |
 | logs summarize | implemented |
+| capabilities | implemented |
 | git status | implemented |
 | git inspect | implemented |
 | finish | implemented |
@@ -124,4 +126,4 @@ Planned commands return `NOT_IMPLEMENTED` with a non-zero exit code.
 
 ## Intentional Limits
 
-Version 0.1.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+Version 0.2.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
