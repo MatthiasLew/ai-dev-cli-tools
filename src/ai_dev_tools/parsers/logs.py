@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ai_dev_tools.config import load_settings
 from ai_dev_tools.models.report import Report
+from ai_dev_tools.reporters.writer import write_json, write_markdown
 
 ERROR_MARKERS = ("error", "failed", "failure", "traceback", "assertionerror", "exception")
 TEST_COUNT_PATTERN = re.compile(
@@ -71,10 +72,16 @@ def summarize_latest_log(project_root: Path) -> Report:
             "message": "No logs found",
             "logs_directory": str(settings.logs_directory),
         }
+        report.finish()
+        write_markdown(report, settings.reports_directory / "logs-summary-latest.md")
+        write_json(report, settings.reports_directory / "logs-summary-latest.json")
         return report
     latest = logs[0]
     report.summary = {
         "log": str(latest),
         **summarize_output(latest.read_text(encoding="utf-8", errors="replace")),
     }
+    report.finish()
+    write_markdown(report, settings.reports_directory / "logs-summary-latest.md")
+    write_json(report, settings.reports_directory / "logs-summary-latest.json")
     return report

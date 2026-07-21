@@ -3,7 +3,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from ai_dev_tools.config import load_settings
 from ai_dev_tools.models.report import Report
+from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.utils.subprocess import run_command
 
 TOOLS: tuple[tuple[str, str, list[str]], ...] = (
@@ -27,7 +29,8 @@ TOOLS: tuple[tuple[str, str, list[str]], ...] = (
 
 
 def run_doctor(project_root: Path) -> Report:
-    report = Report(command="doctor", project_root=project_root)
+    settings = load_settings(project_root)
+    report = Report(command="doctor", project_root=settings.project_root)
     tools: dict[str, dict[str, str | bool | None]] = {}
     for name, executable, version_command in TOOLS:
         path = shutil.which(executable)
@@ -40,9 +43,15 @@ def run_doctor(project_root: Path) -> Report:
             if result.combined_output
             else "available"
         )
-        tools[name] = {"status": "ok", "version": version, "path": path, "required": False}
+        status = "ok" if result.exit_code == 0 else "error"
+        tools[name] = {"status": status, "version": version, "path": path, "required": False}
     report.summary = {
         "tools": tools,
         "missing_optional": [k for k, v in tools.items() if v["status"] == "missing"],
+        "errors_optional": [k for k, v in tools.items() if v["status"] == "error"],
     }
+    report.status = "warning" if report.summary["errors_optional"] else "success"
+    report.finish()
+    write_markdown(report, settings.reports_directory / "doctor.md")
+    write_json(report, settings.reports_directory / "doctor.json")
     return report

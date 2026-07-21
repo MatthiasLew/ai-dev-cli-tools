@@ -8,11 +8,13 @@ from ai_dev_tools.utils.subprocess import run_command, split_command
 def test_summarize_latest_log_no_logs_and_with_log(tmp_path: Path) -> None:
     report = summarize_latest_log(tmp_path)
     assert report.status == "warning"
+    assert (tmp_path / ".ai" / "reports" / "logs-summary-latest.json").exists()
     logs = tmp_path / ".ai" / "logs"
     logs.mkdir(parents=True)
     (logs / "x.log").write_text("Error once\n", encoding="utf-8")
     report = summarize_latest_log(tmp_path)
     assert report.summary["first_failure_reason"] == "Error once"
+    assert (tmp_path / ".ai" / "reports" / "logs-summary-latest.md").exists()
 
 
 def test_check_without_detected_commands(tmp_path: Path) -> None:
