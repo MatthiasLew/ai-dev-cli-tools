@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_IGNORES = {
+    ".ai/logs",
+    ".ai/reports",
     ".git",
     ".mypy_cache",
     ".pytest_cache",

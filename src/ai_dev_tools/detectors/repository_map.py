@@ -73,7 +73,9 @@ def map_repository(project_root: Path) -> Report:
         "directories": sorted(dirs)[:200],
         "important_files": sorted(important)[:200],
         "tests": sorted(tests)[:200],
-        "ci_workflows": sorted(p for p in important if p.startswith(".github/workflows/")),
+        "ci_workflows": sorted(
+            p for p in important if p.replace("\\", "/").startswith(".github/workflows/")
+        ),
         "documentation": sorted(docs)[:200],
         "generated_or_lock_files": sorted(generated)[:200],
         "omitted_patterns": sorted(ignores),
@@ -99,9 +101,14 @@ def _gitignore_patterns(root: Path) -> set[str]:
 def _ignored(rel: Path, patterns: set[str]) -> bool:
     parts = set(rel.parts)
     text = rel.as_posix()
+    normalized_patterns = {pattern.replace("\\", "/") for pattern in patterns}
     return any(
-        pattern in parts or fnmatch.fnmatch(text, pattern) or fnmatch.fnmatch(rel.name, pattern)
-        for pattern in patterns
+        pattern in parts
+        or text == pattern
+        or text.startswith(f"{pattern}/")
+        or fnmatch.fnmatch(text, pattern)
+        or fnmatch.fnmatch(rel.name, pattern)
+        for pattern in normalized_patterns
     )
 
 
