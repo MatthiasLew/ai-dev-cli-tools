@@ -15,3 +15,9 @@ def test_scan_detects_python_project(tmp_path: Path) -> None:
     assert "FastAPI" in report.summary["frameworks"]
     assert "DATABASE_URL" in report.summary["env_example_variables"]
     assert (tmp_path / ".ai" / "reports" / "project-scan.json").exists()
+
+
+def test_scan_includes_config_warnings(tmp_path: Path) -> None:
+    (tmp_path / ".ai-dev-tools.toml").write_text("[reports]\ndirectory=123\n", encoding="utf-8")
+    report = scan_project(tmp_path)
+    assert "Config value [reports].directory must be a string" in report.summary["config_warnings"]

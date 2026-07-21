@@ -70,6 +70,7 @@ def scan_project(project_root: Path) -> Report:
         ),
         "env_example_variables": _env_examples(settings.project_root),
         "config_files": sorted(name for name in files if name in SIGNALS or name.startswith(".")),
+        "config_warnings": settings.warnings,
     }
     report.finish()
     write_markdown(report, settings.reports_directory / "project-scan.md")
