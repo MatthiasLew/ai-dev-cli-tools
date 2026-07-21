@@ -124,6 +124,12 @@ Configuration takes precedence over auto detection. Invalid or unknown configura
 
 Planned commands return `NOT_IMPLEMENTED` with a non-zero exit code.
 
+## v0.2 Scope Notes
+
+- Monorepo/workspace detection: experimental.
+- Per-subproject runner isolation: planned for v0.3.0.
+- Runtime version validation: partial.
+- `context build`, `bootstrap`, `run`, `stop`, auto-commit, auto-push, and GUI remain planned or `NOT_IMPLEMENTED`.
 ## Intentional Limits
 
 Version 0.2.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
