@@ -17,9 +17,13 @@ CheckCategory = Literal["format", "lint", "typecheck", "unit_tests", "integratio
 CheckCost = Literal["fast", "medium", "slow"]
 CheckSource = Literal["detected", "configured"]
 ChangedStrategy = Literal[
+    "changed_test_direct",
     "direct_test_match",
-    "package_or_module_match",
+    "module_match",
+    "package_match",
+    "workspace_match",
     "configured_mapping",
+    "configuration_change",
     "broad_fallback",
     "no_changes",
 ]
@@ -51,14 +55,26 @@ class ChangedSelection:
         return asdict(self)
 
 
-def run_check(project_root: Path, mode: str = "fast") -> Report:
+def run_check(project_root: Path, mode: str = "fast", explain: bool = False) -> Report:
     settings = load_settings(project_root)
     plan = build_validation_plan(settings)
     changed_selection = select_changed_checks(settings, plan) if mode == "changed" else None
     tasks = _tasks_for_mode(plan, mode, changed_selection)
-    report = Report(command=f"check --mode {mode}", project_root=settings.project_root)
+    command = f"check --mode {mode}" + (" --explain" if explain else "")
+    report = Report(command=command, project_root=settings.project_root)
+    if explain:
+        report.summary = {
+            "mode": mode,
+            "plan": [task.to_dict() for task in plan],
+            "selected_checks": [task.to_dict() for task in tasks],
+            "changed_analysis": changed_selection.to_dict() if changed_selection else None,
+            "explain_only": True,
+        }
+        report.finish()
+        _write_check_reports(report, f"{mode}-explain")
+        return report
     if not tasks:
-        report.status = "warning"
+        report.status = "partial"
         report.summary = {
             "mode": mode,
             "message": "No configured checks detected",
@@ -170,6 +186,26 @@ def select_changed_checks(settings: Settings, plan: list[CheckTask]) -> ChangedS
     changed_files = collect_changed_files(settings.project_root)
     if not changed_files:
         return ChangedSelection("no_changes", "high", [], [], [], "No changed files detected.")
+    config_reason = _configuration_change_reason(changed_files)
+    if config_reason:
+        return ChangedSelection(
+            "configuration_change",
+            "low",
+            changed_files,
+            [],
+            [],
+            config_reason,
+        )
+    direct_changed_tests = [path for path in changed_files if _is_test_path(Path(path))]
+    if direct_changed_tests:
+        return ChangedSelection(
+            "changed_test_direct",
+            "high",
+            changed_files,
+            sorted(direct_changed_tests),
+            _commands_for_selected_tests(plan, sorted(direct_changed_tests)),
+            None,
+        )
     configured_tests = _configured_changed_tests(settings, changed_files)
     if configured_tests:
         return ChangedSelection(
@@ -236,6 +272,38 @@ def infer_tests_for_changed_files(root: Path, changed_files: list[str]) -> list[
         for importer in _python_importing_tests(root, path):
             selected[importer] = None
     return sorted(selected)
+
+
+def _configuration_change_reason(changed_files: list[str]) -> str | None:
+    broad_files = {
+        "pyproject.toml",
+        "pytest.ini",
+        "tox.ini",
+        "noxfile.py",
+        "package.json",
+        "pnpm-workspace.yaml",
+        "jest.config.js",
+        "jest.config.ts",
+        "vitest.config.js",
+        "vitest.config.ts",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts",
+        "Cargo.toml",
+        "Cargo.lock",
+        "composer.json",
+        "phpunit.xml",
+    }
+    for rel in changed_files:
+        path = Path(rel)
+        normalized = path.as_posix()
+        if path.name == "conftest.py" or "fixtures" in path.parts:
+            return f"Shared test fixture changed: {rel}"
+        if normalized in broad_files or path.name in broad_files:
+            return f"Project or test configuration changed: {rel}"
+    return None
 
 
 def _candidate_tests_for_source(path: Path) -> list[str]:
@@ -355,7 +423,8 @@ def _tasks_for_mode(
             task for task in plan if task.cost == "fast" or task.category in {"lint", "typecheck"}
         ]
         return fast_tasks or [task for task in plan if task.category == "unit_tests"][:1]
-    if changed is None or changed.strategy in {"broad_fallback", "no_changes"}:
+    broad_strategies = {"broad_fallback", "no_changes", "configuration_change"}
+    if changed is None or changed.strategy in broad_strategies:
         return [
             task for task in plan if task.category in {"format", "lint", "typecheck", "unit_tests"}
         ]

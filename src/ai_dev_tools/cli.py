@@ -34,6 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     check = sub.add_parser("check")
     check.add_argument("--mode", choices=["fast", "changed", "full"], default="fast")
+    check.add_argument(
+        "--explain", action="store_true", help="Show selected checks without running them"
+    )
 
     test = sub.add_parser("test")
     test_sub = test.add_subparsers(dest="test_command", required=True)
@@ -41,7 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     logs = sub.add_parser("logs")
     logs_sub = logs.add_subparsers(dest="logs_command", required=True)
-    logs_sub.add_parser("summarize")
+    logs_summary = logs_sub.add_parser("summarize")
+    logs_summary.add_argument("log_path", nargs="?", type=Path)
+    logs_summary.add_argument("--tool", default="auto")
 
     context = sub.add_parser("context")
     context_sub = context.add_subparsers(dest="context_command", required=True)
@@ -52,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     git_sub.add_parser("status")
     git_sub.add_parser("inspect")
 
+    sub.add_parser("capabilities")
     sub.add_parser("finish")
     return parser
 
@@ -68,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         for artifact in report.artifacts:
             print(artifact.path)
-    return EXIT_SUCCESS if report.status in {"success", "warning"} else EXIT_FAILED
+    return EXIT_SUCCESS if report.status in {"success", "warning", "partial"} else EXIT_FAILED
 
 
 def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
@@ -84,8 +90,10 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         command = "check"
         args.mode = "changed"
     if command == "logs" and args.logs_command == "summarize":
-        from ai_dev_tools.parsers.logs import summarize_latest_log
+        from ai_dev_tools.parsers.logs import summarize_latest_log, summarize_log_file
 
+        if args.log_path is not None:
+            return summarize_log_file(project_root, args.log_path, tool=args.tool)
         return summarize_latest_log(project_root)
     if command == "context" and args.context_command == "build":
         report = Report(
@@ -111,7 +119,9 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
     if command == "check":
         from ai_dev_tools.runners.check import run_check
 
-        return run_check(project_root, mode=args.mode)
+        return run_check(project_root, mode=args.mode, explain=args.explain)
+    if command == "capabilities":
+        return _capabilities_report(project_root)
     if command == "git":
         from ai_dev_tools.git.inspect import inspect_git
 
@@ -121,6 +131,31 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
 
         return run_finish(project_root)
     raise SystemExit(EXIT_USAGE)
+
+
+def _capabilities_report(project_root: Path) -> Report:
+    report = Report(command="capabilities", project_root=project_root)
+    implemented = [
+        "doctor",
+        "scan",
+        "map",
+        "check",
+        "test affected",
+        "logs summarize",
+        "git status",
+        "git inspect",
+        "finish",
+        "capabilities",
+    ]
+    planned = ["context build", "bootstrap", "run", "stop"]
+    report.summary = {
+        "implemented": implemented,
+        "planned": planned,
+        "deprecated": [],
+        "commands": {name: "implemented" for name in implemented}
+        | {name: "planned" for name in planned},
+    }
+    return report
 
 
 def _print_text(report: Report) -> None:

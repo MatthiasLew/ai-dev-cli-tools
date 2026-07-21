@@ -1,0 +1,2 @@
+src/app.py:2: error: Incompatible return value type [return-value]
+Found 1 error in 1 file (checked 1 source file)

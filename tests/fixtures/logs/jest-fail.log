@@ -1,0 +1,2 @@
+FAIL src/foo.test.ts
+Tests: 1 failed, 2 passed, 3 total

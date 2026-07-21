@@ -48,7 +48,7 @@ def test_changed_mode_reports_broad_fallback(monkeypatch, tmp_path: Path) -> Non
     monkeypatch.setattr(check, "run_command", fake_run)
     report = check.run_check(tmp_path, "changed")
     changed = report.summary["changed_analysis"]
-    assert changed["strategy"] == "broad_fallback"
+    assert changed["strategy"] == "changed_test_direct"
     assert changed["changed_files"] == ["src/app.py", "tests/test_app.py"]
     result = report.summary["results"][0]
     assert result["passed"] == 2
