@@ -47,7 +47,7 @@ ai-dev check --mode fast --project "/path/with spaces/project"
 ```bash
 ai-dev doctor
 ai-dev scan
-ai-dev map
+ai-dev map --max-files 500 --max-depth 6
 ai-dev check --mode fast
 ai-dev check --mode changed  # reports changed files and falls back safely when test mapping is uncertain
 ai-dev check --mode full
@@ -101,6 +101,26 @@ logs_directory = ".ai/logs"
 ```
 
 Configuration takes precedence over auto detection.
+
+## Command Status
+
+| Command | Status |
+| --- | --- |
+| doctor | implemented |
+| scan | implemented |
+| map | implemented |
+| check | implemented |
+| test affected | implemented |
+| logs summarize | implemented |
+| git status | implemented |
+| git inspect | implemented |
+| finish | implemented |
+| bootstrap | planned |
+| run | planned |
+| stop | planned |
+| context build | planned |
+
+Planned commands return `NOT_IMPLEMENTED` with a non-zero exit code.
 
 ## Intentional Limits
 

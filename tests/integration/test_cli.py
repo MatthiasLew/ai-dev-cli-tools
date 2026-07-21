@@ -14,5 +14,5 @@ def test_cli_scan_json_with_path_containing_space(tmp_path: Path, capsys) -> Non
     assert (project / ".ai" / "reports" / "project-scan.md").exists()
 
 
-def test_cli_reserved_command_warns(tmp_path: Path) -> None:
-    assert main(["--project", str(tmp_path), "context", "build"]) == 0
+def test_cli_reserved_command_not_implemented(tmp_path: Path) -> None:
+    assert main(["--project", str(tmp_path), "context", "build"]) == 1

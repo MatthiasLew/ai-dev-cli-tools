@@ -38,3 +38,10 @@ def test_windows_batch_command_wrapper() -> None:
         assert wrapped[1:3] == ["/d", "/c"]
     else:
         assert wrapped == ["npm.CMD", "--version"]
+
+
+def test_validate_ci_script() -> None:
+    import runpy
+
+    namespace = runpy.run_path("scripts/validate_ci.py")
+    assert namespace["main"]() == 0

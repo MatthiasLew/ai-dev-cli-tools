@@ -25,7 +25,18 @@ def test_map_omits_ai_reports_and_detects_ci(tmp_path: Path) -> None:
     report = map_repository(tmp_path)
     docs = "\n".join(report.summary["documentation"])
     assert ".ai" not in docs
+    assert ".ai" not in report.summary["directories"]
     assert (
         ".github\\workflows\\ci.yml" in report.summary["ci_workflows"]
         or ".github/workflows/ci.yml" in report.summary["ci_workflows"]
     )
+
+
+def test_map_reports_truncation_and_large_files(tmp_path: Path) -> None:
+    for index in range(3):
+        (tmp_path / f"file{index}.txt").write_text("x", encoding="utf-8")
+    large = tmp_path / "large.txt"
+    large.write_text("x" * 1_000_001, encoding="utf-8")
+    report = map_repository(tmp_path, max_files=2, max_depth=3)
+    assert report.summary["truncated"] is True
+    assert "large.txt" in report.summary["large_files"]

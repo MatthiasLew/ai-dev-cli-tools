@@ -60,6 +60,6 @@ branch = true
 source = ["ai_dev_tools"]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 85
 show_missing = true
 

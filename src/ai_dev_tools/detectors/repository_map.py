@@ -37,7 +37,7 @@ BINARY_EXTENSIONS = {
 GENERATED_PATTERNS = ("*.min.js", "*.lock", "package-lock.json", "coverage.xml")
 
 
-def map_repository(project_root: Path) -> Report:
+def map_repository(project_root: Path, max_files: int = 500, max_depth: int = 6) -> Report:
     settings = load_settings(project_root)
     ignores = settings.ignore_paths | _gitignore_patterns(settings.project_root)
     files: list[Path] = []
@@ -45,7 +45,7 @@ def map_repository(project_root: Path) -> Report:
     generated: list[str] = []
     for path in settings.project_root.rglob("*"):
         rel = path.relative_to(settings.project_root)
-        if _ignored(rel, ignores) or _is_binary(path):
+        if len(rel.parts) > max_depth or _ignored(rel, ignores) or _is_binary(path):
             continue
         if path.is_dir():
             dirs.add(str(rel))
@@ -69,17 +69,22 @@ def map_repository(project_root: Path) -> Report:
         if p.suffix.lower() in {".md", ".rst"} or "docs" in p.parts
     ]
     report = Report(command="map", project_root=settings.project_root)
+    truncated = len(files) > max_files
     report.summary = {
-        "directories": sorted(dirs)[:200],
-        "important_files": sorted(important)[:200],
-        "tests": sorted(tests)[:200],
+        "directories": sorted(dirs)[:max_files],
+        "important_files": sorted(important)[:max_files],
+        "tests": sorted(tests)[:max_files],
         "ci_workflows": sorted(
             p for p in important if p.replace("\\", "/").startswith(".github/workflows/")
         ),
-        "documentation": sorted(docs)[:200],
-        "generated_or_lock_files": sorted(generated)[:200],
+        "documentation": sorted(docs)[:max_files],
+        "generated_or_lock_files": sorted(generated)[:max_files],
         "omitted_patterns": sorted(ignores),
         "file_count_scanned": len(files),
+        "max_files": max_files,
+        "max_depth": max_depth,
+        "truncated": truncated,
+        "large_files": _large_files(settings.project_root, files),
     }
     report.finish()
     write_markdown(report, settings.reports_directory / "repository-map.md")
@@ -114,3 +119,11 @@ def _ignored(rel: Path, patterns: set[str]) -> bool:
 
 def _is_binary(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in BINARY_EXTENSIONS
+
+
+def _large_files(root: Path, files: list[Path]) -> list[str]:
+    return [
+        str(path.relative_to(root))
+        for path in files
+        if path.exists() and path.is_file() and path.stat().st_size > 1_000_000
+    ][:50]

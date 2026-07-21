@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from ai_dev_tools import __version__
 
-Status = Literal["success", "warning", "failed"]
+Status = Literal["success", "warning", "failed", "not_implemented"]
 
 
 def utc_now() -> datetime:

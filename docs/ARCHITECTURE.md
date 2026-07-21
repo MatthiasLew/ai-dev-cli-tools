@@ -18,3 +18,7 @@ Command -> detector/runner -> full log -> parser -> `Report` model -> Markdown/J
 ## Extending
 
 Add small modules under `detectors/`, `runners/`, or `parsers/`. Keep runtime dependencies optional and prefer existing project configuration over global assumptions.
+
+## Validation plans
+
+`check` builds deterministic `CheckTask` entries with name, category, command, cost, source, and required fields. Modes filter by semantics rather than slicing command lists.

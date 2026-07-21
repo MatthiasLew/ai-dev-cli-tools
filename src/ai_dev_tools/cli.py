@@ -25,8 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quiet", action="store_true", help="Only print errors and artifact paths")
 
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ["doctor", "scan", "map", "bootstrap", "run", "stop"]:
+    for name in ["doctor", "scan", "bootstrap", "run", "stop"]:
         sub.add_parser(name)
+
+    map_parser = sub.add_parser("map")
+    map_parser.add_argument("--max-files", type=int, default=500)
+    map_parser.add_argument("--max-depth", type=int, default=6)
 
     check = sub.add_parser("check")
     check.add_argument("--mode", choices=["fast", "changed", "full"], default="fast")
@@ -70,9 +74,10 @@ def main(argv: list[str] | None = None) -> int:
 def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
     command = args.command
     if command in {"bootstrap", "run", "stop"}:
-        report = Report(command=command, project_root=project_root, status="warning")
+        report = Report(command=command, project_root=project_root, status="not_implemented")
         report.summary = {
-            "message": "Command reserved for a future non-destructive implementation."
+            "code": "NOT_IMPLEMENTED",
+            "message": "Command reserved for a future non-destructive implementation.",
         }
         return report
     if command == "test" and args.test_command == "affected":
@@ -83,9 +88,12 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
 
         return summarize_latest_log(project_root)
     if command == "context" and args.context_command == "build":
-        report = Report(command="context build", project_root=project_root, status="warning")
+        report = Report(
+            command="context build", project_root=project_root, status="not_implemented"
+        )
         report.summary = {
-            "message": "Context building is intentionally deferred after version 0.1.0."
+            "code": "NOT_IMPLEMENTED",
+            "message": "Context building is intentionally deferred after version 0.1.0.",
         }
         return report
     if command == "doctor":
@@ -99,7 +107,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
     if command == "map":
         from ai_dev_tools.detectors.repository_map import map_repository
 
-        return map_repository(project_root)
+        return map_repository(project_root, max_files=args.max_files, max_depth=args.max_depth)
     if command == "check":
         from ai_dev_tools.runners.check import run_check
 
