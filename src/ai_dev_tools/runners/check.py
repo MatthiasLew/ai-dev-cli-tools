@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -48,13 +49,13 @@ def _commands_for_project(root: Path, configured: dict[str, str], mode: str) -> 
             else ""
         )
         if "ruff" in text:
-            commands.append(["ruff", "check", "."])
+            commands.append([sys.executable, "-m", "ruff", "check", "."])
         if "mypy" in text:
-            commands.append(["mypy", "src", "tests"])
+            commands.append([sys.executable, "-m", "mypy", "src", "tests"])
         if "black" in text:
-            commands.append(["black", "--check", "."])
+            commands.append([sys.executable, "-m", "black", "--check", "."])
         if (root / "tests").exists():
-            commands.append(["python", "-m", "pytest"])
+            commands.append([sys.executable, "-m", "pytest"])
     if (root / "package.json").exists():
         package = (root / "package.json").read_text(encoding="utf-8", errors="replace")
         if "eslint" in package:
