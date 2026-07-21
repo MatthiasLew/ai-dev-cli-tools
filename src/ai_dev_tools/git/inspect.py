@@ -30,12 +30,16 @@ def inspect_git(project_root: Path, detailed: bool = False) -> Report:
     )
     porcelain = _text(["git", "status", "--porcelain=v1", "--branch"], settings.project_root)
     states = _states(porcelain, upstream, branch is None)
+    ahead_count, behind_count = _ahead_behind_counts(porcelain)
     changed = _changed_files(porcelain)
     summary: dict[str, object] = {
         "state": states[0],
         "states": states,
         "branch": branch,
         "upstream": upstream,
+        "ahead": ahead_count,
+        "behind": behind_count,
+        "diverged": ahead_count > 0 and behind_count > 0,
         "detached_head": branch is None,
         "changed_files": changed,
         "staged_files": [
@@ -92,20 +96,25 @@ def _text(command: list[str], root: Path) -> str:
     return result.stdout.strip() if result.exit_code == 0 else ""
 
 
+def _ahead_behind_counts(porcelain: str) -> tuple[int, int]:
+    header = porcelain.splitlines()[0] if porcelain else ""
+    ahead = re.search(r"ahead (\d+)", header)
+    behind = re.search(r"behind (\d+)", header)
+    return (int(ahead.group(1)) if ahead else 0, int(behind.group(1)) if behind else 0)
+
+
 def _states(porcelain: str, upstream: str | None, detached: bool) -> list[str]:
     states: list[str] = []
-    header = porcelain.splitlines()[0] if porcelain else ""
     if detached:
         states.append("DETACHED_HEAD")
     if upstream is None:
         states.append("NO_UPSTREAM")
-    ahead = re.search(r"ahead (\d+)", header)
-    behind = re.search(r"behind (\d+)", header)
-    if ahead and behind:
+    ahead_count, behind_count = _ahead_behind_counts(porcelain)
+    if ahead_count and behind_count:
         states.append("DIVERGED")
-    elif ahead:
+    elif ahead_count:
         states.append("AHEAD")
-    elif behind:
+    elif behind_count:
         states.append("BEHIND")
     body = porcelain.splitlines()[1:]
     if any(line[:2] in {"UU", "AA", "DD", "AU", "UA", "DU", "UD"} for line in body):

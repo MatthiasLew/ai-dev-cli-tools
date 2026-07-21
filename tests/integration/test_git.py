@@ -10,3 +10,11 @@ def test_git_inspect_dirty_repo(tmp_path: Path) -> None:
     report = inspect_git(tmp_path, detailed=True)
     assert "DIRTY" in report.summary["states"]
     assert "file.txt" in report.summary["changed_files"]
+
+
+def test_git_state_parses_ahead_behind_counts() -> None:
+    from ai_dev_tools.git.inspect import _ahead_behind_counts, _states
+
+    porcelain = "## main...origin/main [ahead 2, behind 1]\n M file.txt"
+    assert _ahead_behind_counts(porcelain) == (2, 1)
+    assert "DIVERGED" in _states(porcelain, "origin/main", False)
