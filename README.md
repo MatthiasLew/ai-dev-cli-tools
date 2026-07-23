@@ -47,9 +47,9 @@ ai-dev check --mode fast --project "/path/with spaces/project"
 ```bash
 ai-dev doctor
 ai-dev scan
-ai-dev map
+ai-dev map --max-files 500 --max-depth 6
 ai-dev check --mode fast
-ai-dev check --mode changed
+ai-dev check --mode changed  # reports changed files and falls back safely when test mapping is uncertain
 ai-dev check --mode full
 ai-dev test affected
 ai-dev logs summarize
@@ -63,9 +63,9 @@ All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version`
 
 ## Reports and Logs
 
-Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git.
+Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 
-JSON reports use a stable schema with `schema_version`, `tool_version`, `status`, `command`, timestamps, `project_root`, `summary`, `issues`, and `artifacts`.
+JSON reports use schema `1.1` with `schema_version`, `tool_version`, `command`, `status`, `exit_code`, timestamps, `project_root`, `summary`, `issues`, `artifacts`, and `metadata`.
 
 ## Auto Detection
 
@@ -100,8 +100,36 @@ directory = ".ai/reports"
 logs_directory = ".ai/logs"
 ```
 
-Configuration takes precedence over auto detection.
+Configuration takes precedence over auto detection. Invalid or unknown configuration is reported through `config_warnings` instead of crashing normal scans.
 
+## Command Status
+
+| Command | Status |
+| --- | --- |
+| doctor | implemented |
+| scan | implemented |
+| map | implemented |
+| check | implemented |
+| check --explain | implemented |
+| test affected | implemented |
+| logs summarize | implemented |
+| capabilities | implemented |
+| git status | implemented |
+| git inspect | implemented |
+| finish | implemented |
+| bootstrap | planned |
+| run | planned |
+| stop | planned |
+| context build | planned |
+
+Planned commands return `NOT_IMPLEMENTED` with a non-zero exit code.
+
+## v0.2 Scope Notes
+
+- Monorepo/workspace detection: experimental.
+- Per-subproject runner isolation: planned for v0.3.0.
+- Runtime version validation: partial.
+- `context build`, `bootstrap`, `run`, `stop`, auto-commit, auto-push, and GUI remain planned or `NOT_IMPLEMENTED`.
 ## Intentional Limits
 
-Version 0.1.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+Version 0.2.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.

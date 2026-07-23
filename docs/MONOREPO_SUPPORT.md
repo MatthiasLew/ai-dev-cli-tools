@@ -1,0 +1,18 @@
+# Monorepo Support
+
+0.2.0 lays groundwork for monorepo-aware validation but does not yet fully isolate every workspace runner.
+
+## Status
+
+- Monorepo/workspace detection: experimental.
+- Per-subproject runner isolation: planned for v0.3.0.
+- Runtime version validation: partial and handled outside this monorepo routing layer.
+
+This document does not claim full runner isolation between subprojects in v0.2.0.
+Current behavior:
+
+- `scan` reports project-level signals and can identify multiple technology signals in one repository.
+- `check --mode changed --explain` exposes the changed-file strategy and selected checks before execution.
+- Configuration changes such as `package.json`, `pnpm-workspace.yaml`, `Cargo.toml`, `pom.xml`, `settings.gradle`, and test fixture files trigger a broader plan.
+
+Planned workspace-specific routing includes npm, pnpm, Yarn, Cargo workspace, Maven multi-module, Gradle multi-project, and mixed Python/Node repositories.
