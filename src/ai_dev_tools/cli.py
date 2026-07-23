@@ -50,7 +50,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     context = sub.add_parser("context")
     context_sub = context.add_subparsers(dest="context_command", required=True)
-    context_sub.add_parser("build")
+    context_build = context_sub.add_parser("build")
+    context_build.add_argument("--task", default="")
+    context_build.add_argument("--max-chars", type=int, default=50_000)
+    context_build.add_argument("--max-files", type=int, default=30)
+    context_build.add_argument("--max-file-chars", type=int, default=8_000)
+    context_build.add_argument("--max-diff-chars", type=int, default=15_000)
+    context_build.add_argument("--include", action="append", default=[])
+    context_build.add_argument("--exclude", action="append", default=[])
+    context_build.add_argument("--changed-only", action="store_true")
+    context_build.add_argument("--staged-only", action="store_true")
+    context_build.add_argument("--no-git", action="store_true")
+    context_build.add_argument("--format", choices=["markdown", "json", "both"], default="both")
+    context_build.add_argument("--output", type=Path)
+    context_build.add_argument("--explain", action="store_true")
 
     git = sub.add_parser("git")
     git_sub = git.add_subparsers(dest="git_command", required=True)
@@ -96,14 +109,26 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             return summarize_log_file(project_root, args.log_path, tool=args.tool)
         return summarize_latest_log(project_root)
     if command == "context" and args.context_command == "build":
-        report = Report(
-            command="context build", project_root=project_root, status="not_implemented"
+        from ai_dev_tools.context import ContextOptions, build_context
+
+        return build_context(
+            project_root,
+            ContextOptions(
+                task=args.task,
+                max_chars=args.max_chars,
+                max_files=args.max_files,
+                max_file_chars=args.max_file_chars,
+                max_diff_chars=args.max_diff_chars,
+                include=tuple(args.include),
+                exclude=tuple(args.exclude),
+                changed_only=args.changed_only,
+                staged_only=args.staged_only,
+                no_git=args.no_git,
+                output=args.output,
+                format=args.format,
+                explain=args.explain,
+            ),
         )
-        report.summary = {
-            "code": "NOT_IMPLEMENTED",
-            "message": "Context building is intentionally deferred after version 0.1.0.",
-        }
-        return report
     if command == "doctor":
         from ai_dev_tools.detectors.environment import run_doctor
 
@@ -142,12 +167,13 @@ def _capabilities_report(project_root: Path) -> Report:
         "check",
         "test affected",
         "logs summarize",
+        "context build",
         "git status",
         "git inspect",
         "finish",
         "capabilities",
     ]
-    planned = ["context build", "bootstrap", "run", "stop"]
+    planned = ["bootstrap", "run", "stop"]
     report.summary = {
         "implemented": implemented,
         "planned": planned,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Add `ai-dev context build` for bounded local AI context packages.
+- Write `.ai/context/context-latest.md` and `.ai/context/context-latest.json` artifacts.
+- Reuse scan, repository map, git inspect, changed-test selection, validation planning, and secret masking.
+- Keep monorepo detection experimental, per-subproject runner isolation planned, and runtime validation partial.
 ## 0.2.0
 
 - Add schema 1.1 reports with exit codes and metadata.

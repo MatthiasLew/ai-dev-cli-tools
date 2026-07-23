@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-dev-cli-tools"
-version = "0.2.0"
+version = "0.3.0"
 description = "Cross-platform CLI helpers that give AI coding agents concise, deterministic development reports."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -62,4 +62,3 @@ source = ["ai_dev_tools"]
 [tool.coverage.report]
 fail_under = 85
 show_missing = true
-

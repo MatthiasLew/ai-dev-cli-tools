@@ -61,6 +61,21 @@ ai-dev finish
 
 All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version` at the top level.
 
+
+## Context Builder
+
+`ai-dev context build` creates a bounded local context package for coding agents without calling any LLM, embedding API, or cloud service.
+
+```bash
+ai-dev context build --task "fix auth tests"
+ai-dev context build --changed-only --max-chars 50000
+ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
+ai-dev context build --explain --json
+```
+
+Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/context-latest.json` by default. The builder includes detected technologies, git state, changed files, related tests, validation plan, recent commits, selected snippets, limited diffs, latest check errors, masked secret findings, and budget/truncation metadata.
+
+Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
 
 Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
@@ -113,6 +128,7 @@ Configuration takes precedence over auto detection. Invalid or unknown configura
 | check --explain | implemented |
 | test affected | implemented |
 | logs summarize | implemented |
+| context build | implemented |
 | capabilities | implemented |
 | git status | implemented |
 | git inspect | implemented |
@@ -120,16 +136,16 @@ Configuration takes precedence over auto detection. Invalid or unknown configura
 | bootstrap | planned |
 | run | planned |
 | stop | planned |
-| context build | planned |
 
 Planned commands return `NOT_IMPLEMENTED` with a non-zero exit code.
 
-## v0.2 Scope Notes
+## Scope Notes
 
 - Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned for v0.3.0.
+- Per-subproject runner isolation: planned after v0.3.0.
 - Runtime version validation: partial.
-- `context build`, `bootstrap`, `run`, `stop`, auto-commit, auto-push, and GUI remain planned or `NOT_IMPLEMENTED`.
-## Intentional Limits
+- `context build` is implemented as a bounded local context pack builder in v0.3.0.
+- `bootstrap`, `run`, `stop`, auto-commit, auto-push, and GUI remain planned or `NOT_IMPLEMENTED`.
 
-Version 0.2.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+## Intentional Limits
+Version 0.3.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.

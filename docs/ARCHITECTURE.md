@@ -10,10 +10,11 @@
 - Reporters write stable Markdown and JSON reports.
 - Git helpers inspect repository state without destructive operations.
 - Security helpers scan changed files for masked secret findings.
+- Context builders compose detector, git, runner-plan, parser, and security outputs into bounded AI context packages.
 
 ## Data Flow
 
-Command -> detector/runner -> full log -> parser -> `Report` model -> Markdown/JSON artifacts.
+Command -> detector/runner/context builder -> full log or bounded source selection -> parser/security masking -> `Report` model -> Markdown/JSON artifacts.
 
 ## Extending
 
@@ -22,3 +23,13 @@ Add small modules under `detectors/`, `runners/`, or `parsers/`. Keep runtime de
 ## Validation plans
 
 `check` builds deterministic `CheckTask` entries with name, category, command, cost, source, and required fields. Modes filter by semantics rather than slicing command lists.
+
+## Context Builders
+
+`context build` is an orchestration layer. It calls project scan, repository map, git inspect, and changed-check selection, then applies local file selection, static dependency hints, snippet limits, diff limits, and secret masking. It does not execute tests, install dependencies, call external AI services, or isolate runners per subproject.
+
+Current context limitations:
+
+- Monorepo/workspace detection: experimental.
+- Per-subproject runner isolation: planned after v0.3.0.
+- Runtime version validation: partial.

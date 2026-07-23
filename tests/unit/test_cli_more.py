@@ -68,3 +68,27 @@ def test_cli_logs_summarize_file_with_tool(tmp_path: Path, capsys) -> None:  # t
     output = capsys.readouterr().out
     assert "pytest" in output
     assert "detected_tool" in output
+
+
+def test_cli_context_build_json(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / "README.md").write_text("docs", encoding="utf-8")
+    assert (
+        main(
+            [
+                "--project",
+                str(tmp_path),
+                "--json",
+                "context",
+                "build",
+                "--no-git",
+                "--include",
+                "README.md",
+                "--format",
+                "json",
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert '"command": "context build"' in output
+    assert (tmp_path / ".ai" / "context" / "context-latest.json").exists()
