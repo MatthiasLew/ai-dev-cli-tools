@@ -11,6 +11,7 @@
 - Git helpers inspect repository state without destructive operations.
 - Security helpers scan changed files for masked secret findings.
 - Context builders compose detector, git, runner-plan, parser, and security outputs into bounded AI context packages.
+- Packaging smoke tests build a wheel, install it into a clean virtual environment, and verify the installed `ai-dev` entrypoint.
 
 ## Data Flow
 
@@ -33,3 +34,7 @@ Current context limitations:
 - Monorepo/workspace detection: experimental.
 - Per-subproject runner isolation: planned after v0.3.0.
 - Runtime version validation: partial.
+
+## Packaging Smoke
+
+`scripts/test_installed_package.py` validates the packaged CLI rather than the source-tree module path. It removes stale build artifacts, builds a wheel, creates a temporary virtual environment in a path with spaces, installs only the wheel, locates the platform-specific `ai-dev` entrypoint, and runs smoke commands without editable install or `PYTHONPATH`.

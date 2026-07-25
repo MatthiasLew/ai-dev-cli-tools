@@ -24,6 +24,7 @@ jobs:
       - run: coverage run -m pytest
       - run: coverage report
       - run: python -m build
+      - run: python scripts/test_installed_package.py
       - run: python scripts/validate_ci.py
       - run: ai-dev --version
       - run: ai-dev doctor --json

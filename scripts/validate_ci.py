@@ -13,6 +13,7 @@ REQUIRED_STEPS = [
     "coverage run -m pytest",
     "coverage report",
     "python -m build",
+    "python scripts/test_installed_package.py",
     "ai-dev --version",
     "ai-dev doctor --json",
     "ai-dev scan --json",

@@ -116,6 +116,22 @@ logs_directory = ".ai/logs"
 ```
 
 Configuration takes precedence over auto detection. Invalid or unknown configuration is reported through `config_warnings` instead of crashing normal scans.
+## Local Validation
+
+Before pushing a larger stage, run:
+
+```bash
+python -m ruff check .
+python -m mypy src tests scripts
+python -m coverage run -m pytest
+python -m coverage report --fail-under=90
+python -m build
+python scripts/validate_ci.py
+python scripts/test_installed_package.py
+git diff --check
+```
+
+`python scripts/test_installed_package.py` rebuilds the wheel, installs only that wheel into a clean virtual environment in a path containing spaces, and verifies the installed `ai-dev` entrypoint without editable install or `PYTHONPATH`.
 
 ## Command Status
 

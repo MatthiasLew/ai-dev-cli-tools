@@ -77,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(_normalize_global_flags(argv))
     project_root = args.project.resolve()
     report = _dispatch(args, project_root).finish()
     if args.json:
@@ -90,6 +90,23 @@ def main(argv: list[str] | None = None) -> int:
     return EXIT_SUCCESS if report.status in {"success", "warning", "partial"} else EXIT_FAILED
 
 
+
+def _normalize_global_flags(argv: list[str] | None) -> list[str] | None:
+    if argv is None:
+        argv = sys.argv[1:]
+    normalized = list(argv)
+    moved: list[str] = []
+    for flag in ("--json", "--quiet"):
+        if flag in normalized:
+            normalized = [item for item in normalized if item != flag]
+            moved.append(flag)
+    if "--project" in normalized:
+        index = normalized.index("--project")
+        if index + 1 < len(normalized) and index != 0:
+            project_pair = normalized[index : index + 2]
+            del normalized[index : index + 2]
+            moved.extend(project_pair)
+    return [*moved, *normalized]
 def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
     command = args.command
     if command in {"bootstrap", "run", "stop"}:
