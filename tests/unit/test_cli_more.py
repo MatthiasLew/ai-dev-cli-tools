@@ -22,7 +22,7 @@ def test_cli_quiet_scan(tmp_path: Path, capsys) -> None:  # type: ignore[no-unty
 
 
 def test_placeholder_returns_not_implemented(tmp_path: Path) -> None:
-    assert main(["--project", str(tmp_path), "--json", "bootstrap"]) == 1
+    assert main(["--project", str(tmp_path), "--json", "run"]) == 1
 
 
 def test_map_accepts_limits(tmp_path: Path) -> None:

@@ -62,6 +62,14 @@ ai-dev finish
 All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version` at the top level.
 
 
+## Bootstrap
+
+`ai-dev bootstrap` prepares a detected project with conservative, project-local commands. Use `--explain` to see the plan without modifications, `--dry-run` to validate planning without executing modifying commands, and `--create-env` to allow copying `.env.example` to `.env` only when `.env` is missing.
+
+Supported strategies include Python uv, Poetry, pip with `pyproject.toml`, pip with `requirements.txt`, Node npm/pnpm/Yarn, Maven wrapper or system Maven, Gradle wrapper or system Gradle, Cargo, and Composer.
+
+See `docs/BOOTSTRAP.md` for safety rules and configuration.
+
 ## Context Builder
 
 `ai-dev context build` creates a bounded local context package for coding agents without calling any LLM, embedding API, or cloud service.
@@ -149,7 +157,7 @@ git diff --check
 | git status | implemented |
 | git inspect | implemented |
 | finish | implemented |
-| bootstrap | planned |
+| bootstrap | implemented |
 | run | planned |
 | stop | planned |
 
@@ -158,10 +166,11 @@ Planned commands return `NOT_IMPLEMENTED` with a non-zero exit code.
 ## Scope Notes
 
 - Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned after v0.3.0.
+- Per-subproject runner isolation: planned after v0.4.0.
 - Runtime version validation: partial.
-- `context build` is implemented as a bounded local context pack builder in v0.3.0.
-- `bootstrap`, `run`, `stop`, auto-commit, auto-push, and GUI remain planned or `NOT_IMPLEMENTED`.
+- `context build` is implemented as a bounded local context pack builder.
+- `bootstrap` is implemented as a conservative local setup planner/executor.
+- `run`, `stop`, auto-commit, auto-push, and GUI remain planned or `NOT_IMPLEMENTED`.
 
 ## Intentional Limits
-Version 0.3.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+Version 0.4.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.

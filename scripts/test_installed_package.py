@@ -84,6 +84,7 @@ def _smoke_entrypoint(entrypoint: Path, cwd: Path) -> None:
         [str(entrypoint), "capabilities", "--json"],
         [str(entrypoint), "doctor", "--json"],
         [str(entrypoint), "scan", "--json"],
+        [str(entrypoint), "bootstrap", "--explain", "--json"],
         [str(entrypoint), "map", "--json"],
     ]
     for command in json_commands:

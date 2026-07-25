@@ -25,9 +25,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quiet", action="store_true", help="Only print errors and artifact paths")
 
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ["doctor", "scan", "bootstrap", "run", "stop"]:
+    for name in ["doctor", "scan"]:
         sub.add_parser(name)
 
+    bootstrap = sub.add_parser("bootstrap")
+    bootstrap.add_argument("--dry-run", action="store_true")
+    bootstrap.add_argument("--explain", action="store_true")
+    bootstrap.add_argument("--create-env", action="store_true")
+
+    for name in ["run", "stop"]:
+        sub.add_parser(name)
     map_parser = sub.add_parser("map")
     map_parser.add_argument("--max-files", type=int, default=500)
     map_parser.add_argument("--max-depth", type=int, default=6)
@@ -109,7 +116,7 @@ def _normalize_global_flags(argv: list[str] | None) -> list[str] | None:
     return [*moved, *normalized]
 def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
     command = args.command
-    if command in {"bootstrap", "run", "stop"}:
+    if command in {"run", "stop"}:
         report = Report(command=command, project_root=project_root, status="not_implemented")
         report.summary = {
             "code": "NOT_IMPLEMENTED",
@@ -144,6 +151,17 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 output=args.output,
                 format=args.format,
                 explain=args.explain,
+            ),
+        )
+    if command == "bootstrap":
+        from ai_dev_tools.runners.bootstrap import BootstrapOptions, run_bootstrap
+
+        return run_bootstrap(
+            project_root,
+            BootstrapOptions(
+                dry_run=args.dry_run,
+                explain=args.explain,
+                create_env=args.create_env,
             ),
         )
     if command == "doctor":
@@ -185,21 +203,28 @@ def _capabilities_report(project_root: Path) -> Report:
         "test affected",
         "logs summarize",
         "context build",
+        "bootstrap",
         "git status",
         "git inspect",
         "finish",
         "capabilities",
     ]
-    planned = ["bootstrap", "run", "stop"]
+    planned = ["run", "stop"]
     report.summary = {
         "implemented": implemented,
         "planned": planned,
         "deprecated": [],
         "commands": {name: "implemented" for name in implemented}
         | {name: "planned" for name in planned},
+        "quality": {
+            "implemented": implemented,
+            "unit_tested": implemented,
+            "integration_tested": ["scan", "git status", "git inspect", "context build"],
+            "cross_platform_ci_verified": [],
+            "ci_status": "BLOCKED_EXTERNAL",
+        },
     }
     return report
-
 
 def _print_text(report: Report) -> None:
     print(f"STATUS: {report.status.upper()}")

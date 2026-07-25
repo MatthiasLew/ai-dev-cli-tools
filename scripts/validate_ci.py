@@ -17,6 +17,7 @@ REQUIRED_STEPS = [
     "ai-dev --version",
     "ai-dev doctor --json",
     "ai-dev scan --json",
+    "ai-dev bootstrap --explain --json",
     "ai-dev git inspect --json",
     "ai-dev capabilities --json",
     "ai-dev context build --explain --json",

@@ -1,0 +1,5 @@
+[tool.poetry]
+name = 'fixture-python-poetry'
+version = '0.0.0'
+description = ''
+authors = []

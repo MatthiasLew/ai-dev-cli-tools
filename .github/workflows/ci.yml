@@ -29,6 +29,7 @@ jobs:
       - run: ai-dev --version
       - run: ai-dev doctor --json
       - run: ai-dev scan --json
+      - run: ai-dev bootstrap --explain --json
       - run: ai-dev capabilities --json
       - run: ai-dev context build --explain --json
       - run: ai-dev git inspect --json

@@ -32,9 +32,13 @@ Add small modules under `detectors/`, `runners/`, or `parsers/`. Keep runtime de
 Current context limitations:
 
 - Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned after v0.3.0.
+- Per-subproject runner isolation: planned after v0.4.0.
 - Runtime version validation: partial.
 
 ## Packaging Smoke
 
 `scripts/test_installed_package.py` validates the packaged CLI rather than the source-tree module path. It removes stale build artifacts, builds a wheel, creates a temporary virtual environment in a path with spaces, installs only the wheel, locates the platform-specific `ai-dev` entrypoint, and runs smoke commands without editable install or `PYTHONPATH`.
+
+## Bootstrap Runners
+
+`bootstrap` builds a deterministic `BootstrapPlan` from project signals and configuration. Explain and dry-run modes do not execute modifying commands. Real execution uses `run_command(shell=False)`, project-local paths, timeouts, full log capture, and guarded `.env.example` copying only when explicitly enabled.

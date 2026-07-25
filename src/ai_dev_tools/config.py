@@ -23,6 +23,17 @@ DEFAULT_IGNORES = {
 
 
 @dataclass(slots=True)
+class BootstrapSettings:
+    create_env: bool = False
+    run_smoke_check: bool = True
+    timeout_seconds: int = 900
+    commands_before: list[list[str]] = field(default_factory=list)
+    commands_after: list[list[str]] = field(default_factory=list)
+    python_venv: str = ".venv"
+    node_frozen_lockfile: bool = True
+
+
+@dataclass(slots=True)
 class Settings:
     project_root: Path
     reports_directory: Path
@@ -32,6 +43,7 @@ class Settings:
     project_name: str | None = None
     changed_tests: dict[str, list[str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    bootstrap: BootstrapSettings = field(default_factory=BootstrapSettings)
 
 
 def load_settings(project_root: Path) -> Settings:
@@ -45,6 +57,7 @@ def load_settings(project_root: Path) -> Settings:
     ignore = _section(data, "ignore")
     commands = _section(data, "commands")
     project = _section(data, "project")
+    bootstrap = _bootstrap_settings(data)
 
     reports_dir = Path(_string_value(reports, "directory", ".ai/reports"))
     logs_dir = Path(_string_value(reports, "logs_directory", ".ai/logs"))
@@ -63,6 +76,7 @@ def load_settings(project_root: Path) -> Settings:
         project_name=_optional_string(project, "name"),
         changed_tests=changed_tests,
         warnings=warnings,
+        bootstrap=bootstrap,
     )
 
 
@@ -89,7 +103,7 @@ def _string_list(data: dict[str, Any], key: str) -> list[str]:
 
 
 def _config_warnings(data: dict[str, Any]) -> list[str]:
-    known = {"project", "commands", "ignore", "reports", "changed_tests"}
+    known = {"project", "commands", "ignore", "reports", "changed_tests", "bootstrap"}
     warnings = [f"Unknown top-level config key: {key}" for key in sorted(data) if key not in known]
     for section in known & data.keys():
         if not isinstance(data[section], dict):
@@ -100,6 +114,7 @@ def _config_warnings(data: dict[str, Any]) -> list[str]:
         _table_string_warnings(data, "reports", allowed_keys={"directory", "logs_directory"})
     )
     warnings.extend(_path_list_warning(data, "ignore", "paths"))
+    warnings.extend(_bootstrap_warnings(data))
     return warnings
 
 
@@ -141,3 +156,68 @@ def _changed_tests(data: dict[str, Any]) -> dict[str, list[str]]:
         ):
             result[key] = value
     return result
+
+
+def _bootstrap_settings(data: dict[str, Any]) -> BootstrapSettings:
+    bootstrap = _section(data, "bootstrap")
+    commands = _section(bootstrap, "commands")
+    python = _section(bootstrap, "python")
+    node = _section(bootstrap, "node")
+    return BootstrapSettings(
+        create_env=_bool_value(bootstrap, "create_env", False),
+        run_smoke_check=_bool_value(bootstrap, "run_smoke_check", True),
+        timeout_seconds=_int_value(bootstrap, "timeout_seconds", 900),
+        commands_before=_command_list(commands, "before"),
+        commands_after=_command_list(commands, "after"),
+        python_venv=_string_value(python, "venv", ".venv"),
+        node_frozen_lockfile=_bool_value(node, "frozen_lockfile", True),
+    )
+
+
+def _bool_value(data: dict[str, Any], key: str, default: bool) -> bool:
+    value = data.get(key, default)
+    return value if isinstance(value, bool) else default
+
+
+def _int_value(data: dict[str, Any], key: str, default: int) -> int:
+    value = data.get(key, default)
+    return value if isinstance(value, int) and value > 0 else default
+
+
+def _command_list(data: dict[str, Any], key: str) -> list[list[str]]:
+    value = data.get(key, [])
+    if not isinstance(value, list):
+        return []
+    commands: list[list[str]] = []
+    for item in value:
+        if isinstance(item, list) and item and all(isinstance(arg, str) for arg in item):
+            commands.append(item)
+    return commands
+
+
+def _bootstrap_warnings(data: dict[str, Any]) -> list[str]:
+    raw = data.get("bootstrap", {})
+    if not isinstance(raw, dict):
+        return []
+    allowed = {"create_env", "run_smoke_check", "timeout_seconds", "commands", "python", "node"}
+    warnings = [
+        f"Unknown config key: [bootstrap].{key}" for key in sorted(raw) if key not in allowed
+    ]
+    commands = _section(raw, "commands")
+    for key in ("before", "after"):
+        value = commands.get(key, [])
+        invalid_commands = not isinstance(value, list) or not all(
+            isinstance(item, list) and item and all(isinstance(arg, str) for arg in item)
+            for item in value
+        )
+        if key in commands and invalid_commands:
+            warnings.append(
+                f"Config value [bootstrap.commands].{key} must be a list of argument lists"
+            )
+    python = _section(raw, "python")
+    if "venv" in python and not isinstance(python["venv"], str):
+        warnings.append("Config value [bootstrap.python].venv must be a string")
+    node = _section(raw, "node")
+    if "frozen_lockfile" in node and not isinstance(node["frozen_lockfile"], bool):
+        warnings.append("Config value [bootstrap.node].frozen_lockfile must be a boolean")
+    return warnings

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Add `ai-dev bootstrap` with safe explain, dry-run, and execution modes.
+- Support bootstrap strategies for Python, Node.js, Maven, Gradle, Rust, and PHP.
+- Add guarded `.env.example` to `.env` creation via `--create-env`.
+- Add installed-wheel entrypoint smoke validation to local and CI standards.
+- Keep cross-platform CI marked as externally blocked until GitHub Actions jobs actually run.
 ## 0.3.0
 
 - Add `ai-dev context build` for bounded local AI context packages.

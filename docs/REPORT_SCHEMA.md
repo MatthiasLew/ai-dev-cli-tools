@@ -7,7 +7,7 @@ Required fields:
 ```json
 {
   "schema_version": "1.1",
-  "tool_version": "0.3.0",
+  "tool_version": "0.4.0",
   "command": "check",
   "status": "success",
   "exit_code": 0,
@@ -55,3 +55,9 @@ Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing field
 `context build` reports include `technologies`, `git_state`, `changed_files`, `related_tests`, `validation_plan`, `selected_files`, `rejected_files`, `diffs`, `latest_errors`, `secret_findings`, `recent_commits`, and `budget` under `summary`.
 
 Consumers should treat snippet and diff content as optional because budget limits may omit or truncate them. Secret values are masked before being written to Markdown or JSON artifacts.
+
+## Bootstrap Summary
+
+`bootstrap` reports include `project_type`, `package_manager`, `dry_run`, `explain`, `planned_commands`, `executed_commands`, `created_venv`, `created_env`, `smoke_check`, `plan`, `executed`, `missing_tools`, and `full_log` when commands ran.
+
+A `blocked` status means a required runtime or package manager is unavailable, or no supported bootstrap strategy could be detected.

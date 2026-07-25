@@ -21,6 +21,8 @@ class ToolSpec:
 TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec("git", "git", ["git", "--version"], required=True),
     ToolSpec("python", "python", ["python", "--version"], required=True),
+    ToolSpec("uv", "uv", ["uv", "--version"]),
+    ToolSpec("poetry", "poetry", ["poetry", "--version"]),
     ToolSpec("node", "node", ["node", "--version"]),
     ToolSpec("npm", "npm", ["npm", "--version"]),
     ToolSpec("pnpm", "pnpm", ["pnpm", "--version"]),
