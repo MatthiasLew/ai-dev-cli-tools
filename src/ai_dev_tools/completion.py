@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+TOP_LEVEL_COMMANDS = (
+    "doctor scan bootstrap run stop map check test logs context cache index diagnostics git "
+    "capabilities finish completion"
+)
+GLOBAL_FLAGS = "--project --json --quiet --help --version"
+
+
+def render_completion(shell: str) -> str:
+    if shell == "bash":
+        return _bash()
+    if shell == "zsh":
+        return _zsh()
+    if shell == "fish":
+        return _fish()
+    if shell == "powershell":
+        return _powershell()
+    raise ValueError(f"Unsupported shell: {shell}")
+
+
+def _bash() -> str:
+    return f'''_ai_dev_complete() {{
+  local current="${{COMP_WORDS[COMP_CWORD]}}"
+  COMPREPLY=($(compgen -W "{TOP_LEVEL_COMMANDS} {GLOBAL_FLAGS}" -- "$current"))
+}}
+complete -F _ai_dev_complete ai-dev
+'''
+
+
+def _zsh() -> str:
+    words = " ".join(TOP_LEVEL_COMMANDS.split() + GLOBAL_FLAGS.split())
+    return f"""#compdef ai-dev
+_ai_dev() {{
+  local -a candidates
+  candidates=({words})
+  compadd -- $candidates
+}}
+compdef _ai_dev ai-dev
+"""
+
+
+def _fish() -> str:
+    lines = ["complete -c ai-dev -f"]
+    lines.extend(
+        f"complete -c ai-dev -n '__fish_use_subcommand' -a '{item}'"
+        for item in TOP_LEVEL_COMMANDS.split()
+    )
+    lines.extend(
+        f"complete -c ai-dev -l '{item[2:]}'"
+        for item in GLOBAL_FLAGS.split()
+        if item.startswith("--")
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _powershell() -> str:
+    candidates = ", ".join(
+        f"'{item}'" for item in TOP_LEVEL_COMMANDS.split() + GLOBAL_FLAGS.split()
+    )
+    return f"""Register-ArgumentCompleter -Native -CommandName ai-dev -ScriptBlock {{
+  param($wordToComplete, $commandAst, $cursorPosition)
+  @({candidates}) |
+    Where-Object {{ $_ -like "$wordToComplete*" }} |
+    ForEach-Object {{
+      [System.Management.Automation.CompletionResult]::new(
+        $_, $_, 'ParameterValue', $_
+      )
+    }}
+}}
+"""

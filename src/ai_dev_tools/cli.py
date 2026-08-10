@@ -106,6 +106,9 @@ def build_parser() -> argparse.ArgumentParser:
     git_sub.add_parser("status")
     git_sub.add_parser("inspect")
 
+    completion = sub.add_parser("completion")
+    completion.add_argument("shell", choices=["bash", "zsh", "fish", "powershell"])
+
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
     sub.add_parser("finish")
@@ -116,6 +119,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(_normalize_global_flags(argv))
     project_root = args.project.resolve()
+    if args.command == "completion":
+        from ai_dev_tools.completion import render_completion
+
+        print(render_completion(args.shell), end="")
+        return EXIT_SUCCESS
     report = _dispatch(args, project_root).finish()
     if args.json:
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))

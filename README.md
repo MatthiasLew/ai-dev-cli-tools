@@ -59,6 +59,7 @@ ai-dev check --mode full --jobs 4
 ai-dev index update
 ai-dev cache status
 ai-dev diagnostics
+ai-dev completion bash
 ai-dev test affected
 ai-dev logs summarize
 ai-dev context build
@@ -193,3 +194,5 @@ git diff --check
 
 ## Intentional Limits
 Version 0.4.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+
+Shell completion scripts are generated with i-dev completion bash|zsh|fish|powershell and can be sourced or installed using the normal mechanism for the selected shell.

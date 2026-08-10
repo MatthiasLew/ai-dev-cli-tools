@@ -105,7 +105,7 @@ changes, and cross-platform behavior are covered where applicable.
 
 - [x] Decide whether the package will be published to PyPI and document the supported install
   and upgrade path.
-- [ ] Add shell completion for Bash, Zsh, Fish, and PowerShell if it can be done without adding
+- [x] Add shell completion for Bash, Zsh, Fish, and PowerShell if it can be done without adding
   heavy runtime dependencies.
 - [x] Document a stable integration contract for coding agents and editor extensions.
 - [x] Provide example integrations that consume JSON reports without parsing Markdown.

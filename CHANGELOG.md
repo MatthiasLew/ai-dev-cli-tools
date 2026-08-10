@@ -12,6 +12,7 @@
 - Add AST-aware Python symbol snippets for large context files.
 - Add minimal, debug, review, and full context profiles.
 - Add local diagnostics, efficiency estimates, a stable agent contract, and JSON integration example.
+- Add dependency-free completion generators for Bash, Zsh, Fish, and PowerShell.
 - Add stable failure signatures and a machine-readable report JSON Schema.
 - Add an extensible tool-output parser registry with deterministic precedence.
 - Add compatibility fixtures and prevent cross-line test-count overcounting.
