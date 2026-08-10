@@ -11,11 +11,12 @@
 - Git helpers inspect repository state without destructive operations.
 - Security helpers scan changed files for masked secret findings.
 - Context builders compose detector, git, runner-plan, parser, and security outputs into bounded AI context packages.
+- The MCP adapter exposes bounded local reports as strict STDIO JSON-RPC tools without duplicating detector or runner logic.
 - Packaging smoke tests build a wheel, install it into a clean virtual environment, and verify the installed `ai-dev` entrypoint.
 
 ## Data Flow
 
-Command -> detector/runner/context builder -> full log or bounded source selection -> parser/security masking -> `Report` model -> Markdown/JSON artifacts.
+CLI or MCP tool -> detector/runner/context builder -> full log or bounded source selection -> parser/security masking -> `Report` model -> Markdown/JSON artifacts or concise MCP `structuredContent`.
 
 ## Extending
 

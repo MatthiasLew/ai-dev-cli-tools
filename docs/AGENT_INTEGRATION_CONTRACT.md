@@ -1,6 +1,7 @@
 # Coding Agent Integration Contract
 
-The supported integration surface is the `ai-dev` command line and report schema `1.1`.
+The supported integration surfaces are the `ai-dev` command line, report schema `1.1`, and the
+local `ai-dev mcp serve` STDIO server.
 Integrations must request JSON with `--json` and must not parse Markdown or terminal prose.
 
 ## Stability
@@ -24,3 +25,18 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
 metrics.
+
+## MCP integration
+
+Use the local MCP server when the agent supports structured tools. Tool results contain concise
+text and machine-readable `structuredContent`; consumers should prefer the structured data.
+
+- Call `project_status` before planning broad repository work.
+- Use `feedback`, `build_context`, and `run_checks` in their preview-only defaults.
+- Set execution or artifact-writing flags only when the task requires them.
+- Expand one stable ID with `explain_evidence` instead of requesting full logs.
+- Treat tool names and required fields as compatibility contracts.
+- Ignore new optional fields and new tools.
+- Respect MCP annotations and the configured client approval policy.
+
+See `MCP_SERVER.md` for setup and complete safety boundaries.

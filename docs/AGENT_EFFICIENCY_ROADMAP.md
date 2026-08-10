@@ -40,7 +40,8 @@ The current implementation now includes:
 - named local baselines with failure and status regression comparison.
 - exact-fingerprint checkpoint/resume and priority feedback scheduling;
 - one-shot compact `feedback` reports with stage timings and local session state;
-- incrementally reused import/test impact edges and focused rerun hints.
+- incrementally reused import/test impact edges and focused rerun hints;
+- a dependency-free local MCP STDIO adapter with focused project tools and strict schemas.
 
 The sections below remain the long-term target design. JavaScript and TypeScript now have a
 conservative top-level symbol extractor; additional language adapters are still planned. A first

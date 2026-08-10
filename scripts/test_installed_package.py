@@ -102,6 +102,22 @@ def _smoke_entrypoint(entrypoint: Path, cwd: Path) -> None:
         ],
         cwd,
     )
+    initialize = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18"},
+        }
+    )
+    mcp_result = _run(
+        [str(entrypoint), "--project", str(cwd), "mcp", "serve"],
+        cwd,
+        input_text=initialize + "\n",
+    )
+    mcp_response = json.loads(mcp_result.stdout)
+    if mcp_response.get("result", {}).get("serverInfo", {}).get("name") != "ai-dev-cli-tools":
+        raise SmokeError("installed MCP entrypoint did not initialize")
 
 
 def _assert_report_json(output: str, command: str) -> None:
@@ -117,7 +133,9 @@ def _assert_report_json(output: str, command: str) -> None:
         raise SmokeError(f"{command} returned unexpected status: {payload['status']}")
 
 
-def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    command: list[str], cwd: Path, *, input_text: str | None = None
+) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -125,6 +143,7 @@ def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         encoding="utf-8",
         errors="replace",
         capture_output=True,
+        input=input_text,
         shell=False,
         timeout=180,
     )

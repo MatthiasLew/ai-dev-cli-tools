@@ -12,7 +12,9 @@ from ai_dev_tools.utils.subprocess import run_command
 CONFLICT_CODES = {"UU", "AA", "DD", "AU", "UA", "DU", "UD"}
 
 
-def inspect_git(project_root: Path, detailed: bool = False) -> Report:
+def inspect_git(
+    project_root: Path, detailed: bool = False, *, write_reports: bool = True
+) -> Report:
     settings = load_settings(project_root)
     report = Report(
         command="git inspect" if detailed else "git status", project_root=settings.project_root
@@ -111,9 +113,10 @@ def inspect_git(project_root: Path, detailed: bool = False) -> Report:
         else "success"
     )
     report.finish()
-    suffix = "inspect" if detailed else "status"
-    write_markdown(report, settings.reports_directory / f"git-{suffix}.md")
-    write_json(report, settings.reports_directory / f"git-{suffix}.json")
+    if write_reports:
+        suffix = "inspect" if detailed else "status"
+        write_markdown(report, settings.reports_directory / f"git-{suffix}.md")
+        write_json(report, settings.reports_directory / f"git-{suffix}.json")
     return report
 
 
