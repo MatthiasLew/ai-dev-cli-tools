@@ -37,9 +37,12 @@ The current implementation now includes:
 - local index/cache status and maintenance commands;
 - stable evidence IDs with targeted local expansion;
 - named local baselines with failure and status regression comparison.
+- exact-fingerprint checkpoint/resume and priority feedback scheduling;
+- one-shot compact `feedback` reports with stage timings and local session state;
+- incrementally reused import/test impact edges and focused rerun hints.
 
-The sections below remain the target design. Items such as broader multi-language symbol-aware
-snippets, checkpoint/resume, and the unified feedback command are still planned.
+The sections below remain the long-term target design. Watch mode, warm environment state,
+bounded flaky retries, and broader multi-language symbol extraction are still planned.
 ## Recommended capabilities
 
 ### 1. Incremental context packs

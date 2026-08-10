@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
+from ai_dev_tools.cache.graph import build_impact_graph
 from ai_dev_tools.config import DEFAULT_IGNORES
 
 INDEX_SCHEMA_VERSION = "1"
@@ -28,6 +29,7 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
     entries: list[IndexEntry] = []
     reused = 0
     hashed = 0
+    reused_paths: set[str] = set()
 
     for path in _project_files(resolved_root):
         relative = path.relative_to(resolved_root).as_posix()
@@ -36,6 +38,7 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
         if old is not None and old["size"] == stat.st_size and old["mtime_ns"] == stat.st_mtime_ns:
             digest = old["sha256"]
             reused += 1
+            reused_paths.add(relative)
         else:
             digest = _sha256(path)
             hashed += 1
@@ -48,16 +51,25 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
             }
         )
 
+    graph = build_impact_graph(
+        resolved_root,
+        {item["path"] for item in entries},
+        reused_paths=reused_paths,
+        previous_edges=previous.get("graph"),
+    )
+
     payload: dict[str, object] = {
         "schema_version": INDEX_SCHEMA_VERSION,
         "project_root": str(resolved_root),
         "generated_at": datetime.now(UTC).isoformat(),
         "entries": entries,
+        "graph": graph,
         "summary": {
             "files": len(entries),
             "hashed": hashed,
             "reused": reused,
             "removed": len(set(previous_entries) - {item["path"] for item in entries}),
+            "graph_edges": len(graph),
         },
     }
     _write_json(index_path, payload)

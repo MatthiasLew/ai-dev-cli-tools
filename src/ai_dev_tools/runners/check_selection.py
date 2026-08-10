@@ -5,6 +5,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from ai_dev_tools.cache.graph import related_tests as graph_related_tests
+from ai_dev_tools.cache.repository import read_repository_index
 from ai_dev_tools.config import Settings
 from ai_dev_tools.runners.check_models import ChangedSelection, ChangedStrategy, CheckTask
 from ai_dev_tools.utils.subprocess import CommandResult, run_command
@@ -96,6 +98,9 @@ def collect_changed_files(
 
 def infer_tests_for_changed_files(root: Path, changed_files: list[str]) -> list[str]:
     selected: dict[str, None] = {}
+    index = read_repository_index(root)
+    for rel in graph_related_tests(index.get("graph"), changed_files):
+        _add_existing(root, selected, rel)
     for rel in changed_files:
         path = Path(rel)
         if _is_test_path(path):

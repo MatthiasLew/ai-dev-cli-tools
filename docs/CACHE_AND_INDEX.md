@@ -10,7 +10,7 @@ ai-dev index update
 ai-dev index rebuild
 ```
 
-The schema-versioned index records relative path, size, modification time, and SHA-256 for eligible project files. An update reuses hashes when size and modification time are unchanged; rebuild hashes every eligible file. Generated, dependency, VCS, fixture, and `.ai` paths are excluded. Deleting the index is safe because it can always be rebuilt.
+The schema-versioned index records relative path, size, modification time, SHA-256, and a bounded local impact graph for eligible project files. Import and source-to-test edges are recomputed only for changed files and reused for unchanged files. An update reuses hashes when size and modification time are unchanged; rebuild hashes every eligible file. Generated, dependency, VCS, fixture, and `.ai` paths are excluded. Deleting the index is safe because it can always be rebuilt.
 
 ## Validation cache
 
@@ -24,7 +24,7 @@ ai-dev cache prune
 ai-dev cache clear
 ```
 
-Reports expose `cached` per result and `cache_hits` in the execution summary. Each cache hit still produces a run-local log reference. Storage is automatically pruned to the newest 200 validation entries and at most 100 MiB. `cache prune` reapplies those limits; `cache clear` removes validation-result entries but leaves the repository index and context manifest intact.
+Reports expose `cached` and `reuse` (`executed`, `cached`, or `resumed`) per result and `cache_hits` in the execution summary. A schema-versioned checkpoint under `.ai/cache/check-checkpoint.json` records completed exact fingerprints; stale fingerprints cannot resume after repository, command, workspace, platform, or runtime changes. Each cache hit still produces a run-local log reference. Storage is automatically pruned to the newest 200 validation entries and at most 100 MiB. `cache prune` reapplies those limits; `cache clear` removes validation-result entries but leaves the repository index and context manifest intact.
 
 ## Incremental context
 

@@ -4,7 +4,6 @@ import hashlib
 import json
 import re
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -18,10 +17,11 @@ from ai_dev_tools.cache.validation import (
 from ai_dev_tools.config import Settings, load_settings
 from ai_dev_tools.detectors.runtime import detect_runtime_requirements
 from ai_dev_tools.detectors.workspaces import detect_workspaces
-from ai_dev_tools.models.report import Report
+from ai_dev_tools.models.report import Artifact, Report
 from ai_dev_tools.parsers.logs import parse_tool_output
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.runners import check_selection as _selection
+from ai_dev_tools.runners.check_checkpoint import load_resume_keys, write_checkpoint
 from ai_dev_tools.runners.check_models import (
     ChangedSelection as ChangedSelection,
 )
@@ -32,6 +32,8 @@ from ai_dev_tools.runners.check_models import (
 from ai_dev_tools.runners.check_models import (
     CheckTask as CheckTask,
 )
+from ai_dev_tools.runners.check_scheduler import schedule_checks, schedule_graph
+from ai_dev_tools.runners.focused import focused_rerun
 from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command, split_command
 
@@ -54,6 +56,8 @@ def run_check(
     explain: bool = False,
     jobs: int = 1,
     use_cache: bool = True,
+    policy: str = "complete",
+    resume: bool = False,
 ) -> Report:
     settings = load_settings(project_root)
     plan = build_validation_plan(settings)
@@ -68,6 +72,8 @@ def run_check(
             "selected_checks": [task.to_dict() for task in tasks],
             "changed_analysis": changed_selection.to_dict() if changed_selection else None,
             "explain_only": True,
+            "schedule": schedule_graph(tasks, policy),
+            "resume_requested": resume,
         }
         _add_runtime_summary(report, settings.project_root)
         report.finish()
@@ -90,43 +96,78 @@ def run_check(
 
     index = update_repository_index(settings.project_root)
     entries = index.get("entries", [])
-    worker_count = max(1, min(jobs, len(tasks)))
-    if worker_count == 1:
-        results = [
-            _run_logged(
-                task,
-                settings.project_root,
-                settings.logs_directory,
-                entries,
-                use_cache,
-            )
-            for task in tasks
-        ]
-    else:
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            results = list(
-                executor.map(
-                    lambda task: _run_logged(
-                        task,
-                        settings.project_root,
-                        settings.logs_directory,
-                        entries,
-                        use_cache,
-                    ),
-                    tasks,
-                )
-            )
+    selected_tasks = tasks
+    cache_enabled = use_cache or resume
+    task_keys = [
+        validation_cache_key(entries, task.command, task.workspace) for task in selected_tasks
+    ]
+    resume_keys = load_resume_keys(settings.project_root, set(task_keys)) if resume else set()
+    worker_count = max(1, min(jobs, len(selected_tasks)))
+    scheduled = schedule_checks(
+        selected_tasks,
+        worker_count,
+        policy,
+        lambda task: _run_logged(
+            task,
+            settings.project_root,
+            settings.logs_directory,
+            entries,
+            cache_enabled,
+        ),
+    )
+    tasks = scheduled.tasks
+    results = scheduled.results
+
     failed = [result for result in results if result.exit_code != 0]
     report.status = "failed" if failed else "success"
     report.summary = _summary_for_results(mode, plan, tasks, results, changed_selection)
+    report.summary["selected_checks"] = [task.to_dict() for task in selected_tasks]
+    result_rows = report.summary.get("results", [])
+    if isinstance(result_rows, list):
+        for task, result, row in zip(tasks, results, result_rows, strict=True):
+            if not isinstance(row, dict):
+                continue
+            key = validation_cache_key(entries, task.command, task.workspace)
+            row["reuse"] = (
+                "resumed"
+                if result.cached and key in resume_keys
+                else "cached"
+                if result.cached
+                else "executed"
+            )
+    successful_keys = [
+        validation_cache_key(entries, task.command, task.workspace)
+        for task, result in zip(tasks, results, strict=True)
+        if result.exit_code == 0
+    ]
+    checkpoint_path = write_checkpoint(
+        settings.project_root,
+        mode=mode,
+        task_keys=task_keys,
+        successful_keys=successful_keys,
+        cancelled=len(scheduled.cancelled),
+    )
+    report.artifacts.append(Artifact(str(checkpoint_path), "checkpoint", "Validation resume state"))
     index_summary = index.get("summary", {})
     report.summary["execution"] = {
         "jobs": worker_count,
         "parallel": worker_count > 1,
-        "cache_enabled": use_cache,
+        "policy": policy,
+        "schedule": schedule_graph(selected_tasks, policy),
+        "cancelled": [task.to_dict() for task in scheduled.cancelled],
+        "cache_enabled": cache_enabled,
         "cache_hits": sum(result.cached for result in results),
+        "resumed": sum(
+            result.cached
+            and validation_cache_key(entries, task.command, task.workspace) in resume_keys
+            for task, result in zip(tasks, results, strict=True)
+        ),
+        "wall_seconds": scheduled.wall_seconds,
+        "aggregate_subprocess_seconds": scheduled.aggregate_seconds,
+        "time_to_first_failure_seconds": scheduled.time_to_first_failure_seconds,
         "index": index_summary,
     }
+
     _add_runtime_summary(report, settings.project_root)
     report.finish()
     _write_check_reports(report, mode)
@@ -363,6 +404,7 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
         "cached": result.cached,
         "full_log": _full_log_from_output(result.stdout),
         "failure_signature": failure_signature,
+        "focused_rerun": focused_rerun(task, parsed) if failure_signature else None,
         **parsed,
     }
 

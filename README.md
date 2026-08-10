@@ -56,11 +56,14 @@ ai-dev map --max-files 500 --max-depth 6
 ai-dev check --mode fast
 ai-dev check --mode changed  # reports changed files and falls back safely when test mapping is uncertain
 ai-dev check --mode full --jobs 4
+ai-dev check --mode changed --policy feedback-first --resume
 ai-dev index update
 ai-dev cache status
 ai-dev baseline create main
 ai-dev baseline compare main
 ai-dev explain issue:<id> --tail 100
+ai-dev feedback --task "fix authentication timeout"
+ai-dev session status
 ai-dev diagnostics
 ai-dev completion bash
 ai-dev test affected
@@ -106,11 +109,13 @@ Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/contex
 Incremental mode stores a schema-versioned manifest under `.ai/cache/` and reports changed versus reused files. Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
 
-Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance. See `docs/CACHE_AND_INDEX.md`.
+Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `check --resume` reuses only exact successful checkpoint fingerprints. `--policy feedback-first` runs cheaper waves first and cancels later expensive waves after a required failure; `complete` retains comprehensive execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance. See `docs/CACHE_AND_INDEX.md`.
 
 Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 
 JSON reports use schema `1.1` with `schema_version`, `tool_version`, `command`, `status`, `exit_code`, timestamps, `project_root`, `summary`, `issues`, `artifacts`, and `metadata`.
+
+`ai-dev feedback` combines Git changes, changed validation, incremental context, focused rerun hints, stage timings, and local session state into one compact agent protocol report.
 
 Every expandable issue, check, file, snippet, diff, workspace, and artifact receives a stable local `evidence_id`. The report metadata lists references; `ai-dev explain <evidence-id> --tail 100` retrieves only that evidence. `ai-dev baseline create <name>` stores a compact local snapshot under `.ai/cache/baselines/`, and `baseline compare <name>` leads with new/resolved failures, issue codes, and status regressions.
 

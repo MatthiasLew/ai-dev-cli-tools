@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 from ai_dev_tools.cache.repository import read_repository_index, update_repository_index
 from ai_dev_tools.cache.validation import (
@@ -18,14 +19,32 @@ def test_repository_index_reuses_unchanged_hashes_and_detects_changes(tmp_path: 
     source.write_text("one\n", encoding="utf-8")
 
     first = update_repository_index(tmp_path)
-    assert first["summary"] == {"files": 1, "hashed": 1, "reused": 0, "removed": 0}
+    assert first["summary"] == {
+        "files": 1,
+        "hashed": 1,
+        "reused": 0,
+        "removed": 0,
+        "graph_edges": 0,
+    }
 
     second = update_repository_index(tmp_path)
-    assert second["summary"] == {"files": 1, "hashed": 0, "reused": 1, "removed": 0}
+    assert second["summary"] == {
+        "files": 1,
+        "hashed": 0,
+        "reused": 1,
+        "removed": 0,
+        "graph_edges": 0,
+    }
 
     source.write_text("different size\n", encoding="utf-8")
     third = update_repository_index(tmp_path)
-    assert third["summary"] == {"files": 1, "hashed": 1, "reused": 0, "removed": 0}
+    assert third["summary"] == {
+        "files": 1,
+        "hashed": 1,
+        "reused": 0,
+        "removed": 0,
+        "graph_edges": 0,
+    }
     assert read_repository_index(tmp_path)["entries"] == third["entries"]
 
 
@@ -37,7 +56,13 @@ def test_repository_index_reports_removed_files(tmp_path: Path) -> None:
 
     result = update_repository_index(tmp_path)
 
-    assert result["summary"] == {"files": 0, "hashed": 0, "reused": 0, "removed": 1}
+    assert result["summary"] == {
+        "files": 0,
+        "hashed": 0,
+        "reused": 0,
+        "removed": 1,
+        "graph_edges": 0,
+    }
 
 
 def test_validation_cache_requires_exact_key_and_only_stores_success(tmp_path: Path) -> None:
@@ -98,3 +123,61 @@ def test_cache_runner_reports_prunes_and_clears(tmp_path: Path) -> None:
     assert run_cache(tmp_path, "prune").summary["validation_cache"]["entries"] == 1
     cleared = run_cache(tmp_path, "clear")
     assert cleared.summary["validation_cache"]["removed"] == 1
+
+
+def test_repository_index_builds_and_reuses_impact_graph(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "service.py"
+    test = tmp_path / "tests" / "test_service.py"
+    source.parent.mkdir()
+    test.parent.mkdir()
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    test.write_text("from src.service import VALUE\n", encoding="utf-8")
+
+    first = update_repository_index(tmp_path)
+    second = update_repository_index(tmp_path)
+    first_graph = cast(list[dict[str, str]], first["graph"])
+    second_graph = cast(list[dict[str, str]], second["graph"])
+
+    assert {(edge["from"], edge["to"], edge["kind"]) for edge in first_graph} >= {
+        ("src/service.py", "tests/test_service.py", "test")
+    }
+    assert second_graph == first_graph
+    second_summary = cast(dict[str, object], second["summary"])
+    assert cast(int, second_summary["graph_edges"]) >= 1
+
+
+def test_impact_graph_extracts_python_js_rust_and_reuses_edges(tmp_path: Path) -> None:
+    from ai_dev_tools.cache.graph import build_impact_graph, related_tests
+
+    files = {
+        "src/app.py": "import util\n",
+        "util.py": "VALUE = 1\n",
+        "web/app.ts": "import {value} from './util'\n",
+        "web/util.ts": "export const value = 1\n",
+        "rust/main.rs": "mod helper;\n",
+        "rust/helper.rs": "pub fn helper() {}\n",
+        "tests/test_app.py": "def test_app(): pass\n",
+    }
+    for relative, text in files.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    graph = build_impact_graph(tmp_path, set(files))
+    edges = {(edge["from"], edge["to"], edge["kind"]) for edge in graph}
+
+    assert ("src/app.py", "util.py", "import") in edges
+    assert ("web/app.ts", "web/util.ts", "import") in edges
+    assert ("rust/main.rs", "rust/helper.rs", "import") in edges
+    assert related_tests(graph, ["src/app.py"]) == ["tests/test_app.py"]
+    assert related_tests("invalid", ["src/app.py"]) == []
+
+    reused = build_impact_graph(
+        tmp_path,
+        set(files),
+        reused_paths={"src/app.py"},
+        previous_edges=graph,
+    )
+    assert ("src/app.py", "util.py", "import") in {
+        (edge["from"], edge["to"], edge["kind"]) for edge in reused
+    }

@@ -54,6 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--mode", choices=["fast", "changed", "full"], default="fast")
     check.add_argument("--jobs", type=int, default=1)
     check.add_argument("--no-cache", action="store_true")
+    check.add_argument("--resume", action="store_true")
+    check.add_argument("--policy", choices=["complete", "feedback-first"], default="complete")
     check.add_argument(
         "--explain", action="store_true", help="Show selected checks without running them"
     )
@@ -108,6 +110,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     completion = sub.add_parser("completion")
     completion.add_argument("shell", choices=["bash", "zsh", "fish", "powershell"])
+
+    feedback = sub.add_parser("feedback")
+    feedback.add_argument("--task", default="")
+    feedback.add_argument("--explain", action="store_true")
+    feedback.add_argument("--jobs", type=int, default=4)
+
+    session = sub.add_parser("session")
+    session_sub = session.add_subparsers(dest="session_command", required=True)
+    session_sub.add_parser("status")
 
     baseline = sub.add_parser("baseline")
     baseline_sub = baseline.add_subparsers(dest="baseline_command", required=True)
@@ -196,6 +207,8 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         args.explain = False
         args.jobs = 1
         args.no_cache = False
+        args.resume = False
+        args.policy = "complete"
     if command == "logs" and args.logs_command == "summarize":
         from ai_dev_tools.parsers.logs import summarize_latest_log, summarize_log_file
 
@@ -257,6 +270,8 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             explain=args.explain,
             jobs=args.jobs,
             use_cache=not args.no_cache,
+            policy=args.policy,
+            resume=args.resume,
         )
     if command == "cache":
         from ai_dev_tools.runners.cache import run_cache
@@ -266,6 +281,17 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         from ai_dev_tools.runners.index import run_index
 
         return run_index(project_root, args.index_command)
+    if command == "feedback":
+        from ai_dev_tools.runners.feedback import FeedbackOptions, run_feedback
+
+        return run_feedback(
+            project_root,
+            FeedbackOptions(task=args.task, explain=args.explain, jobs=args.jobs),
+        )
+    if command == "session" and args.session_command == "status":
+        from ai_dev_tools.runners.feedback import run_session_status
+
+        return run_session_status(project_root)
     if command == "baseline":
         from ai_dev_tools.runners.baseline import run_baseline
 
@@ -317,6 +343,8 @@ def _capabilities_report(project_root: Path) -> Report:
         "git status",
         "git inspect",
         "finish",
+        "feedback",
+        "session status",
         "baseline create",
         "baseline compare",
         "baseline list",

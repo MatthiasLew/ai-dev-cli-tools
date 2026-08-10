@@ -14,9 +14,9 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 
 ## Recommended loop
 
-1. Run `ai-dev scan --json` and `ai-dev diagnostics --json` once.
-2. Build `ai-dev context build --profile minimal --incremental --json`.
-3. Execute `ai-dev check --mode changed --jobs 4 --json`.
+1. Prefer `ai-dev feedback --task "<task>" --json` for the normal compact loop.
+2. Inspect `decision`, `changes`, `validation`, `context`, and `performance`.
+3. Use `ai-dev session status --json` after an interrupted handoff.
 4. Read `metadata.progressive.references` and call `ai-dev explain <evidence-id> --json` only for needed evidence.
 5. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
 6. Before handoff, run `ai-dev finish --json`.

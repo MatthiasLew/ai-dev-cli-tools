@@ -84,7 +84,7 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add stable failure signatures to validation reports.
 - [x] Add Python AST-aware context snippets with symbol names, kinds, line ranges,
   selection reasons, local references, and conservative fallback.
-- [ ] Continue the remaining high-priority features from
+- [x] Continue the remaining high-priority features from
   `docs/AGENT_EFFICIENCY_ROADMAP.md`, starting with progressive report expansion and
   baseline-aware reports.
 - [x] Split the large `context.builder`, `runners.check`, and `runners.bootstrap` modules into
