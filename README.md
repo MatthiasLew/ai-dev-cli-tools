@@ -67,6 +67,7 @@ ai-dev baseline compare main
 ai-dev benchmark run --suite examples/benchmarks/output-budget-smoke.json --variant baseline
 ai-dev explain issue:<id> --tail 100
 ai-dev feedback --task "fix authentication timeout"
+ai-dev watch --mode changed --debounce 500
 ai-dev session status
 ai-dev diagnostics
 ai-dev completion bash
@@ -189,6 +190,7 @@ git diff --check
 | logs summarize | implemented |
 | context build | implemented |
 | diagnostics | implemented |
+| watch | implemented |
 | benchmark run/compare | implemented |
 | capabilities | implemented |
 | git status | implemented |

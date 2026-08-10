@@ -111,6 +111,14 @@ def build_parser() -> argparse.ArgumentParser:
     completion = sub.add_parser("completion")
     completion.add_argument("shell", choices=["bash", "zsh", "fish", "powershell"])
 
+    watch = sub.add_parser("watch")
+    watch.add_argument("--mode", choices=["fast", "changed", "full"], default="changed")
+    watch.add_argument("--debounce", type=int, default=500, metavar="MILLISECONDS")
+    watch.add_argument("--poll", type=int, default=100, metavar="MILLISECONDS")
+    watch.add_argument("--jobs", type=int, default=1)
+    watch.add_argument("--initial", action="store_true")
+    watch.add_argument("--max-runs", type=int, default=0)
+
     feedback = sub.add_parser("feedback")
     feedback.add_argument("--task", default="")
     feedback.add_argument("--explain", action="store_true")
@@ -293,6 +301,20 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         from ai_dev_tools.runners.index import run_index
 
         return run_index(project_root, args.index_command)
+    if command == "watch":
+        from ai_dev_tools.runners.watch import WatchOptions, run_watch
+
+        return run_watch(
+            project_root,
+            WatchOptions(
+                mode=args.mode,
+                debounce_ms=args.debounce,
+                poll_ms=args.poll,
+                jobs=args.jobs,
+                initial=args.initial,
+                max_runs=args.max_runs,
+            ),
+        )
     if command == "feedback":
         from ai_dev_tools.runners.feedback import FeedbackOptions, run_feedback
 
@@ -368,6 +390,7 @@ def _capabilities_report(project_root: Path) -> Report:
         "git status",
         "git inspect",
         "finish",
+        "watch",
         "feedback",
         "session status",
         "baseline create",

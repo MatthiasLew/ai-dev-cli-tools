@@ -41,7 +41,7 @@ The current implementation now includes:
 - one-shot compact `feedback` reports with stage timings and local session state;
 - incrementally reused import/test impact edges and focused rerun hints.
 
-The sections below remain the long-term target design. Watch mode, warm environment state,
+The sections below remain the long-term target design. Warm environment state,
 bounded flaky retries, and broader multi-language symbol extraction are still planned. A first
 version of reproducible local A/B workflow benchmarks is implemented in ai-dev benchmark.
 ## Recommended capabilities
@@ -291,6 +291,9 @@ ai-dev watch --mode changed --debounce 500ms
 The watcher should coalesce rapid editor writes, ignore generated output, cancel obsolete runs,
 and retain only the latest useful result. It must not become a hidden background service unless
 the user explicitly requests that lifecycle.
+
+Implemented as a foreground polling loop with debounce, generated-root exclusion, changed-check
+validation, queued changes, and a deterministic run bound. It never becomes a hidden service.
 
 **Expected impact:** high during interactive implementation and repair loops.
 
