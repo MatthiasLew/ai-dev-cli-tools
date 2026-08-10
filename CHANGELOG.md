@@ -4,6 +4,7 @@
 
 - Add workspace models and isolated check/bootstrap routing for mixed monorepos.
 - Add cross-platform mixed-monorepo and Git path fixtures covering spaces, Unicode, rename, deletion, and non-UTF-8 output.
+- Add runner failure matrices and real Python, Node, Rust, Maven, Gradle, and Composer fixture execution in CI.
 - Detect and validate Python, Node.js, Java, Rust, and PHP runtime requirements.
 - Implement safe managed `run` and `stop` with supervisor-owned process termination.
 - Add HTTP/TCP readiness probes, bounded startup logs, and readiness-timeout cleanup.
