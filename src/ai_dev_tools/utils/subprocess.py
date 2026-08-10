@@ -18,6 +18,10 @@ class CommandResult:
     duration_seconds: float
     timed_out: bool = False
     cached: bool = False
+    attempts: int = 1
+    flaky: bool = False
+    initial_exit_code: int | None = None
+    initial_output: str = ""
 
     @property
     def combined_output(self) -> str:

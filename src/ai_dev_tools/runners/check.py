@@ -17,7 +17,7 @@ from ai_dev_tools.cache.validation import (
 from ai_dev_tools.config import Settings, load_settings
 from ai_dev_tools.detectors.runtime import detect_runtime_requirements
 from ai_dev_tools.detectors.workspaces import detect_workspaces
-from ai_dev_tools.models.report import Artifact, Report
+from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.parsers.logs import parse_tool_output
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.runners import check_selection as _selection
@@ -33,6 +33,7 @@ from ai_dev_tools.runners.check_models import (
     CheckTask as CheckTask,
 )
 from ai_dev_tools.runners.check_scheduler import schedule_checks, schedule_graph
+from ai_dev_tools.runners.flaky import eligible_for_retry, record_result
 from ai_dev_tools.runners.focused import focused_rerun
 from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command, split_command
@@ -58,6 +59,7 @@ def run_check(
     use_cache: bool = True,
     policy: str = "complete",
     resume: bool = False,
+    retry_flaky: int = 0,
 ) -> Report:
     settings = load_settings(project_root)
     plan = build_validation_plan(settings)
@@ -65,6 +67,14 @@ def run_check(
     tasks = _tasks_for_mode(plan, mode, changed_selection)
     command = f"check --mode {mode}" + (" --explain" if explain else "")
     report = Report(command=command, project_root=settings.project_root)
+    if not 0 <= retry_flaky <= 3:
+        report.status = "invalid_configuration"
+        report.summary = {
+            "reason_code": "INVALID_FLAKY_RETRY_LIMIT",
+            "retry_flaky": retry_flaky,
+            "maximum": 3,
+        }
+        return report.finish()
     if explain:
         report.summary = {
             "mode": mode,
@@ -113,13 +123,24 @@ def run_check(
             settings.logs_directory,
             entries,
             cache_enabled,
+            retry_flaky,
         ),
     )
     tasks = scheduled.tasks
     results = scheduled.results
 
     failed = [result for result in results if result.exit_code != 0]
-    report.status = "failed" if failed else "success"
+    flaky_results = [result for result in results if result.flaky]
+    report.status = "failed" if failed else "warning" if flaky_results else "success"
+    for task, result in zip(tasks, results, strict=True):
+        if result.flaky:
+            report.issues.append(
+                Issue(
+                    "warning",
+                    f"{task.name} failed initially and passed after {result.attempts - 1} retry.",
+                    code="FLAKY_PASS",
+                )
+            )
     report.summary = _summary_for_results(mode, plan, tasks, results, changed_selection)
     report.summary["selected_checks"] = [task.to_dict() for task in selected_tasks]
     result_rows = report.summary.get("results", [])
@@ -138,7 +159,7 @@ def run_check(
     successful_keys = [
         validation_cache_key(entries, task.command, task.workspace)
         for task, result in zip(tasks, results, strict=True)
-        if result.exit_code == 0
+        if result.exit_code == 0 and not result.flaky
     ]
     checkpoint_path = write_checkpoint(
         settings.project_root,
@@ -165,6 +186,9 @@ def run_check(
         "wall_seconds": scheduled.wall_seconds,
         "aggregate_subprocess_seconds": scheduled.aggregate_seconds,
         "time_to_first_failure_seconds": scheduled.time_to_first_failure_seconds,
+        "retry_flaky": retry_flaky,
+        "retry_attempts": sum(max(0, result.attempts - 1) for result in results),
+        "flaky_passes": len(flaky_results),
         "index": index_summary,
     }
 
@@ -335,6 +359,7 @@ def _run_logged(
     logs_dir: Path,
     index_entries: object,
     use_cache: bool,
+    retry_flaky: int = 0,
 ) -> CommandResult:
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = logs_dir / f"check-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.log"
@@ -345,10 +370,42 @@ def _run_logged(
         result = run_command(task.command, working_directory)
         result.stdout = mask_text(result.stdout)
         result.stderr = mask_text(result.stderr)
-        if use_cache:
+        first_output = result.combined_output
+        first_exit_code = result.exit_code
+        total_duration = result.duration_seconds
+        attempts = 1
+        if retry_flaky and eligible_for_retry(task, result):
+            for _ in range(retry_flaky):
+                retry = run_command(task.command, working_directory)
+                retry.stdout = mask_text(retry.stdout)
+                retry.stderr = mask_text(retry.stderr)
+                attempts += 1
+                total_duration += retry.duration_seconds
+                result = retry
+                if retry.exit_code == 0:
+                    result.flaky = True
+                    break
+        result.duration_seconds = round(total_duration, 3)
+        result.attempts = attempts
+        if attempts > 1:
+            result.initial_exit_code = first_exit_code
+            result.initial_output = first_output
+        if use_cache and not result.flaky:
             store_validation_result(root, cache_key, result)
-    log_path.write_text(result.combined_output + "\n", encoding="utf-8")
-    result.stdout += f"\nFULL_LOG: {log_path}"
+        if task.category in {"unit_tests", "integration_tests"}:
+            record_result(root, task, cache_key, result)
+    log_text = result.combined_output
+    if result.attempts > 1:
+        log_text = chr(10).join(
+            [
+                f"FIRST_ATTEMPT_EXIT={result.initial_exit_code}",
+                result.initial_output,
+                f"FINAL_ATTEMPT={result.attempts} EXIT={result.exit_code}",
+                result.combined_output,
+            ]
+        )
+    log_path.write_text(log_text + chr(10), encoding="utf-8")
+    result.stdout += chr(10) + f"FULL_LOG: {log_path}"
     return result
 
 
@@ -363,14 +420,20 @@ def _summary_for_results(
         _result_summary(task, result) for task, result in zip(tasks, results, strict=True)
     ]
     failed_results = [item for item in result_summaries if item["exit_code"] != 0]
+    flaky_results = [item for item in result_summaries if item["flaky"]]
     first_failure = next(
-        (item.get("first_failure") for item in failed_results if item.get("first_failure")), None
+        (item.get("first_failure") for item in failed_results if item.get("first_failure")),
+        next(
+            (item.get("initial_failure") for item in flaky_results if item.get("initial_failure")),
+            None,
+        ),
     )
     summary: dict[str, object] = {
         "mode": mode,
         "checks_total": len(result_summaries),
-        "checks_passed": len(result_summaries) - len(failed_results),
+        "checks_passed": len(result_summaries) - len(failed_results) - len(flaky_results),
         "checks_failed": len(failed_results),
+        "checks_flaky": len(flaky_results),
         "tests_total": sum(_int_value(item.get("tests_total")) for item in result_summaries),
         "tests_passed": sum(_int_value(item.get("passed")) for item in result_summaries),
         "tests_failed": sum(_int_value(item.get("failed")) for item in result_summaries),
@@ -392,7 +455,16 @@ def _int_value(value: object) -> int:
 def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]:
     tool_label = " ".join(task.command)
     parsed = parse_tool_output(tool_label, result.combined_output)
-    failure_signature = _failure_signature(task, parsed) if result.exit_code != 0 else None
+    initial_parsed = (
+        parse_tool_output(tool_label, result.initial_output)
+        if result.initial_output
+        else parsed
+    )
+    failure_signature = (
+        _failure_signature(task, initial_parsed)
+        if result.exit_code != 0 or result.flaky
+        else None
+    )
     return {
         "name": task.name,
         "category": task.category,
@@ -402,9 +474,17 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
         "duration_seconds": result.duration_seconds,
         "timed_out": result.timed_out,
         "cached": result.cached,
+        "attempts": result.attempts,
+        "flaky": result.flaky,
+        "initial_exit_code": result.initial_exit_code,
+        "initial_failure": (
+            initial_parsed.get("first_failure") if result.attempts > 1 else None
+        ),
         "full_log": _full_log_from_output(result.stdout),
         "failure_signature": failure_signature,
-        "focused_rerun": focused_rerun(task, parsed) if failure_signature else None,
+        "focused_rerun": (
+            focused_rerun(task, initial_parsed) if failure_signature else None
+        ),
         **parsed,
     }
 

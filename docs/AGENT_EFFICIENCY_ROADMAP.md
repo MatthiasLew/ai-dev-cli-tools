@@ -41,7 +41,7 @@ The current implementation now includes:
 - one-shot compact `feedback` reports with stage timings and local session state;
 - incrementally reused import/test impact edges and focused rerun hints.
 
-The sections below remain the long-term target design. Bounded flaky retries and broader multi-language symbol extraction are still planned. A first
+The sections below remain the long-term target design. Broader multi-language symbol extraction is still planned. A first
 version of reproducible local A/B workflow benchmarks is implemented in ai-dev benchmark.
 
 ## Recommended capabilities
@@ -357,11 +357,15 @@ original failure as flaky rather than hiding it behind a successful retry.
 
 ```bash
 ai-dev check --retry-flaky 1
-ai-dev tests flaky
+ai-dev test flaky
 ```
 
 Retries must be opt-in or configured, capped, and excluded from deterministic failures such as
 syntax errors. A passing retry must never be presented as a clean first-pass result.
+
+Implemented as an opt-in zero-to-three retry policy for test tasks only. Deterministic and
+environment failures are excluded; first failures remain visible, flaky passes are not cached or
+checkpointed, and bounded fingerprint-scoped history powers test flaky.
 
 **Expected impact:** medium for noisy suites and high for avoiding unproductive repair attempts.
 
