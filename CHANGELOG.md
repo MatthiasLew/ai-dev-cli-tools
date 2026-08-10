@@ -5,6 +5,7 @@
 - Add a dependency-free local MCP STDIO server with focused, bounded project tools.
 - Add symbol-level Python and JavaScript/TypeScript working-tree diffs with compact review contexts.
 - Add local multi-agent task coordination with expiring leases and path-conflict detection.
+- Add conservative Java, Rust, and PHP adapters for context selection and symbol-level diffs.
 
 - Add task-aware JavaScript/TypeScript top-level symbol selection for bounded context packs.
 - Correct capabilities metadata for flaky retries and completed cross-platform CI.

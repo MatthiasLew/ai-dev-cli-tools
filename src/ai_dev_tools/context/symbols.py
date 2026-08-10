@@ -7,6 +7,7 @@ from ai_dev_tools.source_symbols import (
     extract_source_symbols,
     select_javascript_symbols,
     select_python_symbols,
+    select_structural_symbols,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "extract_source_symbols",
     "select_javascript_symbols",
     "select_python_symbols",
+    "select_structural_symbols",
 ]

@@ -10,7 +10,20 @@ from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.source_symbols import SourceSymbol, extract_source_symbols
 from ai_dev_tools.utils.subprocess import run_command
 
-_SUPPORTED_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx"}
+_SUPPORTED_SUFFIXES = {
+    ".py",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    ".java",
+    ".rs",
+    ".php",
+}
 _HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 _MAX_FILES = 50
 _MAX_SOURCE_BYTES = 1_000_000
@@ -188,7 +201,7 @@ def analyze_symbol_diff(
             "max_files": max_files,
         },
         "fallbacks": fallbacks,
-        "supported_languages": ["python", "javascript", "typescript"],
+        "supported_languages": ["python", "javascript", "typescript", "java", "rust", "php"],
     }
 
 

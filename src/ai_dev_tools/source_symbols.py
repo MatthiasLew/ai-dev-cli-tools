@@ -46,12 +46,18 @@ def extract_source_symbols(source: str, suffix: str) -> list[SourceSymbol] | Non
             for node in tree.body
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
         ]
-    if normalized in {".js", ".jsx", ".ts", ".tsx"}:
+    if normalized in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}:
         structure = _javascript_structure(source)
         if structure is None:
             return None
         cleaned, line_depths = structure
         return _javascript_definitions(cleaned, line_depths)
+    if normalized in {".java", ".rs", ".php"}:
+        structure = _javascript_structure(source)
+        if structure is None:
+            return None
+        cleaned, line_depths = structure
+        return _additional_language_definitions(cleaned, line_depths, normalized)
     return None
 
 
@@ -254,6 +260,68 @@ def select_javascript_symbols(
             comment_prefix="//",
         )
 
+    if not selected:
+        return None
+    return SymbolSelection(
+        content="\n\n".join(sections).rstrip() + "\n",
+        snippets=selected,
+        omitted_content=True,
+        truncated=any(item.truncated for item in selected),
+    )
+
+
+def select_structural_symbols(
+    source: str,
+    display_source: str,
+    task: str,
+    max_chars: int,
+    suffix: str,
+) -> SymbolSelection | None:
+    """Select bounded declarations for Java, Rust, and PHP."""
+    if len(display_source) <= max_chars:
+        return None
+    definitions = extract_source_symbols(source, suffix)
+    if not definitions:
+        return None
+    task_tokens = _task_tokens(task)
+    matched = [item for item in definitions if _name_tokens(item.name) & task_tokens]
+    candidates = matched or [item for item in definitions if not item.name.startswith("_")]
+    candidates.sort(
+        key=lambda item: (_symbol_score(item.name, task_tokens), -item.start_line),
+        reverse=True,
+    )
+    local_names = {item.name for item in definitions}
+    source_lines = display_source.splitlines(keepends=True)
+    plain_lines = source.splitlines(keepends=True)
+    selected: list[SymbolSnippet] = []
+    sections: list[str] = []
+    remaining = max(max_chars, 0)
+    for item in candidates:
+        if remaining <= 0:
+            break
+        task_match = bool(_name_tokens(item.name) & task_tokens)
+        body = "".join(plain_lines[item.start_line - 1 : item.end_line])
+        referenced = sorted(
+            name
+            for name in local_names
+            if name != item.name and re.search(rf"(?<![\w$]){re.escape(name)}(?![\w$])", body)
+        )
+        remaining = _append_section(
+            sections,
+            selected,
+            source_lines,
+            SymbolSnippet(
+                name=item.name,
+                kind=item.kind,
+                start_line=item.start_line,
+                end_line=item.end_line,
+                reason="symbol name matches task terms" if task_match else "public declaration",
+                reason_code="TASK_SYMBOL_MATCH" if task_match else "PUBLIC_SYMBOL",
+                referenced_local_symbols=referenced,
+            ),
+            remaining,
+            comment_prefix="//" if suffix.lower() != ".php" else "#",
+        )
     if not selected:
         return None
     return SymbolSelection(
@@ -467,3 +535,84 @@ def _line_offsets(text: str) -> list[int]:
     offsets = [0]
     offsets.extend(match.end() for match in re.finditer("\n", text))
     return offsets
+
+
+def _additional_language_definitions(
+    cleaned: str, line_depths: list[int], suffix: str
+) -> list[SourceSymbol]:
+    patterns: tuple[tuple[re.Pattern[str], str, set[int]], ...]
+    if suffix == ".java":
+        patterns = (
+            (
+                re.compile(
+                    r"\s*(?:(?:public|abstract|final|sealed)\s+)*(?:class|record)\s+([A-Za-z_$][\w$]*)"
+                ),
+                "class",
+                {0},
+            ),
+            (
+                re.compile(r"\s*(?:(?:public|sealed)\s+)*interface\s+([A-Za-z_$][\w$]*)"),
+                "interface",
+                {0},
+            ),
+            (re.compile(r"\s*(?:public\s+)?enum\s+([A-Za-z_$][\w$]*)"), "enum", {0}),
+            (
+                re.compile(
+                    r"\s*(?:(?:public|protected|private|static|final|synchronized|native|abstract)\s+)+(?:[\w$<>?,.\[\]]+\s+)+([A-Za-z_$][\w$]*)\s*\("
+                ),
+                "method",
+                {1},
+            ),
+        )
+    elif suffix == ".rs":
+        patterns = (
+            (
+                re.compile(
+                    r"\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+|unsafe\s+|const\s+)*fn\s+([A-Za-z_][\w]*)"
+                ),
+                "function",
+                {0, 1},
+            ),
+            (re.compile(r"\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+([A-Za-z_][\w]*)"), "struct", {0}),
+            (re.compile(r"\s*(?:pub(?:\([^)]*\))?\s+)?enum\s+([A-Za-z_][\w]*)"), "enum", {0}),
+            (re.compile(r"\s*(?:pub(?:\([^)]*\))?\s+)?trait\s+([A-Za-z_][\w]*)"), "trait", {0}),
+            (
+                re.compile(r"\s*impl(?:<[^>]+>)?\s+(?:[^\s]+\s+for\s+)?([A-Za-z_][\w]*)"),
+                "impl",
+                {0},
+            ),
+        )
+    else:
+        patterns = (
+            (re.compile(r"\s*(?:(?:final|abstract)\s+)?class\s+([A-Za-z_][\w]*)"), "class", {0}),
+            (re.compile(r"\s*interface\s+([A-Za-z_][\w]*)"), "interface", {0}),
+            (re.compile(r"\s*trait\s+([A-Za-z_][\w]*)"), "trait", {0}),
+            (re.compile(r"\s*enum\s+([A-Za-z_][\w]*)"), "enum", {0}),
+            (
+                re.compile(
+                    r"\s*(?:(?:public|protected|private|static|final|abstract)\s+)*function\s+&?\s*([A-Za-z_][\w]*)"
+                ),
+                "method",
+                {0, 1},
+            ),
+        )
+    offsets = _line_offsets(cleaned)
+    found: list[SourceSymbol] = []
+    for line_index, line in enumerate(cleaned.splitlines()):
+        depth = line_depths[line_index] if line_index < len(line_depths) else -1
+        for pattern, kind, allowed_depths in patterns:
+            match = pattern.match(line)
+            if match is None or depth not in allowed_depths:
+                continue
+            start_offset = offsets[line_index] + match.start()
+            brace = cleaned.find("{", start_offset)
+            semicolon = cleaned.find(";", start_offset)
+            end_line = (
+                line_index + 1
+                if brace < 0 or (semicolon >= 0 and semicolon < brace)
+                else _matching_brace_line(cleaned, brace)
+            )
+            if end_line is not None:
+                found.append(SourceSymbol(match.group(1), kind, line_index + 1, end_line))
+            break
+    return found

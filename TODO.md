@@ -112,6 +112,8 @@ changes, and cross-platform behavior are covered where applicable.
   minimal context output.
 - [x] Add local multi-agent task coordination with atomic state, expiring claim leases,
   dependency gates, declared-path conflict detection, CLI/MCP operations, and stable reason codes.
+- [x] Add conservative Java, Rust, and PHP symbol adapters to bounded context selection and
+  symbol-level diffs, with task matching, local references, and safe parse fallback.
 
 ## P3 — Distribution and ecosystem
 

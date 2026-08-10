@@ -46,9 +46,12 @@ The current implementation now includes:
   signatures, related tests, risk, and conservative fallback metadata.
 - local multi-agent task coordination with atomic state, expiring leases, dependency gates,
   and declared-path conflict detection through CLI and MCP.
+- conservative Java, Rust, and PHP declaration adapters shared by bounded context selection
+  and symbol-level working-tree diff analysis.
 
 The sections below remain the long-term target design. JavaScript and TypeScript now have a
-conservative top-level symbol extractor; additional language adapters are still planned. A first
+conservative top-level symbol extractor. Java, Rust, and PHP now have conservative structural
+extractors as well; deeper method and ecosystem-specific adapters remain planned. A first
 version of reproducible local A/B workflow benchmarks is implemented in ai-dev benchmark.
 
 ## Recommended capabilities
