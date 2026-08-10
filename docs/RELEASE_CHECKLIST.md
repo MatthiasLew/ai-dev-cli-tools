@@ -59,5 +59,7 @@ local development command.
 
 ## Latest cross-platform evidence
 
-- GitHub Actions CI run 31382168325 passed on 2026-08-10 for Linux, Windows, and macOS across the configured Python 3.11-3.13 matrix.
-- Docs run 31382168329 passed for the same commit (11e372).
+- GitHub Actions CI run 31385971077 passed on 2026-08-10 for Linux, Windows, and
+  macOS across Python 3.11-3.13, including managed signal/process tests and real
+  Python, Node, Rust, Maven, Gradle, and Composer fixture toolchains.
+- Docs run 31385971106 passed for the same commit (`02ac4e6`).

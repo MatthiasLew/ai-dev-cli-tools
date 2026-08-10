@@ -62,7 +62,7 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add foreground mode, bounded startup-log capture, readiness checks, timeout handling,
   stale metadata recovery, and clear exit statuses.
 - [x] Provide `--explain` and `--dry-run` behavior before allowing background execution.
-- [ ] Test signal and process handling on Linux, macOS, and Windows.
+- [x] Test signal and process handling on Linux, macOS, and Windows.
 
 ### Validation reliability
 
