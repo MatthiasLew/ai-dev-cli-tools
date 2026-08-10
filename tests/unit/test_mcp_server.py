@@ -62,6 +62,7 @@ def test_initialize_advertises_tools_and_bounded_instructions(tmp_path: Path) ->
     names = [tool["name"] for tool in tools]
     assert names == [
         "build_context",
+        "coordinate_agents",
         "explain_evidence",
         "feedback",
         "project_status",
@@ -279,3 +280,21 @@ def test_invalid_bounded_values_return_parameter_errors(tmp_path: Path) -> None:
     assert invalid_choice["error"]["code"] == -32602
     assert invalid_reference is not None
     assert invalid_reference["error"]["code"] == -32602
+
+
+def test_coordinate_agents_tool_claims_and_reports_conflicts(tmp_path: Path) -> None:
+    server = LocalMcpServer(tmp_path)
+    added = _call(
+        server,
+        "coordinate_agents",
+        {"action": "add", "task_id": "one", "title": "One", "paths": ["src"]},
+    )
+    claimed = _call(
+        server,
+        "coordinate_agents",
+        {"action": "claim", "task_id": "one", "agent_id": "agent-a"},
+    )
+
+    assert added["isError"] is False
+    assert claimed["structuredContent"]["summary"]["reason_code"] == "TASK_CLAIMED"
+    assert claimed["structuredContent"]["summary"]["active_claims"][0]["id"] == "one"

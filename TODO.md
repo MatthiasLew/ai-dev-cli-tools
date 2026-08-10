@@ -110,6 +110,8 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add symbol-level working-tree diffs for Python and JavaScript/TypeScript with changed
   signatures, line counts, risk, related tests, conservative fallbacks, and compact review or
   minimal context output.
+- [x] Add local multi-agent task coordination with atomic state, expiring claim leases,
+  dependency gates, declared-path conflict detection, CLI/MCP operations, and stable reason codes.
 
 ## P3 — Distribution and ecosystem
 

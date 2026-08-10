@@ -101,6 +101,10 @@ codex mcp add ai-dev -- ai-dev --project "/absolute/path/to/project" mcp serve
 See `docs/MCP_SERVER.md` for tool schemas, approvals, project-scoped configuration, and
 security boundaries.
 
+For agents sharing a repository, `ai-dev agents add|claim|heartbeat|release|complete|status`
+maintains an atomic local task board with expiring leases and declared-path conflict detection.
+See `docs/AGENT_COORDINATION.md` for the workflow and safety limits.
+
 ## Bootstrap
 
 `ai-dev bootstrap` prepares a detected project with conservative, project-local commands. Use `--explain` to see the plan without modifications, `--dry-run` to validate planning without executing modifying commands, and `--create-env` to allow copying `.env.example` to `.env` only when `.env` is missing.
