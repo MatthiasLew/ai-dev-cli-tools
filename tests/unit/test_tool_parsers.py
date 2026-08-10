@@ -92,3 +92,48 @@ def test_parser_registry_supports_extension_and_guards_duplicate_names() -> None
         unregister_parser("acme")
     with pytest.raises(KeyError):
         unregister_parser("acme")
+
+
+@pytest.mark.parametrize(
+    ("command", "fixture", "exit_code", "parser", "status"),
+    [
+        ("ruff check .", "ruff-warning.log", 0, "ruff", "success"),
+        ("pytest", "pytest-multiple-failures.log", 1, "pytest", "failed"),
+        ("mvn test", "maven-localized-fail.log", 1, "maven", "failed"),
+        ("pytest", "pytest-9-ok.log", 0, "pytest", "success"),
+    ],
+)
+def test_parser_compatibility_fixtures(
+    command: str, fixture: str, exit_code: int, parser: str, status: str
+) -> None:
+    parsed = parse_tool_output(
+        command,
+        (FIXTURES / fixture).read_text(encoding="utf-8"),
+        exit_code=exit_code,
+    )
+
+    assert parsed["parser"] == parser
+    assert parsed["status"] == status
+
+
+def test_parser_reports_warnings_multiple_failures_localized_frames_and_new_versions() -> None:
+    warning = parse_tool_output(
+        "ruff check .", (FIXTURES / "ruff-warning.log").read_text(encoding="utf-8")
+    )
+    multiple = parse_tool_output(
+        "pytest",
+        (FIXTURES / "pytest-multiple-failures.log").read_text(encoding="utf-8"),
+        exit_code=1,
+    )
+    localized = parse_tool_output(
+        "mvn test", (FIXTURES / "maven-localized-fail.log").read_text(encoding="utf-8"), 1
+    )
+    modern = parse_tool_output("pytest", (FIXTURES / "pytest-9-ok.log").read_text(encoding="utf-8"))
+
+    assert warning["warnings"] == 1
+    assert multiple["failed"] == 2
+    repeated = cast(list[str], multiple["grouped_repeated_messages"])
+    assert "AssertionError: expected 200 x 2" in repeated
+    assert localized["first_project_frame"] == "src/main/java/App.java:12:3"
+    assert modern["passed"] == 3
+    assert modern["skipped"] == 1

@@ -90,7 +90,7 @@ changes, and cross-platform behavior are covered where applicable.
 - [ ] Split the large `context.builder`, `runners.check`, and `runners.bootstrap` modules into
   small strategy and orchestration modules with stable interfaces.
 - [x] Replace hard-coded parser selection with a parser registry and documented extension API.
-- [ ] Add parser fixtures for warnings, multiple simultaneous failures, localized output, and
+- [x] Add parser fixtures for warnings, multiple simultaneous failures, localized output, and
   new tool versions.
 - [x] Add bounded cache storage under `.ai/cache/` with schema versions, fingerprints,
   explicit invalidation rules, pruning, and local diagnostics.

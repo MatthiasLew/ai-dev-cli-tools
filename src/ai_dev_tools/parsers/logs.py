@@ -20,7 +20,7 @@ PROJECT_FRAME_PATTERN = re.compile(
     r"(?P<file>[A-Za-z0-9_./\\-]+\.(?:py|ts|tsx|js|jsx|java|rs|php)):(?P<line>\d+)(?::(?P<column>\d+))?"
 )
 TEST_COUNT_PATTERN = re.compile(
-    r"(?P<count>\d+)\s+(?P<kind>passed|failed|failures?|skipped|errors?|xfailed|xpassed|tests?)",
+    r"(?P<count>\d+)[ \t]+(?P<kind>passed|failed|failures?|skipped|errors?|xfailed|xpassed|tests?)",
     re.IGNORECASE,
 )
 PYTEST_FAILURE_PATTERN = re.compile(r"FAILED\s+(?P<test>\S+)(?:\s+-\s+(?P<message>.*))?")
