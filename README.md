@@ -69,6 +69,8 @@ ai-dev explain issue:<id> --tail 100
 ai-dev feedback --task "fix authentication timeout"
 ai-dev watch --mode changed --debounce 500
 ai-dev session status
+ai-dev bootstrap --if-needed
+ai-dev environment explain
 ai-dev diagnostics
 ai-dev completion bash
 ai-dev test affected
@@ -197,6 +199,7 @@ git diff --check
 | git inspect | implemented |
 | finish | implemented |
 | bootstrap | implemented |
+| environment explain | implemented |
 | run | implemented |
 | stop | implemented |
 

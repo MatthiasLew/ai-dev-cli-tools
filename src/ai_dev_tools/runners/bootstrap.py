@@ -22,6 +22,10 @@ from ai_dev_tools.runners.bootstrap_models import (
 from ai_dev_tools.runners.bootstrap_strategies import (
     build_bootstrap_plan as build_bootstrap_plan,
 )
+from ai_dev_tools.runners.environment_state import (
+    capture_environment_state,
+    inspect_environment_state,
+)
 from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command
 
@@ -31,9 +35,36 @@ BootstrapStatus = Literal["planned", "executed", "skipped", "failed"]
 def run_bootstrap(project_root: Path, options: BootstrapOptions) -> Report:
     settings = load_settings(project_root)
     report = Report(command="bootstrap", project_root=settings.project_root)
+    plan = build_bootstrap_plan(settings, options)
+    warm_state = inspect_environment_state(settings.project_root, plan)
+    if options.if_needed and warm_state["reusable"] and not options.explain:
+        report.summary = {
+            "project_type": plan.project_type,
+            "package_manager": plan.package_manager,
+            "if_needed": True,
+            "skipped": True,
+            "reason_code": "WARM_ENVIRONMENT_REUSED",
+            "planned_commands": len(plan.steps),
+            "executed_commands": 0,
+            "plan": plan.to_dict(),
+            "environment_state": {
+                "reusable": True,
+                "state_path": warm_state["state_path"],
+                "reason_codes": [],
+            },
+            "modifications": "NONE",
+        }
+        state_path = Path(str(warm_state["state_path"]))
+        report.artifacts.append(
+            Artifact(str(state_path), "environment-state", "Reused warm environment state")
+        )
+        report.finish()
+        write_markdown(report, settings.reports_directory / "bootstrap-latest.md")
+        write_json(report, settings.reports_directory / "bootstrap-latest.json")
+        return report
+
     scan = scan_project(settings.project_root)
     doctor = run_doctor(settings.project_root)
-    plan = build_bootstrap_plan(settings, options)
     missing_tools = _missing_required_tools(plan, doctor)
     incompatible_runtimes = list(doctor.summary.get("incompatible_runtimes", []))
     log_path = _log_path(settings.logs_directory)
@@ -112,6 +143,7 @@ def run_bootstrap(project_root: Path, options: BootstrapOptions) -> Report:
         "project_type": plan.project_type,
         "package_manager": plan.package_manager,
         "dry_run": options.dry_run,
+        "if_needed": options.if_needed,
         "explain": options.explain,
         "planned_commands": len(plan.steps),
         "executed_commands": len([item for item in executed if item["exit_code"] == 0]),
@@ -128,6 +160,27 @@ def run_bootstrap(project_root: Path, options: BootstrapOptions) -> Report:
     if log_path.exists():
         summary["full_log"] = str(log_path)
         report.artifacts.append(Artifact(str(log_path), "log", "Full bootstrap command output"))
+    summary["environment_state"] = {
+        "reusable_before": warm_state["reusable"],
+        "reason_codes": warm_state["reason_codes"],
+        "state_path": warm_state["state_path"],
+        "captured": False,
+    }
+    if report.status == "success" and should_execute:
+        state_path = capture_environment_state(
+            settings.project_root,
+            plan,
+            doctor.summary,
+        )
+        summary["environment_state"] = {
+            "reusable_before": warm_state["reusable"],
+            "reason_codes": warm_state["reason_codes"],
+            "state_path": str(state_path),
+            "captured": True,
+        }
+        report.artifacts.append(
+            Artifact(str(state_path), "environment-state", "Warm environment state")
+        )
     report.summary = summary
     report.finish()
     write_markdown(report, settings.reports_directory / "bootstrap-latest.md")

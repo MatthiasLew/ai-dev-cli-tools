@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--dry-run", action="store_true")
     bootstrap.add_argument("--explain", action="store_true")
     bootstrap.add_argument("--create-env", action="store_true")
+    bootstrap.add_argument("--if-needed", action="store_true")
+
+    environment = sub.add_parser("environment")
+    environment_sub = environment.add_subparsers(dest="environment_command", required=True)
+    environment_sub.add_parser("explain")
 
     run = sub.add_parser("run")
     run.add_argument("--dry-run", action="store_true")
@@ -267,8 +272,13 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 dry_run=args.dry_run,
                 explain=args.explain,
                 create_env=args.create_env,
+                if_needed=args.if_needed,
             ),
         )
+    if command == "environment" and args.environment_command == "explain":
+        from ai_dev_tools.runners.environment_state import run_environment_explain
+
+        return run_environment_explain(project_root)
     if command == "doctor":
         from ai_dev_tools.detectors.environment import run_doctor
 
@@ -385,6 +395,7 @@ def _capabilities_report(project_root: Path) -> Report:
         "logs summarize",
         "context build",
         "bootstrap",
+        "environment explain",
         "run",
         "stop",
         "git status",

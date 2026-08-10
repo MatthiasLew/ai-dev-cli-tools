@@ -41,9 +41,9 @@ The current implementation now includes:
 - one-shot compact `feedback` reports with stage timings and local session state;
 - incrementally reused import/test impact edges and focused rerun hints.
 
-The sections below remain the long-term target design. Warm environment state,
-bounded flaky retries, and broader multi-language symbol extraction are still planned. A first
+The sections below remain the long-term target design. Bounded flaky retries and broader multi-language symbol extraction are still planned. A first
 version of reproducible local A/B workflow benchmarks is implemented in ai-dev benchmark.
+
 ## Recommended capabilities
 
 ### 1. Incremental context packs
@@ -326,6 +326,10 @@ ai-dev environment explain
 
 The tool must revalidate executable existence and fingerprints before reusing state. It must not
 silently install global software or assume that an activated shell remains unchanged.
+
+Implemented with a schema-versioned local snapshot, input and plan fingerprints, executable
+path revalidation, bootstrap --if-needed, and environment explain. Only a successful bootstrap
+can refresh reusable state.
 
 **Expected impact:** medium to high for fresh sessions and multi-workspace repositories.
 
