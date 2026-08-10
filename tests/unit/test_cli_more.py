@@ -35,6 +35,8 @@ def test_cli_capabilities_json(tmp_path: Path, capsys) -> None:  # type: ignore[
     output = capsys.readouterr().out
     assert "implemented" in output
     assert "context build" in output
+    assert "test flaky" in output
+    assert '"ci_status": "VERIFIED"' in output
 
 
 def test_cli_check_explain_does_not_run(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]

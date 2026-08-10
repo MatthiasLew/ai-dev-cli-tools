@@ -33,7 +33,8 @@ The current implementation now includes:
 - a reusable, schema-versioned repository index;
 - content-addressed validation caching with bounded retention and explicit bypass;
 - stable failure signatures, bounded parallel checks, and workspace-aware execution;
-- Python AST-aware snippets with line ranges, selection reasons, and referenced local symbols;
+- Python AST-aware snippets and conservative JavaScript/TypeScript top-level snippets with line
+  ranges, selection reasons, and referenced local symbols;
 - local index/cache status and maintenance commands;
 - stable evidence IDs with targeted local expansion;
 - named local baselines with failure and status regression comparison.
@@ -41,7 +42,8 @@ The current implementation now includes:
 - one-shot compact `feedback` reports with stage timings and local session state;
 - incrementally reused import/test impact edges and focused rerun hints.
 
-The sections below remain the long-term target design. Broader multi-language symbol extraction is still planned. A first
+The sections below remain the long-term target design. JavaScript and TypeScript now have a
+conservative top-level symbol extractor; additional language adapters are still planned. A first
 version of reproducible local A/B workflow benchmarks is implemented in ai-dev benchmark.
 
 ## Recommended capabilities

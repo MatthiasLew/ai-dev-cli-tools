@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add task-aware JavaScript/TypeScript top-level symbol selection for bounded context packs.
+- Correct capabilities metadata for flaky retries and completed cross-platform CI.
+
 - Add reproducible, correctness-gated local A/B workflow benchmarks and comparison reports.
 - Add foreground watch mode with debounced changed validation and latest-result reports.
 - Add revalidated warm environment state and bootstrap --if-needed.

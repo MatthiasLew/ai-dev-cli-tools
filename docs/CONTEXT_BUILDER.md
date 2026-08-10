@@ -36,14 +36,22 @@ The builder reuses existing project scan, repository map, git inspection, and ch
 
 `--changed-only` and `--staged-only` narrow selection to Git changes. `--no-git` skips Git inspection and diffs, which is useful for fixture directories or unpacked source trees.
 
-## Symbol-aware Python snippets
+## Symbol-aware source snippets
 
 When a Python file exceeds `--max-file-chars`, the builder parses it with the standard-library
 AST and selects imports plus task-relevant top-level functions, async functions, or classes.
+
+JavaScript and TypeScript files use a dependency-free, conservative structural extractor for
+top-level functions, classes, interfaces, types, enums, namespaces, and arrow functions. The
+extractor ignores nested declarations and braces inside comments or strings. It deliberately
+falls back to bounded file-prefix selection for unbalanced or ambiguous source instead of
+guessing.
+
 Every selected snippet reports its symbol name, kind, line range, reason, referenced local
 symbols, and truncation state. Import text has a separate bounded budget so it cannot displace
-the matching implementation. Syntax errors, small files, and non-Python files use the existing
-bounded file-prefix fallback.
+the matching implementation. Syntax errors, small files, unsupported languages, and files
+without recognized top-level declarations use the existing bounded file-prefix fallback.
+
 ## Safety
 
 The builder excludes `.env`, private keys, binary files, cache directories, build outputs, and `.ai/logs` or `.ai/reports`. Snippets and diffs are masked with the same secret patterns used by git inspection. Report writers also apply a final mask before serializing Markdown or JSON. Check, bootstrap, doctor, foreground runtime, and supervised background output are masked before being persisted.

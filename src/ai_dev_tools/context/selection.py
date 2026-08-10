@@ -5,7 +5,11 @@ import re
 from pathlib import Path
 
 from ai_dev_tools.context.models import ContextOptions, RejectedFile, SelectedFile
-from ai_dev_tools.context.symbols import SymbolSnippet, select_python_symbols
+from ai_dev_tools.context.symbols import (
+    SymbolSnippet,
+    select_javascript_symbols,
+    select_python_symbols,
+)
 from ai_dev_tools.detectors.repository_map import BINARY_EXTENSIONS
 from ai_dev_tools.security.secrets import mask_text
 
@@ -112,11 +116,20 @@ def _read_selected_files(
             rejected.append(RejectedFile(rel, f"unreadable: {exc}", "UNREADABLE_FILE"))
             continue
         masked = mask_text(text)
-        symbol_selection = (
-            select_python_symbols(text, masked, options.task, options.max_file_chars)
-            if path.suffix.lower() == ".py"
-            else None
-        )
+        suffix = path.suffix.lower()
+        if suffix == ".py":
+            symbol_selection = select_python_symbols(
+                text, masked, options.task, options.max_file_chars
+            )
+            symbol_strategy = "python-ast"
+        elif suffix in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}:
+            symbol_selection = select_javascript_symbols(
+                text, masked, options.task, options.max_file_chars
+            )
+            symbol_strategy = "javascript-structure"
+        else:
+            symbol_selection = None
+            symbol_strategy = "file-prefix"
         if symbol_selection is None:
             snippet, truncated = _truncate_text(masked, options.max_file_chars)
             strategy = "file-prefix"
@@ -125,7 +138,7 @@ def _read_selected_files(
         else:
             snippet = symbol_selection.content
             truncated = symbol_selection.truncated
-            strategy = "python-ast"
+            strategy = symbol_strategy
             omitted_content = symbol_selection.omitted_content
             snippets = symbol_selection.snippets
         selected.append(
