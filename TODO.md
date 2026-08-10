@@ -42,7 +42,7 @@ changes, and cross-platform behavior are covered where applicable.
   command from the repository root.
 - [x] Deduplicate repository-wide checks while keeping subproject checks isolated.
 - [x] Report which workspace selected each command and why.
-- [ ] Add mixed-language monorepo fixtures and integration tests for Windows and POSIX paths.
+- [x] Add mixed-language monorepo fixtures and integration tests for Windows and POSIX paths.
 
 ### Runtime compatibility
 
@@ -73,7 +73,7 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add schema contract tests that reject accidental breaking changes to JSON reports.
 - [x] Define confidence levels for affected-test selection and make fallback behavior part of
   the public report schema.
-- [ ] Add explicit tests for filenames containing spaces, Unicode, renames, deletions, and
+- [x] Add explicit tests for filenames containing spaces, Unicode, renames, deletions, and
   non-UTF-8 tool output.
 
 ## P2 — Improve agent efficiency and maintainability

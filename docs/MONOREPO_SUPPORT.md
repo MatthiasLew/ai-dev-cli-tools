@@ -16,3 +16,5 @@ Current behavior:
 - Configuration changes such as `package.json`, `pnpm-workspace.yaml`, `Cargo.toml`, `pom.xml`, `settings.gradle`, and test fixture files trigger a broader plan.
 
 Planned workspace-specific routing includes npm, pnpm, Yarn, Cargo workspace, Maven multi-module, Gradle multi-project, and mixed Python/Node repositories.
+
+Mixed Python/Node/Rust fixtures are exercised from paths containing spaces and Unicode. The same integration test runs in the Linux, Windows, and macOS GitHub Actions matrix and verifies POSIX plus Windows-style workspace ownership paths.

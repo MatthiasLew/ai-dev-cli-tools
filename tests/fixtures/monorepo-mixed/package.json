@@ -1,0 +1,1 @@
+{"name":"mixed-root","private":true,"workspaces":["packages/*","services/*"]}

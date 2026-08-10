@@ -1,0 +1,1 @@
+{"name":"mixed-web","scripts":{"test":"node test.js"},"engines":{"node":">=18"}}
