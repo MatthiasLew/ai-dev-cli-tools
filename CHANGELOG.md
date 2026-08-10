@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Add reproducible, correctness-gated local A/B workflow benchmarks and comparison reports.
+- Add foreground watch mode with debounced changed validation and latest-result reports.
 
 ## 0.5.0a1 - 2026-08-10
 
