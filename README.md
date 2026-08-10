@@ -22,10 +22,13 @@ be safe for `ai-dev` to recreate.
 ## Install
 
 ```bash
-python -m pip install pipx
-pipx install .
+python -m pip install --upgrade pipx
+pipx install ai-dev-cli-tools==0.5.0a1
 ai-dev --help
 ```
+
+For a source checkout before the public alpha is published, use `pipx install .`. See
+`docs/DISTRIBUTION.md` for the Trusted Publishing and upgrade policy.
 
 For development:
 
@@ -203,6 +206,6 @@ git diff --check
 - Auto-commit, auto-push, and GUI remain out of scope or planned.
 
 ## Intentional Limits
-Version 0.4.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+Version 0.5.0a1 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
 
-Shell completion scripts are generated with i-dev completion bash|zsh|fish|powershell and can be sourced or installed using the normal mechanism for the selected shell.
+Shell completion scripts are generated with `ai-dev completion bash|zsh|fish|powershell` and can be sourced or installed using the normal mechanism for the selected shell.

@@ -9,7 +9,7 @@ Required fields:
 ```json
 {
   "schema_version": "1.1",
-  "tool_version": "0.4.0",
+  "tool_version": "0.5.0a1",
   "command": "check",
   "status": "success",
   "exit_code": 0,

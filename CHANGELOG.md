@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0a1 - 2026-08-10
+
 - Add workspace models and isolated check/bootstrap routing for mixed monorepos.
 - Add cross-platform mixed-monorepo and Git path fixtures covering spaces, Unicode, rename, deletion, and non-UTF-8 output.
 - Add runner failure matrices and real Python, Node, Rust, Maven, Gradle, and Composer fixture execution in CI.
