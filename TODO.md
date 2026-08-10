@@ -111,6 +111,8 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Provide example integrations that consume JSON reports without parsing Markdown.
 - [x] Add a local-only diagnostics command for cache size, report retention, and configuration
   provenance.
+- [x] Add opt-in bounded flaky retries, deterministic-failure exclusions, preserved first
+  failures, non-cacheable flaky passes, and bounded local test history.
 - [x] Add revalidated warm environment state, bootstrap --if-needed, and environment explain
   without retaining secrets or silently trusting changed tools and dependency inputs.
 - [x] Add foreground watch mode with ignored generated roots, debounced change coalescing,

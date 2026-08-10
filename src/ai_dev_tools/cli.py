@@ -60,6 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--jobs", type=int, default=1)
     check.add_argument("--no-cache", action="store_true")
     check.add_argument("--resume", action="store_true")
+    check.add_argument("--retry-flaky", type=int, default=0, metavar="COUNT")
     check.add_argument("--policy", choices=["complete", "feedback-first"], default="complete")
     check.add_argument(
         "--explain", action="store_true", help="Show selected checks without running them"
@@ -78,6 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     test = sub.add_parser("test")
     test_sub = test.add_subparsers(dest="test_command", required=True)
     test_sub.add_parser("affected")
+    test_sub.add_parser("flaky")
 
     logs = sub.add_parser("logs")
     logs_sub = logs.add_subparsers(dest="logs_command", required=True)
@@ -226,6 +228,10 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             explain=args.explain,
             timeout_seconds=args.timeout,
         )
+    if command == "test" and args.test_command == "flaky":
+        from ai_dev_tools.runners.flaky import run_flaky_report
+
+        return run_flaky_report(project_root)
     if command == "test" and args.test_command == "affected":
         command = "check"
         args.mode = "changed"
@@ -233,6 +239,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         args.jobs = 1
         args.no_cache = False
         args.resume = False
+        args.retry_flaky = 0
         args.policy = "complete"
     if command == "logs" and args.logs_command == "summarize":
         from ai_dev_tools.parsers.logs import summarize_latest_log, summarize_log_file
@@ -302,6 +309,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             use_cache=not args.no_cache,
             policy=args.policy,
             resume=args.resume,
+            retry_flaky=args.retry_flaky,
         )
     if command == "cache":
         from ai_dev_tools.runners.cache import run_cache

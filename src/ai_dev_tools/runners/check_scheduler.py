@@ -35,7 +35,9 @@ def schedule_checks(
         group_results = _execute_group(group, jobs, execute)
         completed_tasks.extend(group)
         results.extend(group_results)
-        if first_failure_at is None and any(result.exit_code != 0 for result in group_results):
+        if first_failure_at is None and any(
+            result.exit_code != 0 or result.flaky for result in group_results
+        ):
             first_failure_at = monotonic() - started
         blocking = any(
             task.required and result.exit_code != 0

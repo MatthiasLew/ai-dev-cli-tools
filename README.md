@@ -60,6 +60,7 @@ ai-dev check --mode fast
 ai-dev check --mode changed  # reports changed files and falls back safely when test mapping is uncertain
 ai-dev check --mode full --jobs 4
 ai-dev check --mode changed --policy feedback-first --resume
+ai-dev check --mode changed --retry-flaky 1
 ai-dev index update
 ai-dev cache status
 ai-dev baseline create main
@@ -74,6 +75,7 @@ ai-dev environment explain
 ai-dev diagnostics
 ai-dev completion bash
 ai-dev test affected
+ai-dev test flaky
 ai-dev logs summarize
 ai-dev context build
 ai-dev git status
@@ -187,6 +189,7 @@ git diff --check
 | check | implemented |
 | check --explain | implemented |
 | test affected | implemented |
+| test flaky / check --retry-flaky | implemented |
 | index status/update/rebuild | implemented |
 | cache status/prune/clear | implemented |
 | logs summarize | implemented |

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 TOP_LEVEL_COMMANDS = (
-    "doctor scan bootstrap run stop map check test logs context cache index "
-    "baseline explain feedback session diagnostics git "
+    "doctor scan bootstrap environment run stop map check test logs context cache index "
+    "baseline benchmark explain feedback watch session diagnostics git "
     "capabilities finish completion"
 )
 GLOBAL_FLAGS = "--project --json --quiet --help --version"

@@ -19,6 +19,7 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 3. Use `ai-dev session status --json` after an interrupted handoff.
 4. Read `metadata.progressive.references` and call `ai-dev explain <evidence-id> --json` only for needed evidence.
 5. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
+6. Treat FLAKY_PASS and checks_flaky as unresolved warning evidence; never report them as a clean first-pass success.
 6. Before handoff, run `ai-dev finish --json`.
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
