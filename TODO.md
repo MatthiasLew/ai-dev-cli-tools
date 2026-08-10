@@ -66,9 +66,9 @@ changes, and cross-platform behavior are covered where applicable.
 
 ### Validation reliability
 
-- [ ] Add end-to-end fixture projects whose real toolchains can be executed in CI, not only
+- [x] Add end-to-end fixture projects whose real toolchains can be executed in CI, not only
   detected or parsed from saved logs.
-- [ ] Test failure, timeout, missing executable, malformed output, and partial-log paths for
+- [x] Test failure, timeout, missing executable, malformed output, and partial-log paths for
   every supported runner family.
 - [x] Add schema contract tests that reject accidental breaking changes to JSON reports.
 - [x] Define confidence levels for affected-test selection and make fallback behavior part of
@@ -87,7 +87,7 @@ changes, and cross-platform behavior are covered where applicable.
 - [ ] Continue the remaining high-priority features from
   `docs/AGENT_EFFICIENCY_ROADMAP.md`, starting with progressive report expansion and
   baseline-aware reports.
-- [ ] Split the large `context.builder`, `runners.check`, and `runners.bootstrap` modules into
+- [x] Split the large `context.builder`, `runners.check`, and `runners.bootstrap` modules into
   small strategy and orchestration modules with stable interfaces.
 - [x] Replace hard-coded parser selection with a parser registry and documented extension API.
 - [x] Add parser fixtures for warnings, multiple simultaneous failures, localized output, and

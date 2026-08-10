@@ -107,7 +107,7 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             *plan.command,
         ]
         _spawn_supervisor(supervisor_command, settings.project_root)
-        state = _wait_for_state(paths["metadata"], {"running", "exited"}, 5.0)
+        state = _wait_for_state(paths["metadata"], {"running", "exited"}, 10.0)
         readiness: dict[str, object] = {"status": "not_configured"}
         if state.get("status") != "running":
             report.status = "failed"

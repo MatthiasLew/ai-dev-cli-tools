@@ -25,9 +25,13 @@ Add small modules under `detectors/`, `runners/`, or `parsers/`. Keep runtime de
 
 `check` builds deterministic `CheckTask` entries with name, category, command, cost, source, and required fields. Modes filter by semantics rather than slicing command lists.
 
+The stable `runners.check` facade orchestrates execution and re-exports its public models and selection functions. `check_models` owns report contracts, while `check_selection` owns changed-file and affected-test strategy.
+
 ## Context Builders
 
 `context build` is an orchestration layer. It calls project scan, repository map, git inspect, and changed-check selection, then applies local file selection, static dependency hints, snippet limits, diff limits, and secret masking. It does not execute tests, install dependencies, call external AI services, or isolate runners per subproject.
+
+`context.models` owns budgets and file contracts. `context.selection` owns candidate ranking inputs, security exclusions, file reading, and bounded language dependency hints. The stable builder facade coordinates these strategies and report rendering.
 
 Current context limitations:
 
@@ -42,3 +46,5 @@ Current context limitations:
 ## Bootstrap Runners
 
 `bootstrap` builds a deterministic `BootstrapPlan` from project signals and configuration. Explain and dry-run modes do not execute modifying commands. Real execution uses `run_command(shell=False)`, project-local paths, timeouts, full log capture, and guarded `.env.example` copying only when explicitly enabled.
+
+`bootstrap_models` contains the stable plan contracts, `bootstrap_strategies` contains project and workspace planning, and the `bootstrap` facade only orchestrates safety checks, execution, logs, and reports.

@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 import json
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, replace
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
 from ai_dev_tools.cache.repository import update_repository_index
 from ai_dev_tools.cache.validation import (
@@ -23,55 +21,31 @@ from ai_dev_tools.detectors.workspaces import detect_workspaces
 from ai_dev_tools.models.report import Report
 from ai_dev_tools.parsers.logs import parse_tool_output
 from ai_dev_tools.reporters.writer import write_json, write_markdown
+from ai_dev_tools.runners import check_selection as _selection
+from ai_dev_tools.runners.check_models import (
+    ChangedSelection as ChangedSelection,
+)
+from ai_dev_tools.runners.check_models import (
+    CheckCategory,
+    CheckCost,
+)
+from ai_dev_tools.runners.check_models import (
+    CheckTask as CheckTask,
+)
 from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command, split_command
 
-CheckCategory = Literal["format", "lint", "typecheck", "unit_tests", "integration_tests", "build"]
-CheckCost = Literal["fast", "medium", "slow"]
-CheckSource = Literal["detected", "configured"]
-ChangedStrategy = Literal[
-    "changed_test_direct",
-    "direct_test_match",
-    "module_match",
-    "package_match",
-    "workspace_match",
-    "configured_mapping",
-    "configuration_change",
-    "broad_fallback",
-    "no_changes",
-]
+
+def collect_changed_files(root: Path) -> list[str]:
+    return _selection.collect_changed_files(root, run_command)
 
 
-@dataclass(frozen=True, slots=True)
-class CheckTask:
-    name: str
-    category: CheckCategory
-    command: list[str]
-    cost: CheckCost
-    source: CheckSource
-    required: bool = True
-    workspace: str = ""
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+def infer_tests_for_changed_files(root: Path, changed_files: list[str]) -> list[str]:
+    return _selection.infer_tests_for_changed_files(root, changed_files)
 
 
-@dataclass(frozen=True, slots=True)
-class ChangedSelection:
-    strategy: ChangedStrategy
-    confidence: str
-    changed_files: list[str]
-    selected_tests: list[str]
-    selected_commands: list[list[str]]
-    fallback_reason: str | None = None
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            **asdict(self),
-            "fallback_reason_code": (
-                f"CHANGED_{self.strategy.upper()}" if self.fallback_reason else None
-            ),
-        }
+def select_changed_checks(settings: Settings, plan: list[CheckTask]) -> ChangedSelection:
+    return _selection.select_changed_checks(settings, plan, collect_changed_files)
 
 
 def run_check(
@@ -254,231 +228,6 @@ def build_validation_plan(
             child_tasks = build_validation_plan(child_settings, include_workspaces=False)
             tasks.extend(replace(task, workspace=workspace.root) for task in child_tasks)
     return sorted(_deduplicate_tasks(tasks), key=_task_order)
-
-
-def select_changed_checks(settings: Settings, plan: list[CheckTask]) -> ChangedSelection:
-    changed_files = collect_changed_files(settings.project_root)
-    if not changed_files:
-        return ChangedSelection("no_changes", "high", [], [], [], "No changed files detected.")
-    config_reason = _configuration_change_reason(changed_files)
-    if config_reason:
-        return ChangedSelection(
-            "configuration_change",
-            "low",
-            changed_files,
-            [],
-            [],
-            config_reason,
-        )
-    direct_changed_tests = [path for path in changed_files if _is_test_path(Path(path))]
-    if direct_changed_tests:
-        return ChangedSelection(
-            "changed_test_direct",
-            "high",
-            changed_files,
-            sorted(direct_changed_tests),
-            _commands_for_selected_tests(plan, sorted(direct_changed_tests)),
-            None,
-        )
-    configured_tests = _configured_changed_tests(settings, changed_files)
-    if configured_tests:
-        return ChangedSelection(
-            "configured_mapping",
-            "high",
-            changed_files,
-            configured_tests,
-            _commands_for_selected_tests(plan, configured_tests),
-            None,
-        )
-    selected_tests = infer_tests_for_changed_files(settings.project_root, changed_files)
-    if selected_tests:
-        strategy: ChangedStrategy = "direct_test_match"
-        return ChangedSelection(
-            strategy,
-            "medium",
-            changed_files,
-            selected_tests,
-            _commands_for_selected_tests(plan, selected_tests),
-            None,
-        )
-    return ChangedSelection(
-        "broad_fallback",
-        "low",
-        changed_files,
-        [],
-        [],
-        "Changed files were detected, but no reliable test dependency map is available yet.",
-    )
-
-
-def collect_changed_files(root: Path) -> list[str]:
-    seen: dict[str, None] = {}
-    commands = [
-        ["git", "diff", "--name-only", "-z"],
-        ["git", "diff", "--cached", "--name-only", "-z"],
-        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
-    ]
-    upstream = run_command(
-        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root, 30
-    )
-    if upstream.exit_code == 0 and upstream.stdout.strip():
-        commands.append(["git", "diff", "--name-only", "-z", upstream.stdout.strip() + "...HEAD"])
-    for command in commands:
-        result = run_command(command, root, 30)
-        if result.exit_code != 0:
-            continue
-        for item in _split_nul(result.stdout):
-            if item:
-                seen[item] = None
-    return sorted(seen)
-
-
-def infer_tests_for_changed_files(root: Path, changed_files: list[str]) -> list[str]:
-    selected: dict[str, None] = {}
-    for rel in changed_files:
-        path = Path(rel)
-        if _is_test_path(path):
-            _add_existing(root, selected, rel)
-            continue
-        candidates = _candidate_tests_for_source(path)
-        for candidate in candidates:
-            _add_existing(root, selected, candidate)
-        for importer in _python_importing_tests(root, path):
-            selected[importer] = None
-    return sorted(selected)
-
-
-def _configuration_change_reason(changed_files: list[str]) -> str | None:
-    broad_files = {
-        "pyproject.toml",
-        "pytest.ini",
-        "tox.ini",
-        "noxfile.py",
-        "package.json",
-        "pnpm-workspace.yaml",
-        "jest.config.js",
-        "jest.config.ts",
-        "vitest.config.js",
-        "vitest.config.ts",
-        "pom.xml",
-        "build.gradle",
-        "build.gradle.kts",
-        "settings.gradle",
-        "settings.gradle.kts",
-        "Cargo.toml",
-        "Cargo.lock",
-        "composer.json",
-        "phpunit.xml",
-    }
-    for rel in changed_files:
-        path = Path(rel)
-        normalized = path.as_posix()
-        if path.name == "conftest.py" or "fixtures" in path.parts:
-            return f"Shared test fixture changed: {rel}"
-        if normalized in broad_files or path.name in broad_files:
-            return f"Project or test configuration changed: {rel}"
-    return None
-
-
-def _candidate_tests_for_source(path: Path) -> list[str]:
-    stem = path.stem
-    suffix = path.suffix.lower()
-    parts = list(path.parts)
-    candidates: list[str] = []
-    if suffix == ".py":
-        relative_parts = parts[1:] if parts and parts[0] in {"src", "lib"} else parts
-        if relative_parts:
-            relative_parts[-1] = f"test_{stem}.py"
-            candidates.append(str(Path("tests", *relative_parts)))
-        candidates.append(str(Path("tests", f"test_{stem}.py")))
-    if suffix in {".js", ".jsx", ".ts", ".tsx"}:
-        candidates.extend(
-            [
-                str(path.with_name(f"{stem}.test{suffix}")),
-                str(path.with_name(f"{stem}.spec{suffix}")),
-                str(Path("tests", f"{stem}.test{suffix}")),
-                str(Path("tests", f"{stem}.spec{suffix}")),
-            ]
-        )
-    if suffix == ".java" and parts[:3] == ["src", "main", "java"]:
-        test_parts = ["src", "test", "java", *parts[3:]]
-        test_parts[-1] = f"{stem}Test.java"
-        candidates.append(str(Path(*test_parts)))
-    if suffix == ".php":
-        rel_parts = parts[1:] if parts and parts[0] == "src" else parts
-        if rel_parts:
-            rel_parts[-1] = f"{stem}Test.php"
-            candidates.append(str(Path("tests", *rel_parts)))
-    return candidates
-
-
-def _python_importing_tests(root: Path, source_path: Path) -> list[str]:
-    if source_path.suffix.lower() != ".py" or not (root / "tests").exists():
-        return []
-    module = ".".join(source_path.with_suffix("").parts)
-    if module.startswith("src."):
-        module = module[4:]
-    needle_options = {
-        f"import {module}",
-        f"from {module} import",
-        f"from {module.rsplit('.', 1)[0]} import" if "." in module else "",
-    }
-    matches: list[str] = []
-    for test_path in (root / "tests").rglob("test_*.py"):
-        text = test_path.read_text(encoding="utf-8", errors="replace")
-        if any(needle and needle in text for needle in needle_options):
-            matches.append(str(test_path.relative_to(root)))
-    return matches
-
-
-def _configured_changed_tests(settings: Settings, changed_files: list[str]) -> list[str]:
-    selected: dict[str, None] = {}
-    for source_pattern, test_patterns in settings.changed_tests.items():
-        if not any(
-            fnmatch.fnmatch(path.replace("\\", "/"), source_pattern) for path in changed_files
-        ):
-            continue
-        for pattern in test_patterns:
-            for match in _matching_test_files(settings.project_root, pattern):
-                selected[str(match.relative_to(settings.project_root))] = None
-    return sorted(selected)
-
-
-def _matching_test_files(root: Path, pattern: str) -> list[Path]:
-    files: dict[Path, None] = {}
-    for match in root.glob(pattern):
-        if match.is_file():
-            files[match] = None
-        elif match.is_dir():
-            for child in match.rglob("*"):
-                if child.is_file():
-                    files[child] = None
-    return sorted(files)
-
-
-def _commands_for_selected_tests(
-    plan: list[CheckTask], selected_tests: list[str]
-) -> list[list[str]]:
-    commands: list[list[str]] = []
-    if not selected_tests:
-        return commands
-    if any(path.endswith(".py") for path in selected_tests):
-        commands.append([sys.executable, "-m", "pytest", *selected_tests])
-    if any(path.endswith((".js", ".jsx", ".ts", ".tsx")) for path in selected_tests):
-        npm_test = next((task.command for task in plan if task.name == "npm test"), ["npm", "test"])
-        commands.append(npm_test)
-    if any(path.endswith(".java") for path in selected_tests):
-        maven = next((task.command for task in plan if task.name == "maven test"), None)
-        gradle = next((task.command for task in plan if task.name == "gradle test"), None)
-        commands.append(maven or gradle or ["mvn", "test"])
-    if any(path.endswith(".php") for path in selected_tests):
-        commands.append(
-            next(
-                (task.command for task in plan if task.name == "composer test"),
-                ["composer", "test"],
-            )
-        )
-    return commands
 
 
 def _configured_plan(commands: dict[str, str]) -> list[CheckTask]:
@@ -697,26 +446,6 @@ def _deduplicate_tasks(tasks: list[CheckTask]) -> list[CheckTask]:
     for task in tasks:
         unique[(task.workspace, task.category, tuple(task.command))] = task
     return list(unique.values())
-
-
-def _is_test_path(path: Path) -> bool:
-    text = path.as_posix().lower()
-    return (
-        "/tests/" in f"/{text}"
-        or ".test." in text
-        or ".spec." in text
-        or path.name.startswith("test_")
-    )
-
-
-def _add_existing(root: Path, selected: dict[str, None], rel: str) -> None:
-    path = root / rel
-    if path.exists() and path.is_file():
-        selected[str(path.relative_to(root))] = None
-
-
-def _split_nul(output: str) -> list[str]:
-    return [item for item in output.split("\0") if item]
 
 
 def _full_log_from_output(output: str) -> str | None:
