@@ -55,3 +55,22 @@ def test_git_status_can_skip_report_writes(tmp_path: Path) -> None:
 
     assert report.status == "success"
     assert not (tmp_path / ".ai" / "reports").exists()
+
+
+def test_git_inspect_includes_symbol_level_diff(tmp_path: Path) -> None:
+    run_command(["git", "init", "-b", "main"], tmp_path, 30)
+    run_command(["git", "config", "user.email", "agent@example.com"], tmp_path, 30)
+    run_command(["git", "config", "user.name", "Agent"], tmp_path, 30)
+    source = tmp_path / "service.py"
+    source.write_text("def calculate(value):\n    return value + 1\n", encoding="utf-8")
+    run_command(["git", "add", "service.py"], tmp_path, 30)
+    run_command(["git", "commit", "-m", "initial"], tmp_path, 30)
+    source.write_text(
+        "def calculate(value, offset=2):\n    return value + offset\n", encoding="utf-8"
+    )
+
+    report = inspect_git(tmp_path, detailed=True, write_reports=False)
+
+    assert report.summary["changed_symbols"][0]["name"] == "calculate"
+    assert report.summary["changed_symbols"][0]["risk"] == "high"
+    assert report.summary["symbol_diff_summary"]["symbols_changed"] == 1

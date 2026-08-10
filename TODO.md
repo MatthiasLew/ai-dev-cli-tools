@@ -107,6 +107,9 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add a local MCP STDIO server with focused tools for project status, feedback,
   bounded context, validation, and evidence expansion; default potentially expensive
   operations to preview-only and document Codex configuration.
+- [x] Add symbol-level working-tree diffs for Python and JavaScript/TypeScript with changed
+  signatures, line counts, risk, related tests, conservative fallbacks, and compact review or
+  minimal context output.
 
 ## P3 — Distribution and ecosystem
 

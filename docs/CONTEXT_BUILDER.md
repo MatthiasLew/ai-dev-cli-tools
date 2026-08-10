@@ -52,6 +52,17 @@ symbols, and truncation state. Import text has a separate bounded budget so it c
 the matching implementation. Syntax errors, small files, unsupported languages, and files
 without recognized top-level declarations use the existing bounded file-prefix fallback.
 
+## Symbol-level diffs
+
+Detailed Git inspection maps zero-context working-tree hunks to top-level Python and
+JavaScript/TypeScript symbols. Reports expose changed signatures, added and deleted line counts,
+change type, risk, related tests, and parser confidence. Module-level edits are retained as a
+`<module>` entry, while deleted symbols are resolved against `HEAD`.
+
+The `minimal` and `review` profiles compact eligible raw diffs into a bounded `symbol-diff`
+summary. Raw diffs remain the fallback whenever parsing is ambiguous, a file is unsupported, or
+no useful symbol mapping exists. The default, debug, and full profiles retain their raw diffs.
+
 ## Safety
 
 The builder excludes `.env`, private keys, binary files, cache directories, build outputs, and `.ai/logs` or `.ai/reports`. Snippets and diffs are masked with the same secret patterns used by git inspection. Report writers also apply a final mask before serializing Markdown or JSON. Check, bootstrap, doctor, foreground runtime, and supervised background output are masked before being persisted.
