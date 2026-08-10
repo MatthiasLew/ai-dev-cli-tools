@@ -9,6 +9,7 @@ from ai_dev_tools.context.symbols import (
     SymbolSnippet,
     select_javascript_symbols,
     select_python_symbols,
+    select_structural_symbols,
 )
 from ai_dev_tools.detectors.repository_map import BINARY_EXTENSIONS
 from ai_dev_tools.security.secrets import mask_text
@@ -127,6 +128,15 @@ def _read_selected_files(
                 text, masked, options.task, options.max_file_chars
             )
             symbol_strategy = "javascript-structure"
+        elif suffix in {".java", ".rs", ".php"}:
+            symbol_selection = select_structural_symbols(
+                text, masked, options.task, options.max_file_chars, suffix
+            )
+            symbol_strategy = {
+                ".java": "java-structure",
+                ".rs": "rust-structure",
+                ".php": "php-structure",
+            }[suffix]
         else:
             symbol_selection = None
             symbol_strategy = "file-prefix"

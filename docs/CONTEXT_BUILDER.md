@@ -52,10 +52,14 @@ symbols, and truncation state. Import text has a separate bounded budget so it c
 the matching implementation. Syntax errors, small files, unsupported languages, and files
 without recognized top-level declarations use the existing bounded file-prefix fallback.
 
+Java, Rust, and PHP use the same bounded selection contract with conservative structural
+extractors. Java and PHP include class methods; Rust includes top-level functions, structs, enums,
+traits, and impl blocks. Ambiguous or unbalanced input always falls back to the file prefix.
+
 ## Symbol-level diffs
 
 Detailed Git inspection maps zero-context working-tree hunks to top-level Python and
-JavaScript/TypeScript symbols. Reports expose changed signatures, added and deleted line counts,
+JavaScript/TypeScript, Java, Rust, and PHP symbols. Reports expose changed signatures, added and deleted line counts,
 change type, risk, related tests, and parser confidence. Module-level edits are retained as a
 `<module>` entry, while deleted symbols are resolved against `HEAD`.
 
