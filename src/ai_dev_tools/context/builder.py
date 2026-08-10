@@ -83,6 +83,7 @@ class ContextOptions:
 class SelectedFile:
     path: str
     reason: str
+    reason_code: str
     chars: int
     truncated: bool
     content: str
@@ -98,6 +99,7 @@ class SelectedFile:
 class RejectedFile:
     path: str
     reason: str
+    reason_code: str
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -157,7 +159,12 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
             {
                 "explain_only": True,
                 "selected_files": [
-                    {"path": _rel(root, path), "reason": candidates[path]} for path in ordered_paths
+                    {
+                        "path": _rel(root, path),
+                        "reason": candidates[path],
+                        "reason_code": _selection_reason_code(candidates[path]),
+                    }
+                    for path in ordered_paths
                 ],
                 "rejected_files": [item.to_dict() for item in rejected],
                 "secret_findings": [finding.masked_dict() for finding in secret_findings],
@@ -360,12 +367,12 @@ def _add_candidate(
         resolved = path.resolve()
         resolved.relative_to(root.resolve())
     except ValueError:
-        rejected.append(RejectedFile(str(path), "outside project root"))
+        rejected.append(RejectedFile(str(path), "outside project root", "OUTSIDE_PROJECT_ROOT"))
         return
     rel = _rel(root, path)
     blocked = _blocked_reason(path, rel, options.exclude)
     if blocked:
-        rejected.append(RejectedFile(rel, blocked))
+        rejected.append(RejectedFile(rel, blocked, _rejection_reason_code(blocked)))
         return
     candidates[path] = reason
 
@@ -394,7 +401,7 @@ def _read_selected_files(
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
-            rejected.append(RejectedFile(rel, f"unreadable: {exc}"))
+            rejected.append(RejectedFile(rel, f"unreadable: {exc}", "UNREADABLE_FILE"))
             continue
         masked = mask_text(text)
         symbol_selection = (
@@ -417,6 +424,7 @@ def _read_selected_files(
             SelectedFile(
                 path=rel,
                 reason=reasons[path],
+                reason_code=_selection_reason_code(reasons[path]),
                 chars=len(snippet),
                 truncated=truncated,
                 content=snippet,
@@ -426,6 +434,33 @@ def _read_selected_files(
             )
         )
     return selected, rejected
+
+
+def _selection_reason_code(reason: str) -> str:
+    return {
+        "included by user": "USER_INCLUDE",
+        "changed file": "CHANGED_FILE",
+        "related affected test": "RELATED_TEST",
+        "detected entrypoint": "DETECTED_ENTRYPOINT",
+        "important project file": "IMPORTANT_FILE",
+        "repository test file": "TEST_FILE",
+        "CI workflow": "CI_WORKFLOW",
+        "documentation": "DOCUMENTATION",
+        "Python dependency": "PYTHON_DEPENDENCY",
+        "JavaScript/TypeScript dependency": "JS_TS_DEPENDENCY",
+        "Rust dependency": "RUST_DEPENDENCY",
+        "Java dependency": "JAVA_DEPENDENCY",
+        "PHP dependency": "PHP_DEPENDENCY",
+    }.get(reason, "SELECTED_FILE")
+
+
+def _rejection_reason_code(reason: str) -> str:
+    return {
+        "environment or secret-bearing file": "SENSITIVE_OR_ENV_FILE",
+        "binary or sensitive file type": "BINARY_OR_SENSITIVE_TYPE",
+        "ignored generated/cache path": "IGNORED_GENERATED_PATH",
+        "excluded by user pattern": "USER_EXCLUDED",
+    }.get(reason, "REJECTED_FILE")
 
 
 def _limited_diffs(root: Path, options: ContextOptions) -> list[dict[str, object]]:

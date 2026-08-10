@@ -66,7 +66,12 @@ class ChangedSelection:
     fallback_reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {
+            **asdict(self),
+            "fallback_reason_code": (
+                f"CHANGED_{self.strategy.upper()}" if self.fallback_reason else None
+            ),
+        }
 
 
 def run_check(
@@ -99,6 +104,7 @@ def run_check(
         report.summary = {
             "mode": mode,
             "message": "No configured checks detected",
+            "reason_code": "NO_CHECKS_DETECTED",
             "plan": [task.to_dict() for task in plan],
         }
         if changed_selection is not None:

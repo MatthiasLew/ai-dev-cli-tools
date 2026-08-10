@@ -95,7 +95,7 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add bounded cache storage under `.ai/cache/` with schema versions, fingerprints,
   explicit invalidation rules, pruning, and local diagnostics.
 - [x] Add configurable context profiles such as `minimal`, `debug`, `review`, and `full`.
-- [ ] Add machine-readable reason codes wherever reports currently expose only prose.
+- [x] Add machine-readable reason codes wherever reports currently expose only prose.
 - [x] Ensure secret masking is applied consistently to snippets, diffs, command output,
   environment diagnostics, and generated reports.
 - [x] Add tests proving that blocked files, private keys, tokens, and `.env` values never enter

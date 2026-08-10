@@ -12,6 +12,7 @@ class SymbolSnippet:
     start_line: int
     end_line: int
     reason: str
+    reason_code: str
     referenced_local_symbols: list[str] = field(default_factory=list)
     truncated: bool = False
 
@@ -72,7 +73,12 @@ def select_python_symbols(
             selected,
             source_lines,
             SymbolSnippet(
-                "<imports>", "imports", start, end, "imports required by selected symbols"
+                "<imports>",
+                "imports",
+                start,
+                end,
+                "imports required by selected symbols",
+                "REQUIRED_IMPORTS",
             ),
             import_budget,
         )
@@ -99,6 +105,11 @@ def select_python_symbols(
             start_line=node.lineno,
             end_line=_end_line(node),
             reason=reason,
+            reason_code=(
+                "TASK_SYMBOL_MATCH"
+                if reason == "symbol name matches task terms"
+                else "PUBLIC_SYMBOL"
+            ),
             referenced_local_symbols=referenced,
         )
         remaining = _append_section(sections, selected, source_lines, snippet, remaining)

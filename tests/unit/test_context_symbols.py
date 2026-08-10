@@ -22,6 +22,7 @@ def test_python_symbol_selection_prefers_task_match_and_reports_references() -> 
     assert symbol.start_line > 1
     assert symbol.end_line >= symbol.start_line
     assert symbol.reason == "symbol name matches task terms"
+    assert symbol.reason_code == "TASK_SYMBOL_MATCH"
     assert symbol.referenced_local_symbols == ["helper"]
     assert selection.omitted_content is True
 

@@ -40,7 +40,19 @@ class BootstrapStep:
     workspace: str = ""
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {**asdict(self), "reason_code": _bootstrap_reason_code(self)}
+
+
+def _bootstrap_reason_code(step: BootstrapStep) -> str:
+    if step.action == "create_venv":
+        return "CREATE_VIRTUAL_ENVIRONMENT"
+    if step.action == "copy_env":
+        return "CREATE_ENVIRONMENT_FILE"
+    if step.workspace:
+        return "WORKSPACE_BOOTSTRAP"
+    if "smoke" in step.name.lower() or "verify" in step.reason.lower():
+        return "SMOKE_VALIDATION"
+    return "PROJECT_BOOTSTRAP"
 
 
 @dataclass(frozen=True, slots=True)

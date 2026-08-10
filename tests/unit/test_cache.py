@@ -74,6 +74,7 @@ def test_index_runner_supports_status_update_and_rebuild(tmp_path: Path) -> None
     missing = run_index(tmp_path, "status")
     assert missing.status == "partial"
     assert missing.summary["indexed"] is False
+    assert missing.summary["reason_code"] == "INDEX_MISSING"
 
     (tmp_path / "file.txt").write_text("content", encoding="utf-8")
     updated = run_index(tmp_path, "update")

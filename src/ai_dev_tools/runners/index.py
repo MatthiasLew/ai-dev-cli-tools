@@ -20,6 +20,7 @@ def run_index(project_root: Path, action: str) -> Report:
             report.summary = {
                 "indexed": False,
                 "message": "Repository index does not exist. Run `ai-dev index update`.",
+                "reason_code": "INDEX_MISSING",
             }
             return report
     else:

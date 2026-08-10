@@ -43,6 +43,17 @@ Issue objects use stable fields:
 
 Severity values are `info`, `warning`, `error`, and `critical`.
 
+## Machine-readable reason codes
+
+Reports retain human-readable `message`, `reason`, `fallback_reason`, and
+`blocking_reasons` fields. Whenever one of these values describes a tool decision or a
+blocked/partial outcome, the same object also exposes a stable uppercase reason code. Examples
+include `reason_code`, `fallback_reason_code`, and `blocking_reason_codes`. Consumers should
+branch on codes and display prose; prose may improve without a schema-version change.
+
+Context file and symbol entries, bootstrap steps, changed-check fallback analysis, missing
+index/log/check outcomes, and finish blockers all follow this rule.
+
 ## Migration From 1.0
 
 Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing fields from schema 1.0 as `exit_code: 0` for successful reports and `{}` for metadata. Consumers should accept `partial` where schema 1.0 reports may have used `warning`.

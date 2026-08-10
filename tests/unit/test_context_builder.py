@@ -19,6 +19,7 @@ def test_context_explain_selects_files_without_writing_pack(tmp_path: Path) -> N
     assert report.status == "success"
     assert report.summary["explain_only"] is True
     assert any(item["path"] == "src/app.py" for item in report.summary["selected_files"])
+    assert report.summary["selected_files"][0]["reason_code"]
     assert not (tmp_path / ".ai" / "context" / "context-latest.md").exists()
 
 
@@ -83,6 +84,13 @@ def test_context_rejects_env_and_binary_files(tmp_path: Path) -> None:
     rejected = {item["path"]: item["reason"] for item in report.summary["rejected_files"]}
     assert rejected[".env"] == "environment or secret-bearing file"
     assert rejected["logo.png"] == "binary or sensitive file type"
+    rejected_codes = {
+        item["path"]: item["reason_code"] for item in report.summary["rejected_files"]
+    }
+    assert rejected_codes == {
+        ".env": "SENSITIVE_OR_ENV_FILE",
+        "logo.png": "BINARY_OR_SENSITIVE_TYPE",
+    }
 
 
 def test_context_budget_truncates_large_file(tmp_path: Path) -> None:

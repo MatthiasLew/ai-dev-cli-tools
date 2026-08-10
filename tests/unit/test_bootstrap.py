@@ -30,6 +30,7 @@ def test_bootstrap_python_uv_plan(tmp_path: Path) -> None:
     assert plan.project_type == "python"
     assert plan.package_manager == "uv"
     assert plan.steps[0].command == ["uv", "sync"]
+    assert plan.steps[0].to_dict()["reason_code"] == "PROJECT_BOOTSTRAP"
 
 
 def test_bootstrap_python_poetry_plan(tmp_path: Path) -> None:

@@ -8,6 +8,7 @@ from ai_dev_tools.utils.subprocess import run_command, split_command
 def test_summarize_latest_log_no_logs_and_with_log(tmp_path: Path) -> None:
     report = summarize_latest_log(tmp_path)
     assert report.status == "partial"
+    assert report.summary["reason_code"] == "NO_LOGS"
     assert (tmp_path / ".ai" / "reports" / "logs-summary-latest.json").exists()
     logs = tmp_path / ".ai" / "logs"
     logs.mkdir(parents=True)
@@ -21,6 +22,7 @@ def test_check_without_detected_commands(tmp_path: Path) -> None:
     report = run_check(tmp_path)
     assert report.status == "partial"
     assert "No configured checks" in str(report.summary["message"])
+    assert report.summary["reason_code"] == "NO_CHECKS_DETECTED"
 
 
 def test_subprocess_helpers(tmp_path: Path) -> None:

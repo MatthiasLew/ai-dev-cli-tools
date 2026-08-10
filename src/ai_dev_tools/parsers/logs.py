@@ -212,6 +212,7 @@ def summarize_latest_log(project_root: Path) -> Report:
         report.status = "partial"
         report.summary = {
             "message": "No logs found",
+            "reason_code": "NO_LOGS",
             "logs_directory": str(settings.logs_directory),
         }
         report.finish()
@@ -228,7 +229,11 @@ def summarize_log_file(project_root: Path, log_path: Path, tool: str = "auto") -
     if not path.exists():
         report.status = "failed"
         report.exit_code = 1
-        report.summary = {"message": "Log file does not exist", "log": str(path)}
+        report.summary = {
+            "message": "Log file does not exist",
+            "reason_code": "LOG_NOT_FOUND",
+            "log": str(path),
+        }
         report.finish()
         return report
     size = path.stat().st_size
@@ -237,6 +242,7 @@ def summarize_log_file(project_root: Path, log_path: Path, tool: str = "auto") -
         report.exit_code = 1
         report.summary = {
             "message": "Log file exceeds 50 MB limit",
+            "reason_code": "LOG_TOO_LARGE",
             "log": str(path),
             "bytes": size,
         }

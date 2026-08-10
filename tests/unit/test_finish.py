@@ -32,6 +32,7 @@ def test_finish_blocks_no_changes(monkeypatch, tmp_path: Path) -> None:  # type:
     report = finish.run_finish(tmp_path)
     assert report.status == "failed"
     assert report.summary["blocking_reasons"] == ["no_changes"]
+    assert report.summary["blocking_reason_codes"] == ["NO_CHANGES"]
 
 
 def test_finish_blocks_conflicts_and_failed_checks(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

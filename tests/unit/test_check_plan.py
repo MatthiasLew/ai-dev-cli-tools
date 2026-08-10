@@ -62,6 +62,7 @@ def test_configured_changed_tests_mapping(tmp_path: Path) -> None:
     settings = load_settings(tmp_path)
     selection = select_changed_checks(settings, build_validation_plan(settings))
     assert selection.strategy == "no_changes"
+    assert selection.to_dict()["fallback_reason_code"] == "CHANGED_NO_CHANGES"
     # Exercise configured mapping through the underlying settings contract.
     assert settings.changed_tests == {"src/auth/**": ["tests/auth/**"]}
 

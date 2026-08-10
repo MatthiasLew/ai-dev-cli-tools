@@ -31,6 +31,7 @@ def run_finish(project_root: Path) -> Report:
     report.summary = {
         "ready_to_commit": ready,
         "blocking_reasons": blocking_reasons,
+        "blocking_reason_codes": [_blocking_reason_code(reason) for reason in blocking_reasons],
         "changed": _classify_changed(changed),
         "validation": {
             "checks": check_report.status,
@@ -73,6 +74,20 @@ def _blocking_reasons(
     if findings:
         reasons.append(f"{len(findings)} potential secret(s) detected")
     return reasons
+
+
+def _blocking_reason_code(reason: str) -> str:
+    if reason == "no_changes":
+        return "NO_CHANGES"
+    if "merge conflicts" in reason:
+        return "MERGE_CONFLICTS"
+    if reason.startswith("repository state is "):
+        return f"UNSAFE_REPOSITORY_{reason.rsplit(' ', 1)[-1]}"
+    if "check" in reason and "failed" in reason:
+        return "CHECKS_FAILED"
+    if "secret" in reason:
+        return "POTENTIAL_SECRETS"
+    return "FINISH_BLOCKED"
 
 
 def _classify_changed(paths: list[str]) -> dict[str, int]:
