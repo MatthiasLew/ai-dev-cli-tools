@@ -3,7 +3,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -13,6 +13,7 @@ from ai_dev_tools.context.incremental import (
     save_incremental_manifest,
     select_incremental,
 )
+from ai_dev_tools.context.profiles import get_context_profile
 from ai_dev_tools.context.symbols import SymbolSnippet, select_python_symbols
 from ai_dev_tools.detectors.project import scan_project
 from ai_dev_tools.detectors.repository_map import BINARY_EXTENSIONS, map_repository
@@ -75,6 +76,7 @@ class ContextOptions:
     format: ContextFormat = "both"
     explain: bool = False
     incremental: bool = False
+    profile: str = "default"
 
 
 @dataclass(slots=True)
@@ -102,6 +104,7 @@ class RejectedFile:
 
 
 def build_context(project_root: Path, options: ContextOptions) -> Report:
+    options = _apply_context_profile(options)
     settings = load_settings(project_root)
     root = settings.project_root
     report = Report(command="context build", project_root=root)
@@ -246,6 +249,32 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         json_text = json.dumps(report.to_dict(), indent=2, sort_keys=True)
         json_path.write_text(json_text, encoding="utf-8")
     return report
+
+
+def _apply_context_profile(options: ContextOptions) -> ContextOptions:
+    profile = get_context_profile(options.profile)
+    if profile is None:
+        return options
+    return replace(
+        options,
+        max_chars=(
+            profile.max_chars if options.max_chars == DEFAULT_MAX_CHARS else options.max_chars
+        ),
+        max_files=(
+            profile.max_files if options.max_files == DEFAULT_MAX_FILES else options.max_files
+        ),
+        max_file_chars=(
+            profile.max_file_chars
+            if options.max_file_chars == DEFAULT_MAX_FILE_CHARS
+            else options.max_file_chars
+        ),
+        max_diff_chars=(
+            profile.max_diff_chars
+            if options.max_diff_chars == DEFAULT_MAX_DIFF_CHARS
+            else options.max_diff_chars
+        ),
+        changed_only=options.changed_only or profile.changed_only,
+    )
 
 
 def _base_summary(

@@ -91,6 +91,7 @@ kills an arbitrary PID read from stale state. See `docs/RUNTIME.md`.
 ai-dev context build --task "fix auth tests"
 ai-dev context build --changed-only --max-chars 50000
 ai-dev context build --incremental  # emits only candidates changed since the last pack
+ai-dev context build --profile review
 ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
 ai-dev context build --explain --json
 ```

@@ -78,6 +78,11 @@ def build_parser() -> argparse.ArgumentParser:
     context_sub = context.add_subparsers(dest="context_command", required=True)
     context_build = context_sub.add_parser("build")
     context_build.add_argument("--task", default="")
+    context_build.add_argument(
+        "--profile",
+        choices=["default", "minimal", "debug", "review", "full"],
+        default="default",
+    )
     context_build.add_argument("--max-chars", type=int, default=50_000)
     context_build.add_argument("--max-files", type=int, default=30)
     context_build.add_argument("--max-file-chars", type=int, default=8_000)
@@ -176,6 +181,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             project_root,
             ContextOptions(
                 task=args.task,
+                profile=args.profile,
                 max_chars=args.max_chars,
                 max_files=args.max_files,
                 max_file_chars=args.max_file_chars,

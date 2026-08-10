@@ -9,6 +9,7 @@
 - Add a versioned repository index and content-addressed validation cache with bounded retention.
 - Add incremental context manifests and `context build --incremental`.
 - Add AST-aware Python symbol snippets for large context files.
+- Add minimal, debug, review, and full context profiles.
 - Add stable failure signatures and a machine-readable report JSON Schema.
 - Add an extensible tool-output parser registry with deterministic precedence.
 - Raise and enforce the coverage threshold to 90%.

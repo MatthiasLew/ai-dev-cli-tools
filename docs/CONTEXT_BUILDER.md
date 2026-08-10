@@ -13,6 +13,12 @@ Use `--incremental` to emit only candidate files whose content fingerprint chang
 
 Use `--format markdown`, `--format json`, or `--format both` to control artifacts. Use `--output <directory>` to write to a different directory.
 
+## Profiles
+
+Use `--profile minimal|debug|review|full` for stable task-oriented defaults. `minimal` creates a
+small handoff, `debug` expands errors and nearby code, `review` focuses on changed files, and
+`full` provides broad repository coverage. Explicit non-default budget flags override profile
+budgets. The selected profile and resolved limits are recorded in the JSON report.
 ## Budget Controls
 
 Defaults:
