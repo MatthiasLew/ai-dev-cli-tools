@@ -1,8 +1,14 @@
 import json
+import os
+import signal
+import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
+from typing import cast
+
+import pytest
 
 from ai_dev_tools.runtime import supervisor
 
@@ -129,3 +135,74 @@ def test_supervisor_masks_streamed_application_output(tmp_path: Path) -> None:
     assert exit_code == 0
     assert secret not in output
     assert "MASKED_OPENAI_KEY" in output
+
+
+def _wait_for_metadata(path: Path) -> dict[str, object]:
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            time.sleep(0.02)
+    raise AssertionError(f"supervisor metadata was not created: {path}")
+
+
+def _external_supervisor(tmp_path: Path) -> tuple[subprocess.Popen[str], Path, Path]:
+    metadata = tmp_path / "external-process.json"
+    request = tmp_path / "external-stop.request"
+    command = [
+        sys.executable,
+        "-m",
+        "ai_dev_tools.runtime.supervisor",
+        "--metadata",
+        str(metadata),
+        "--request",
+        str(request),
+        "--token",
+        "external-token",
+        "--cwd",
+        str(tmp_path),
+        "--log",
+        str(tmp_path / "external.log"),
+        "--",
+        sys.executable,
+        "-c",
+        "import time; time.sleep(30)",
+    ]
+    process = subprocess.Popen(command, text=True)
+    _wait_for_metadata(metadata)
+    return process, metadata, request
+
+
+def test_external_supervisor_honors_control_token_on_every_platform(tmp_path: Path) -> None:
+    process, metadata, request = _external_supervisor(tmp_path)
+    try:
+        request.write_text("external-token", encoding="utf-8")
+        assert process.wait(timeout=10) == 0
+        state = _wait_for_metadata(metadata)
+        assert state["status"] == "stopped"
+        assert not request.exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX signal semantics")
+def test_external_supervisor_handles_sigterm_and_reaps_child(tmp_path: Path) -> None:
+    process, metadata, _ = _external_supervisor(tmp_path)
+    child_pid_value = _wait_for_metadata(metadata)["child_pid"]
+    assert isinstance(child_pid_value, int)
+    child_pid = child_pid_value
+    try:
+        os.kill(process.pid, signal.SIGTERM)
+        assert process.wait(timeout=10) == 0
+        state = _wait_for_metadata(metadata)
+        assert state["status"] == "stopped"
+        assert state["exit_code"] is not None
+        with pytest.raises(ProcessLookupError):
+            os.kill(child_pid, 0)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
