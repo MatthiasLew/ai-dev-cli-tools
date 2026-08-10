@@ -46,3 +46,12 @@ def test_name_status_parses_rename(monkeypatch) -> None:  # type: ignore[no-unty
     entries = _name_status(["git", "diff", "--name-status", "-z"], Path.cwd())
     assert entries == [{"status": "R100", "path": "new name.py", "old_path": "old name.py"}]
     assert _entry_paths(entries) == ["new name.py"]
+
+
+def test_git_status_can_skip_report_writes(tmp_path: Path) -> None:
+    run_command(["git", "init", "-b", "main"], tmp_path, 30)
+
+    report = inspect_git(tmp_path, write_reports=False)
+
+    assert report.status == "success"
+    assert not (tmp_path / ".ai" / "reports").exists()

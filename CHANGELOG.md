@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a dependency-free local MCP STDIO server with focused, bounded project tools.
+
 - Add task-aware JavaScript/TypeScript top-level symbol selection for bounded context packs.
 - Correct capabilities metadata for flaky retries and completed cross-platform CI.
 

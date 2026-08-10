@@ -158,6 +158,10 @@ def build_parser() -> argparse.ArgumentParser:
     explain.add_argument("reference")
     explain.add_argument("--tail", type=int, default=100)
 
+    mcp = sub.add_parser("mcp")
+    mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
+    mcp_sub.add_parser("serve")
+
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
     sub.add_parser("finish")
@@ -168,6 +172,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(_normalize_global_flags(argv))
     project_root = args.project.resolve()
+    if args.command == "mcp" and args.mcp_command == "serve":
+        from ai_dev_tools.mcp_server import serve_mcp
+
+        return serve_mcp(project_root)
     if args.command == "completion":
         from ai_dev_tools.completion import render_completion
 
@@ -395,6 +403,7 @@ def _capabilities_report(project_root: Path) -> Report:
         "check",
         "test affected",
         "test flaky",
+        "mcp serve",
         "cache status",
         "cache prune",
         "cache clear",

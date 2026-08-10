@@ -42,7 +42,7 @@ FRAMEWORK_HINTS = {
 }
 
 
-def scan_project(project_root: Path) -> Report:
+def scan_project(project_root: Path, *, write_reports: bool = True) -> Report:
     settings = load_settings(project_root)
     report = Report(command="scan", project_root=settings.project_root)
     files = {path.name: path for path in settings.project_root.iterdir() if path.is_file()}
@@ -80,8 +80,9 @@ def scan_project(project_root: Path) -> Report:
         "workspace_count": len(workspaces),
     }
     report.finish()
-    write_markdown(report, settings.reports_directory / "project-scan.md")
-    write_json(report, settings.reports_directory / "project-scan.json")
+    if write_reports:
+        write_markdown(report, settings.reports_directory / "project-scan.md")
+        write_json(report, settings.reports_directory / "project-scan.json")
     return report
 
 

@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "name": "mcp-recurring-status",
+  "fixture_version": "1",
+  "working_directory": ".",
+  "reset_command": ["python", "-c", "pass"],
+  "validation_command": ["python", "-c", "print('verified')"],
+  "variants": {
+    "baseline": ["python", "scripts/benchmark_mcp_status.py", "baseline"],
+    "ai-dev": ["python", "scripts/benchmark_mcp_status.py", "mcp"]
+  }
+}

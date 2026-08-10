@@ -1,3 +1,5 @@
+import io
+import json
 from pathlib import Path
 
 from ai_dev_tools.cli import main
@@ -36,6 +38,7 @@ def test_cli_capabilities_json(tmp_path: Path, capsys) -> None:  # type: ignore[
     assert "implemented" in output
     assert "context build" in output
     assert "test flaky" in output
+    assert "mcp serve" in output
     assert '"ci_status": "VERIFIED"' in output
 
 
@@ -94,3 +97,20 @@ def test_cli_context_build_json(tmp_path: Path, capsys) -> None:  # type: ignore
     output = capsys.readouterr().out
     assert '"command": "context build"' in output
     assert (tmp_path / ".ai" / "context" / "context-latest.json").exists()
+
+
+def test_cli_mcp_serve_uses_stdio_without_extra_output(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18"},
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(request) + "\n"))
+
+    assert main(["--project", str(tmp_path), "mcp", "serve"]) == 0
+
+    output = capsys.readouterr().out
+    response = json.loads(output)
+    assert response["id"] == 1
+    assert response["result"]["serverInfo"]["name"] == "ai-dev-cli-tools"

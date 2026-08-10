@@ -19,6 +19,7 @@ def test_completion_scripts_include_shell_registration_and_commands(
     assert marker in script
     assert "context" in script
     assert "diagnostics" in script
+    assert "mcp" in script
     assert "--project" in script or "-l 'project'" in script
 
 

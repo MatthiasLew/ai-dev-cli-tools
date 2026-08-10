@@ -104,6 +104,10 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add tests proving that blocked files, private keys, tokens, and `.env` values never enter
   context artifacts in clear text.
 
+- [x] Add a local MCP STDIO server with focused tools for project status, feedback,
+  bounded context, validation, and evidence expansion; default potentially expensive
+  operations to preview-only and document Codex configuration.
+
 ## P3 — Distribution and ecosystem
 
 - [x] Decide whether the package will be published to PyPI and document the supported install

@@ -74,6 +74,7 @@ ai-dev bootstrap --if-needed
 ai-dev environment explain
 ai-dev diagnostics
 ai-dev completion bash
+ai-dev mcp serve
 ai-dev test affected
 ai-dev test flaky
 ai-dev logs summarize
@@ -85,6 +86,20 @@ ai-dev finish
 
 All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version` at the top level.
 
+
+## Local MCP server
+
+`ai-dev mcp serve` exposes project status, compact feedback, bounded context, validation,
+and progressive evidence as local structured tools for Codex-compatible MCP clients. The STDIO
+server is dependency-free, has no network listener, fixes all calls to one project root, and
+defaults validation to preview-only.
+
+```bash
+codex mcp add ai-dev -- ai-dev --project "/absolute/path/to/project" mcp serve
+```
+
+See `docs/MCP_SERVER.md` for tool schemas, approvals, project-scoped configuration, and
+security boundaries.
 
 ## Bootstrap
 
@@ -113,7 +128,7 @@ ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
 ai-dev context build --explain --json
 ```
 
-Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/context-latest.json` by default. The builder includes detected technologies, git state, changed files, related tests, validation plan, recent commits, selected snippets, limited diffs, latest check errors, masked secret findings, and budget/truncation metadata. Large Python files use AST-aware symbol snippets with line ranges instead of blindly returning only the beginning of the file.
+Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/context-latest.json` by default. The builder includes detected technologies, git state, changed files, related tests, validation plan, recent commits, selected snippets, limited diffs, latest check errors, masked secret findings, and budget/truncation metadata. Large Python files use AST-aware symbol snippets, while large JavaScript and TypeScript files use conservative top-level symbol selection instead of blindly returning only the beginning of the file.
 
 Incremental mode stores a schema-versioned manifest under `.ai/cache/` and reports changed versus reused files. Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
@@ -195,6 +210,7 @@ git diff --check
 | logs summarize | implemented |
 | context build | implemented |
 | diagnostics | implemented |
+| mcp serve | implemented |
 | watch | implemented |
 | benchmark run/compare | implemented |
 | capabilities | implemented |
