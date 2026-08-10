@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "name": "output-budget-smoke",
+  "fixture_version": "1",
+  "working_directory": ".",
+  "reset_command": ["python", "-c", "pass"],
+  "validation_command": ["python", "-c", "print('verified')"],
+  "variants": {
+    "baseline": ["python", "-c", "print('raw log line ' * 200)"],
+    "ai-dev": ["python", "-c", "print('STATUS SUCCESS SUMMARY verified')"]
+  }
+}

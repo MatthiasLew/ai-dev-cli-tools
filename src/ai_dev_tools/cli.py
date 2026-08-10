@@ -127,6 +127,18 @@ def build_parser() -> argparse.ArgumentParser:
         baseline_action = baseline_sub.add_parser(action)
         baseline_action.add_argument("name")
 
+    benchmark = sub.add_parser("benchmark")
+    benchmark_sub = benchmark.add_subparsers(dest="benchmark_command", required=True)
+    benchmark_run = benchmark_sub.add_parser("run")
+    benchmark_run.add_argument("--suite", required=True, type=Path)
+    benchmark_run.add_argument("--variant", required=True)
+    benchmark_run.add_argument("--trials", type=int, default=3)
+    benchmark_run.add_argument("--cache-state", choices=["cold", "warm"], default="cold")
+    benchmark_run.add_argument("--timeout", type=int, default=300)
+    benchmark_compare = benchmark_sub.add_parser("compare")
+    benchmark_compare.add_argument("baseline", type=Path)
+    benchmark_compare.add_argument("candidate", type=Path)
+
     explain = sub.add_parser("explain")
     explain.add_argument("reference")
     explain.add_argument("--tail", type=int, default=100)
@@ -300,6 +312,19 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             args.baseline_command,
             getattr(args, "name", None),
         )
+    if command == "benchmark":
+        from ai_dev_tools.runners.benchmark import compare_benchmarks, run_benchmark
+
+        if args.benchmark_command == "run":
+            return run_benchmark(
+                project_root,
+                args.suite,
+                args.variant,
+                trials=args.trials,
+                cache_state=args.cache_state,
+                timeout_seconds=args.timeout,
+            )
+        return compare_benchmarks(project_root, args.baseline, args.candidate)
     if command == "explain":
         from ai_dev_tools.reporters.progressive import run_explain
 
@@ -348,6 +373,8 @@ def _capabilities_report(project_root: Path) -> Report:
         "baseline create",
         "baseline compare",
         "baseline list",
+        "benchmark run",
+        "benchmark compare",
         "explain",
         "diagnostics",
         "capabilities",

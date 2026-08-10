@@ -42,7 +42,8 @@ The current implementation now includes:
 - incrementally reused import/test impact edges and focused rerun hints.
 
 The sections below remain the long-term target design. Watch mode, warm environment state,
-bounded flaky retries, and broader multi-language symbol extraction are still planned.
+bounded flaky retries, and broader multi-language symbol extraction are still planned. A first
+version of reproducible local A/B workflow benchmarks is implemented in ai-dev benchmark.
 ## Recommended capabilities
 
 ### 1. Incremental context packs
