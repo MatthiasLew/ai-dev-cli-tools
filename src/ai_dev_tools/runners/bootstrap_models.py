@@ -11,6 +11,7 @@ class BootstrapOptions:
     dry_run: bool = False
     explain: bool = False
     create_env: bool = False
+    if_needed: bool = False
 
 
 @dataclass(frozen=True, slots=True)
