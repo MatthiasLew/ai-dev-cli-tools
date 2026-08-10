@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ai_dev_tools.runners import check
+import ai_dev_tools.runners.check as check
 from ai_dev_tools.utils.subprocess import CommandResult
 
 
@@ -17,7 +17,8 @@ def test_check_uses_configured_commands(monkeypatch, tmp_path: Path) -> None:  #
     monkeypatch.setattr(check, "run_command", fake_run)
     report = check.run_check(tmp_path, "full")
     assert report.status == "success"
-    assert calls == [["python", "--version"], ["python", "--version"]]
+    assert calls == [["python", "--version"]]
+    assert report.summary["execution"]["cache_hits"] == 1
     assert (tmp_path / ".ai" / "logs").exists()
 
 
@@ -31,6 +32,7 @@ def test_check_reports_failure(monkeypatch, tmp_path: Path) -> None:  # type: ig
     report = check.run_check(tmp_path, "fast")
     assert report.status == "failed"
     assert report.summary["results"][0]["first_failure_reason"] == "FAILED test_x"
+    assert report.summary["results"][0]["failure_signature"].startswith("failure:")
 
 
 def test_changed_mode_reports_broad_fallback(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

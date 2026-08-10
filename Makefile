@@ -11,7 +11,7 @@ typecheck:
 
 coverage:
 	coverage run -m pytest
-	coverage report
+	coverage report --fail-under=90
 
 build:
 	python -m build

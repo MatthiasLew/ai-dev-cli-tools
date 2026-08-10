@@ -131,3 +131,44 @@ def test_select_changed_checks_uses_configured_mapping(monkeypatch, tmp_path: Pa
         == [["python", "-m", "pytest", str(Path("tests/auth/test_login.py"))]]
         or selection.selected_commands
     )
+
+
+def test_validation_plan_routes_child_workspace_tasks(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text('{"workspaces": ["packages/*"]}', encoding="utf-8")
+    child = tmp_path / "packages" / "web"
+    child.mkdir(parents=True)
+    (child / "package.json").write_text(
+        '{"scripts": {"lint": "eslint .", "test": "vitest"}, "devDependencies": {"eslint": "1"}}',
+        encoding="utf-8",
+    )
+
+    plan = build_validation_plan(load_settings(tmp_path))
+    child_tasks = [task for task in plan if task.workspace == "packages/web"]
+
+    assert {task.name for task in child_tasks} == {"npm lint", "npm test"}
+
+
+def test_changed_mode_selects_owning_workspace(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.runners import check
+
+    (tmp_path / "package.json").write_text('{"workspaces": ["packages/*"]}', encoding="utf-8")
+    for name in ("api", "web"):
+        child = tmp_path / "packages" / name
+        child.mkdir(parents=True)
+        (child / "package.json").write_text(
+            '{"scripts": {"lint": "eslint .", "test": "vitest"}, '
+            '"devDependencies": {"eslint": "1"}}',
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(
+        check,
+        "collect_changed_files",
+        lambda root: ["packages/web/src/component.ts"],
+    )
+
+    report = check.run_check(tmp_path, mode="changed", explain=True)
+    selected = report.summary["selected_checks"]
+
+    assert isinstance(selected, list)
+    assert selected
+    assert {item["workspace"] for item in selected} == {"packages/web"}

@@ -6,6 +6,8 @@ import tomllib
 from pathlib import Path
 
 from ai_dev_tools.config import load_settings
+from ai_dev_tools.detectors.runtime import detect_runtime_requirements
+from ai_dev_tools.detectors.workspaces import detect_workspaces
 from ai_dev_tools.models.report import Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 
@@ -46,6 +48,8 @@ def scan_project(project_root: Path) -> Report:
     files = {path.name: path for path in settings.project_root.iterdir() if path.is_file()}
     scripts = _detect_scripts(settings.project_root)
     dependencies = _dependency_names(settings.project_root)
+    workspaces = detect_workspaces(settings.project_root)
+    runtime_requirements = detect_runtime_requirements(settings.project_root)
     report.summary = {
         "project_name": settings.project_name or settings.project_root.name,
         "languages": sorted({language for name, language in SIGNALS.items() if name in files}),
@@ -71,6 +75,9 @@ def scan_project(project_root: Path) -> Report:
         "env_example_variables": _env_examples(settings.project_root),
         "config_files": sorted(name for name in files if name in SIGNALS or name.startswith(".")),
         "config_warnings": settings.warnings,
+        "runtime_requirements": [requirement.to_dict() for requirement in runtime_requirements],
+        "workspaces": [workspace.to_dict() for workspace in workspaces],
+        "workspace_count": len(workspaces),
     }
     report.finish()
     write_markdown(report, settings.reports_directory / "project-scan.md")

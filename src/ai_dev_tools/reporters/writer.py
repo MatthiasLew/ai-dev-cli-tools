@@ -9,8 +9,8 @@ from ai_dev_tools.models.report import Artifact, Report
 
 def write_json(report: Report, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    _register_artifact(report, path, "json", "Structured report")
     path.write_text(json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    report.artifacts.append(Artifact(path=str(path), kind="json", description="Structured report"))
     return path
 
 
@@ -36,9 +36,16 @@ def render_markdown(report: Report) -> str:
 
 def write_markdown(report: Report, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    _register_artifact(report, path, "markdown", "Human report")
     path.write_text(render_markdown(report), encoding="utf-8")
-    report.artifacts.append(Artifact(path=str(path), kind="markdown", description="Human report"))
     return path
+
+
+def _register_artifact(report: Report, path: Path, kind: str, description: str) -> None:
+    artifact_path = str(path)
+    if any(item.path == artifact_path and item.kind == kind for item in report.artifacts):
+        return
+    report.artifacts.append(Artifact(path=artifact_path, kind=kind, description=description))
 
 
 def _render_value(value: Any, indent: int = 0) -> list[str]:

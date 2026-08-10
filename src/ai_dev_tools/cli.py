@@ -33,17 +33,36 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--explain", action="store_true")
     bootstrap.add_argument("--create-env", action="store_true")
 
-    for name in ["run", "stop"]:
-        sub.add_parser(name)
+    run = sub.add_parser("run")
+    run.add_argument("--dry-run", action="store_true")
+    run.add_argument("--explain", action="store_true")
+    run.add_argument("--foreground", action="store_true")
+    run.add_argument("--timeout", type=int, default=300)
+
+    stop = sub.add_parser("stop")
+    stop.add_argument("--explain", action="store_true")
+    stop.add_argument("--timeout", type=int, default=10)
     map_parser = sub.add_parser("map")
     map_parser.add_argument("--max-files", type=int, default=500)
     map_parser.add_argument("--max-depth", type=int, default=6)
 
     check = sub.add_parser("check")
     check.add_argument("--mode", choices=["fast", "changed", "full"], default="fast")
+    check.add_argument("--jobs", type=int, default=1)
+    check.add_argument("--no-cache", action="store_true")
     check.add_argument(
         "--explain", action="store_true", help="Show selected checks without running them"
     )
+
+    cache = sub.add_parser("cache")
+    cache_sub = cache.add_subparsers(dest="cache_command", required=True)
+    for action in ["status", "prune", "clear"]:
+        cache_sub.add_parser(action)
+
+    index = sub.add_parser("index")
+    index_sub = index.add_subparsers(dest="index_command", required=True)
+    for action in ["status", "update", "rebuild"]:
+        index_sub.add_parser(action)
 
     test = sub.add_parser("test")
     test_sub = test.add_subparsers(dest="test_command", required=True)
@@ -71,6 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--format", choices=["markdown", "json", "both"], default="both")
     context_build.add_argument("--output", type=Path)
     context_build.add_argument("--explain", action="store_true")
+    context_build.add_argument("--incremental", action="store_true")
 
     git = sub.add_parser("git")
     git_sub = git.add_subparsers(dest="git_command", required=True)
@@ -97,7 +117,6 @@ def main(argv: list[str] | None = None) -> int:
     return EXIT_SUCCESS if report.status in {"success", "warning", "partial"} else EXIT_FAILED
 
 
-
 def _normalize_global_flags(argv: list[str] | None) -> list[str] | None:
     if argv is None:
         argv = sys.argv[1:]
@@ -114,18 +133,36 @@ def _normalize_global_flags(argv: list[str] | None) -> list[str] | None:
             del normalized[index : index + 2]
             moved.extend(project_pair)
     return [*moved, *normalized]
+
+
 def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
     command = args.command
-    if command in {"run", "stop"}:
-        report = Report(command=command, project_root=project_root, status="not_implemented")
-        report.summary = {
-            "code": "NOT_IMPLEMENTED",
-            "message": "Command reserved for a future non-destructive implementation.",
-        }
-        return report
+    if command == "run":
+        from ai_dev_tools.runtime import RunOptions, run_application
+
+        return run_application(
+            project_root,
+            RunOptions(
+                explain=args.explain,
+                dry_run=args.dry_run,
+                foreground=args.foreground,
+                timeout_seconds=args.timeout,
+            ),
+        )
+    if command == "stop":
+        from ai_dev_tools.runtime import stop_application
+
+        return stop_application(
+            project_root,
+            explain=args.explain,
+            timeout_seconds=args.timeout,
+        )
     if command == "test" and args.test_command == "affected":
         command = "check"
         args.mode = "changed"
+        args.explain = False
+        args.jobs = 1
+        args.no_cache = False
     if command == "logs" and args.logs_command == "summarize":
         from ai_dev_tools.parsers.logs import summarize_latest_log, summarize_log_file
 
@@ -151,6 +188,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 output=args.output,
                 format=args.format,
                 explain=args.explain,
+                incremental=args.incremental,
             ),
         )
     if command == "bootstrap":
@@ -179,7 +217,21 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
     if command == "check":
         from ai_dev_tools.runners.check import run_check
 
-        return run_check(project_root, mode=args.mode, explain=args.explain)
+        return run_check(
+            project_root,
+            mode=args.mode,
+            explain=args.explain,
+            jobs=args.jobs,
+            use_cache=not args.no_cache,
+        )
+    if command == "cache":
+        from ai_dev_tools.runners.cache import run_cache
+
+        return run_cache(project_root, args.cache_command)
+    if command == "index":
+        from ai_dev_tools.runners.index import run_index
+
+        return run_index(project_root, args.index_command)
     if command == "capabilities":
         return _capabilities_report(project_root)
     if command == "git":
@@ -201,15 +253,23 @@ def _capabilities_report(project_root: Path) -> Report:
         "map",
         "check",
         "test affected",
+        "cache status",
+        "cache prune",
+        "cache clear",
+        "index status",
+        "index update",
+        "index rebuild",
         "logs summarize",
         "context build",
         "bootstrap",
+        "run",
+        "stop",
         "git status",
         "git inspect",
         "finish",
         "capabilities",
     ]
-    planned = ["run", "stop"]
+    planned: list[str] = []
     report.summary = {
         "implemented": implemented,
         "planned": planned,
@@ -225,6 +285,7 @@ def _capabilities_report(project_root: Path) -> Report:
         },
     }
     return report
+
 
 def _print_text(report: Report) -> None:
     print(f"STATUS: {report.status.upper()}")

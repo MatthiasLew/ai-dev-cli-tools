@@ -193,3 +193,37 @@ def test_context_explain_reports_rejected_outside_root(tmp_path: Path) -> None:
     )
 
     assert report.summary["rejected_files"][0]["reason"] == "outside project root"
+
+
+def test_incremental_context_reuses_unchanged_files_and_invalidates_changes(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src" / "app.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    options = ContextOptions(
+        no_git=True,
+        include=("src/*.py",),
+        incremental=True,
+        format="json",
+        max_chars=20_000,
+    )
+
+    first = build_context(tmp_path, options)
+    assert any(item["path"] == "src/app.py" for item in first.summary["selected_files"])
+    assert first.summary["incremental"]["reused"] == 0
+
+    second = build_context(tmp_path, options)
+    assert second.summary["selected_files"] == []
+    assert second.summary["incremental"]["reused"] >= 1
+
+    source.write_text("VALUE = 200\n", encoding="utf-8")
+    third = build_context(tmp_path, options)
+    assert any(item["path"] == "src/app.py" for item in third.summary["selected_files"])
+    data = json.loads(
+        (tmp_path / ".ai" / "context" / "context-latest.json").read_text(encoding="utf-8")
+    )
+    artifact_paths = {item["path"] for item in data["artifacts"]}
+    assert str(tmp_path / ".ai" / "context" / "context-latest.json") in artifact_paths
+    assert str(tmp_path / ".ai" / "cache" / "context-manifest.json") in artifact_paths

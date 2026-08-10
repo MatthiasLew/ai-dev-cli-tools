@@ -3,11 +3,17 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from ai_dev_tools.config import load_settings
+from ai_dev_tools.context.incremental import (
+    IncrementalSelection,
+    save_incremental_manifest,
+    select_incremental,
+)
+from ai_dev_tools.context.symbols import SymbolSnippet, select_python_symbols
 from ai_dev_tools.detectors.project import scan_project
 from ai_dev_tools.detectors.repository_map import BINARY_EXTENSIONS, map_repository
 from ai_dev_tools.git.inspect import inspect_git
@@ -68,6 +74,7 @@ class ContextOptions:
     output: Path | None = None
     format: ContextFormat = "both"
     explain: bool = False
+    incremental: bool = False
 
 
 @dataclass(slots=True)
@@ -77,6 +84,9 @@ class SelectedFile:
     chars: int
     truncated: bool
     content: str
+    selection_strategy: str = "file-prefix"
+    omitted_content: bool = False
+    snippets: list[SymbolSnippet] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -124,6 +134,10 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     ordered_paths = sorted(candidates, key=lambda item: _candidate_sort_key(item, candidates[item]))
     if options.changed_only or options.staged_only:
         ordered_paths = [path for path in ordered_paths if _rel(root, path) in set(changed_files)]
+    incremental_state: IncrementalSelection | None = None
+    if options.incremental:
+        incremental_state = select_incremental(root, ordered_paths)
+        ordered_paths = incremental_state.selected
     ordered_paths = ordered_paths[: max(options.max_files, 0)]
 
     secret_findings = scan_paths_for_secrets(root, ordered_paths)
@@ -145,6 +159,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
                 "rejected_files": [item.to_dict() for item in rejected],
                 "secret_findings": [finding.masked_dict() for finding in secret_findings],
                 "budget": _budget_summary(options, 0, False),
+                "incremental": _incremental_summary(incremental_state),
             }
         )
         report.summary = summary
@@ -165,6 +180,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     )
     summary.update(
         {
+            "incremental": _incremental_summary(incremental_state, len(selected)),
             "selected_files": [item.to_dict() for item in selected],
             "rejected_files": [item.to_dict() for item in rejected],
             "diffs": diffs,
@@ -196,22 +212,39 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     else:
         summary["truncated"] = any(item.truncated for item in selected)
         report.status = "partial" if summary["truncated"] else "success"
+    manifest_artifact: Artifact | None = None
+    if incremental_state is not None:
+        manifest_path, context_id = save_incremental_manifest(
+            root,
+            incremental_state,
+            [item.path for item in selected],
+        )
+        incremental = summary.get("incremental")
+        if isinstance(incremental, dict):
+            incremental["context_id"] = context_id
+            incremental["manifest"] = str(manifest_path)
+        manifest_artifact = Artifact(
+            str(manifest_path), "context-manifest", "Incremental context state"
+        )
+
     report.summary = summary
     report.finish()
 
     output_dir = options.output or (root / ".ai" / "context")
     output_dir.mkdir(parents=True, exist_ok=True)
+    md_path = output_dir / "context-latest.md"
+    json_path = output_dir / "context-latest.json"
     if options.format in {"markdown", "both"}:
-        md_path = output_dir / "context-latest.md"
-        md_path.write_text(_render_markdown(report, report.summary), encoding="utf-8")
-        report.artifacts.append(
-            Artifact(str(md_path), "markdown", "Bounded AI context package")
-        )
+        report.artifacts.append(Artifact(str(md_path), "markdown", "Bounded AI context package"))
     if options.format in {"json", "both"}:
-        json_path = output_dir / "context-latest.json"
+        report.artifacts.append(Artifact(str(json_path), "json", "Bounded AI context package"))
+    if manifest_artifact is not None:
+        report.artifacts.append(manifest_artifact)
+    if options.format in {"markdown", "both"}:
+        md_path.write_text(_render_markdown(report, report.summary), encoding="utf-8")
+    if options.format in {"json", "both"}:
         json_text = json.dumps(report.to_dict(), indent=2, sort_keys=True)
         json_path.write_text(json_text, encoding="utf-8")
-        report.artifacts.append(Artifact(str(json_path), "json", "Bounded AI context package"))
     return report
 
 
@@ -232,6 +265,8 @@ def _base_summary(
             "frameworks": scan_summary.get("frameworks", []),
             "package_managers": scan_summary.get("package_managers", []),
             "entrypoints": scan_summary.get("entrypoints", []),
+            "runtime_requirements": scan_summary.get("runtime_requirements", []),
+            "workspaces": scan_summary.get("workspaces", []),
         },
         "git_state": git_summary,
         "changed_files": _extract_changed_files(git_summary),
@@ -333,7 +368,22 @@ def _read_selected_files(
             rejected.append(RejectedFile(rel, f"unreadable: {exc}"))
             continue
         masked = _mask_secrets(text)
-        snippet, truncated = _truncate_text(masked, options.max_file_chars)
+        symbol_selection = (
+            select_python_symbols(text, masked, options.task, options.max_file_chars)
+            if path.suffix.lower() == ".py"
+            else None
+        )
+        if symbol_selection is None:
+            snippet, truncated = _truncate_text(masked, options.max_file_chars)
+            strategy = "file-prefix"
+            omitted_content = truncated
+            snippets: list[SymbolSnippet] = []
+        else:
+            snippet = symbol_selection.content
+            truncated = symbol_selection.truncated
+            strategy = "python-ast"
+            omitted_content = symbol_selection.omitted_content
+            snippets = symbol_selection.snippets
         selected.append(
             SelectedFile(
                 path=rel,
@@ -341,6 +391,9 @@ def _read_selected_files(
                 chars=len(snippet),
                 truncated=truncated,
                 content=snippet,
+                selection_strategy=strategy,
+                omitted_content=omitted_content,
+                snippets=snippets,
             )
         )
     return selected, rejected
@@ -514,6 +567,8 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
                 "",
                 f"### {item.get('path')}",
                 f"Reason: {item.get('reason')}",
+                f"Selection: {item.get('selection_strategy', 'file-prefix')}",
+                f"Omitted content: {item.get('omitted_content', False)}",
                 f"Truncated: {item.get('truncated')}",
                 "```text",
                 str(item.get("content", "")),
@@ -526,6 +581,8 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
             [
                 "",
                 f"### {item.get('name')}",
+                f"Selection: {item.get('selection_strategy', 'file-prefix')}",
+                f"Omitted content: {item.get('omitted_content', False)}",
                 f"Truncated: {item.get('truncated')}",
                 "```diff",
                 str(item.get("content", item.get("error", ""))),
@@ -561,8 +618,7 @@ def _cap_json_payload(payload: dict[str, object], max_chars: int) -> tuple[dict[
         capped_summary["selected_files"] = []
         capped_summary["diffs"] = []
         capped_summary["json_payload_note"] = (
-            "Large snippets and diffs omitted from JSON budget. "
-            "See markdown artifact when enabled."
+            "Large snippets and diffs omitted from JSON budget. See markdown artifact when enabled."
         )
         capped["summary"] = capped_summary
     return capped, True
@@ -598,6 +654,22 @@ def _extract_changed_files(git_summary: dict[str, object] | None) -> list[str]:
     return _visible_project_files(_object_list(git_summary.get("changed_files")))
 
 
+def _incremental_summary(
+    state: IncrementalSelection | None, emitted: int | None = None
+) -> dict[str, object]:
+    if state is None:
+        return {"enabled": False}
+    pending = len(state.selected)
+    return {
+        "enabled": True,
+        "changed_candidates": pending,
+        "emitted": emitted,
+        "deferred": max(pending - emitted, 0) if emitted is not None else None,
+        "reused": len(state.reused),
+        "reused_files": state.reused[:100],
+        "index": state.index_summary,
+    }
+
 
 def _options_dict(options: ContextOptions) -> dict[str, object]:
     data = asdict(options)
@@ -626,6 +698,7 @@ def _related_tests(changed_analysis: ChangedSelection | None) -> list[str]:
         return []
     data = changed_analysis.to_dict()
     return _object_list(data.get("selected_tests"))
+
 
 def _candidate_sort_key(path: Path, reason: str) -> tuple[int, str]:
     priority = 50

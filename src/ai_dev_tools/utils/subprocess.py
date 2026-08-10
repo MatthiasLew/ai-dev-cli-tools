@@ -17,6 +17,7 @@ class CommandResult:
     stderr: str
     duration_seconds: float
     timed_out: bool = False
+    cached: bool = False
 
     @property
     def combined_output(self) -> str:

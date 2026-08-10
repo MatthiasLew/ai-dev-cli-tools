@@ -8,6 +8,7 @@ from typing import Protocol
 
 from ai_dev_tools.config import load_settings
 from ai_dev_tools.models.report import Report
+from ai_dev_tools.parsers.registry import ParserRegistry
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.utils.subprocess import CommandResult
 
@@ -87,7 +88,8 @@ class ParsedToolResult:
 
 
 class ToolOutputParser(Protocol):
-    tool_name: str
+    @property
+    def tool_name(self) -> str: ...
 
     def can_parse(self, command: CommandResult) -> bool: ...
 
@@ -118,10 +120,7 @@ class GenericParser:
         return _parsed_from_output("generic", "generic", "low", command)
 
 
-Parser = RegexToolParser | GenericParser
-
-
-PARSERS: tuple[Parser, ...] = (
+BUILTIN_PARSERS: tuple[ToolOutputParser, ...] = (
     RegexToolParser("pytest", ("pytest", "failed tests/", "= short test summary info ="), "high"),
     RegexToolParser("ruff", ("ruff", "would reformat"), "high"),
     RegexToolParser("mypy", ("mypy", "success: no issues found", "checked 1 source file"), "high"),
@@ -157,11 +156,25 @@ def parse_tool_output(tool: str, output: str, exit_code: int = 0) -> dict[str, o
     return parse_command_result(command).to_dict()
 
 
+PARSER_REGISTRY = ParserRegistry[ParsedToolResult](BUILTIN_PARSERS)
+
+
+def register_parser(parser: ToolOutputParser, *, replace: bool = False) -> None:
+    """Register a parser before built-ins; names must be unique unless replace is true."""
+    PARSER_REGISTRY.register(parser, prepend=True, replace=replace)
+
+
+def unregister_parser(tool_name: str) -> None:
+    """Remove a parser by its stable tool name."""
+    PARSER_REGISTRY.unregister(tool_name)
+
+
+def parser_names() -> tuple[str, ...]:
+    return PARSER_REGISTRY.names
+
+
 def parse_command_result(command: CommandResult) -> ParsedToolResult:
-    for parser in PARSERS:
-        if parser.can_parse(command):
-            return parser.parse(command)
-    return GenericParser().parse(command)
+    return PARSER_REGISTRY.parse(command)
 
 
 def summarize_output(output: str) -> dict[str, object]:

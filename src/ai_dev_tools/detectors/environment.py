@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ai_dev_tools.config import load_settings
+from ai_dev_tools.detectors.runtime import (
+    detect_runtime_requirements,
+    evaluate_requirement,
+)
 from ai_dev_tools.models.report import Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.utils.subprocess import run_command
@@ -67,6 +71,22 @@ def run_doctor(project_root: Path) -> Report:
             "path": path,
             "required": spec.required,
         }
+    requirements = detect_runtime_requirements(settings.project_root)
+    runtime_compatibility = [
+        evaluate_requirement(
+            requirement,
+            str(tools.get(requirement.runtime, {}).get("version"))
+            if tools.get(requirement.runtime, {}).get("version")
+            else None,
+        )
+        for requirement in requirements
+    ]
+    incompatible_runtimes = [
+        item for item in runtime_compatibility if item["status"] == "incompatible"
+    ]
+    missing_project_runtimes = [
+        item for item in runtime_compatibility if item["status"] == "missing"
+    ]
     report.summary = {
         "tools": tools,
         "missing_required": [
@@ -78,13 +98,22 @@ def run_doctor(project_root: Path) -> Report:
         "errors_required": [
             k for k, v in tools.items() if v["required"] and v["status"] == "error"
         ],
+        "runtime_requirements": [item.to_dict() for item in requirements],
+        "runtime_compatibility": runtime_compatibility,
+        "incompatible_runtimes": incompatible_runtimes,
+        "missing_project_runtimes": missing_project_runtimes,
         "errors_optional": [
             k for k, v in tools.items() if not v["required"] and v["status"] == "error"
         ],
     }
     report.status = (
         "failed"
-        if report.summary["missing_required"] or report.summary["errors_required"]
+        if (
+            report.summary["missing_required"]
+            or report.summary["errors_required"]
+            or incompatible_runtimes
+            or missing_project_runtimes
+        )
         else "warning"
         if report.summary["errors_optional"]
         else "success"

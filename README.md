@@ -12,6 +12,11 @@ AI coding agents often spend tokens reading full test output, repository trees, 
 Scripts do the work and collect data.
 AI reads a short report and decides what to do next.
 Full logs stay on disk until needed.
+
+Generated state under `.ai/logs/`, `.ai/reports/`, `.ai/context/`, `.ai/cache/`,
+`.ai/runtime/`, and `.ai/tmp/` is local and ignored by Git. Logs, reports, and context
+artifacts may be removed when no longer needed; cache, runtime, and temporary state must always
+be safe for `ai-dev` to recreate.
 ```
 
 ## Install
@@ -50,7 +55,9 @@ ai-dev scan
 ai-dev map --max-files 500 --max-depth 6
 ai-dev check --mode fast
 ai-dev check --mode changed  # reports changed files and falls back safely when test mapping is uncertain
-ai-dev check --mode full
+ai-dev check --mode full --jobs 4
+ai-dev index update
+ai-dev cache status
 ai-dev test affected
 ai-dev logs summarize
 ai-dev context build
@@ -70,6 +77,12 @@ Supported strategies include Python uv, Poetry, pip with `pyproject.toml`, pip w
 
 See `docs/BOOTSTRAP.md` for safety rules and configuration.
 
+## Managed application runtime
+
+`ai-dev run` supports explain, dry-run, foreground, and supervised background modes.
+`ai-dev stop` sends a token-authenticated request to the matching local supervisor and never
+kills an arbitrary PID read from stale state. See `docs/RUNTIME.md`.
+
 ## Context Builder
 
 `ai-dev context build` creates a bounded local context package for coding agents without calling any LLM, embedding API, or cloud service.
@@ -77,14 +90,17 @@ See `docs/BOOTSTRAP.md` for safety rules and configuration.
 ```bash
 ai-dev context build --task "fix auth tests"
 ai-dev context build --changed-only --max-chars 50000
+ai-dev context build --incremental  # emits only candidates changed since the last pack
 ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
 ai-dev context build --explain --json
 ```
 
-Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/context-latest.json` by default. The builder includes detected technologies, git state, changed files, related tests, validation plan, recent commits, selected snippets, limited diffs, latest check errors, masked secret findings, and budget/truncation metadata.
+Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/context-latest.json` by default. The builder includes detected technologies, git state, changed files, related tests, validation plan, recent commits, selected snippets, limited diffs, latest check errors, masked secret findings, and budget/truncation metadata. Large Python files use AST-aware symbol snippets with line ranges instead of blindly returning only the beginning of the file.
 
-Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
+Incremental mode stores a schema-versioned manifest under `.ai/cache/` and reports changed versus reused files. Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
+
+Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance. See `docs/CACHE_AND_INDEX.md`.
 
 Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 
@@ -151,6 +167,8 @@ git diff --check
 | check | implemented |
 | check --explain | implemented |
 | test affected | implemented |
+| index status/update/rebuild | implemented |
+| cache status/prune/clear | implemented |
 | logs summarize | implemented |
 | context build | implemented |
 | capabilities | implemented |
@@ -158,19 +176,17 @@ git diff --check
 | git inspect | implemented |
 | finish | implemented |
 | bootstrap | implemented |
-| run | planned |
-| stop | planned |
-
-Planned commands return `NOT_IMPLEMENTED` with a non-zero exit code.
+| run | implemented |
+| stop | implemented |
 
 ## Scope Notes
 
-- Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned after v0.4.0.
+- Monorepo/workspace detection and per-subproject command routing: implemented.
+- Per-subproject check and bootstrap working directories: implemented.
 - Runtime version validation: partial.
 - `context build` is implemented as a bounded local context pack builder.
 - `bootstrap` is implemented as a conservative local setup planner/executor.
-- `run`, `stop`, auto-commit, auto-push, and GUI remain planned or `NOT_IMPLEMENTED`.
+- Auto-commit, auto-push, and GUI remain out of scope or planned.
 
 ## Intentional Limits
 Version 0.4.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.

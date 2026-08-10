@@ -1,13 +1,25 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
+import re
 import sys
-from dataclasses import asdict, dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+from ai_dev_tools.cache.repository import update_repository_index
+from ai_dev_tools.cache.validation import (
+    load_validation_result,
+    store_validation_result,
+    validation_cache_key,
+)
 from ai_dev_tools.config import Settings, load_settings
+from ai_dev_tools.detectors.runtime import detect_runtime_requirements
+from ai_dev_tools.detectors.workspaces import detect_workspaces
 from ai_dev_tools.models.report import Report
 from ai_dev_tools.parsers.logs import parse_tool_output
 from ai_dev_tools.reporters.writer import write_json, write_markdown
@@ -37,6 +49,7 @@ class CheckTask:
     cost: CheckCost
     source: CheckSource
     required: bool = True
+    workspace: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -55,7 +68,13 @@ class ChangedSelection:
         return asdict(self)
 
 
-def run_check(project_root: Path, mode: str = "fast", explain: bool = False) -> Report:
+def run_check(
+    project_root: Path,
+    mode: str = "fast",
+    explain: bool = False,
+    jobs: int = 1,
+    use_cache: bool = True,
+) -> Report:
     settings = load_settings(project_root)
     plan = build_validation_plan(settings)
     changed_selection = select_changed_checks(settings, plan) if mode == "changed" else None
@@ -70,6 +89,7 @@ def run_check(project_root: Path, mode: str = "fast", explain: bool = False) -> 
             "changed_analysis": changed_selection.to_dict() if changed_selection else None,
             "explain_only": True,
         }
+        _add_runtime_summary(report, settings.project_root)
         report.finish()
         _write_check_reports(report, f"{mode}-explain")
         return report
@@ -82,20 +102,59 @@ def run_check(project_root: Path, mode: str = "fast", explain: bool = False) -> 
         }
         if changed_selection is not None:
             report.summary["changed_analysis"] = changed_selection.to_dict()
+        _add_runtime_summary(report, settings.project_root)
         report.finish()
         _write_check_reports(report, mode)
         return report
 
-    results = [_run_logged(task, settings.project_root, settings.logs_directory) for task in tasks]
+    index = update_repository_index(settings.project_root)
+    entries = index.get("entries", [])
+    worker_count = max(1, min(jobs, len(tasks)))
+    if worker_count == 1:
+        results = [
+            _run_logged(
+                task,
+                settings.project_root,
+                settings.logs_directory,
+                entries,
+                use_cache,
+            )
+            for task in tasks
+        ]
+    else:
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            results = list(
+                executor.map(
+                    lambda task: _run_logged(
+                        task,
+                        settings.project_root,
+                        settings.logs_directory,
+                        entries,
+                        use_cache,
+                    ),
+                    tasks,
+                )
+            )
     failed = [result for result in results if result.exit_code != 0]
     report.status = "failed" if failed else "success"
     report.summary = _summary_for_results(mode, plan, tasks, results, changed_selection)
+    index_summary = index.get("summary", {})
+    report.summary["execution"] = {
+        "jobs": worker_count,
+        "parallel": worker_count > 1,
+        "cache_enabled": use_cache,
+        "cache_hits": sum(result.cached for result in results),
+        "index": index_summary,
+    }
+    _add_runtime_summary(report, settings.project_root)
     report.finish()
     _write_check_reports(report, mode)
     return report
 
 
-def build_validation_plan(settings: Settings) -> list[CheckTask]:
+def build_validation_plan(
+    settings: Settings, *, include_workspaces: bool = True
+) -> list[CheckTask]:
     if settings.commands:
         return _configured_plan(settings.commands)
     root = settings.project_root
@@ -179,7 +238,15 @@ def build_validation_plan(settings: Settings) -> list[CheckTask]:
         tasks.append(
             CheckTask("composer test", "unit_tests", ["composer", "test"], "medium", "detected")
         )
-    return sorted(tasks, key=_task_order)
+    if include_workspaces:
+        for workspace in detect_workspaces(root):
+            if not workspace.root:
+                continue
+            workspace_root = root / workspace.root
+            child_settings = load_settings(workspace_root)
+            child_tasks = build_validation_plan(child_settings, include_workspaces=False)
+            tasks.extend(replace(task, workspace=workspace.root) for task in child_tasks)
+    return sorted(_deduplicate_tasks(tasks), key=_task_order)
 
 
 def select_changed_checks(settings: Settings, plan: list[CheckTask]) -> ChangedSelection:
@@ -423,24 +490,53 @@ def _tasks_for_mode(
             task for task in plan if task.cost == "fast" or task.category in {"lint", "typecheck"}
         ]
         return fast_tasks or [task for task in plan if task.category == "unit_tests"][:1]
-    broad_strategies = {"broad_fallback", "no_changes", "configuration_change"}
+    broad_strategies = {"no_changes", "configuration_change"}
     if changed is None or changed.strategy in broad_strategies:
         return [
             task for task in plan if task.category in {"format", "lint", "typecheck", "unit_tests"}
         ]
+    relevant_plan = _tasks_for_changed_workspaces(plan, changed.changed_files)
+    if changed.strategy == "broad_fallback":
+        return [
+            task
+            for task in relevant_plan
+            if task.category in {"format", "lint", "typecheck", "unit_tests"}
+        ]
     selected_commands = {tuple(command) for command in changed.selected_commands}
-    selected_tasks = [task for task in plan if task.category in {"format", "lint", "typecheck"}]
-    selected_tasks.extend(
-        CheckTask("affected tests", "unit_tests", list(command), "fast", "detected")
-        for command in selected_commands
-    )
+    selected_tasks = [
+        task for task in relevant_plan if task.category in {"format", "lint", "typecheck"}
+    ]
+    for command in selected_commands:
+        workspace = _workspace_for_command(relevant_plan, list(command))
+        selected_tasks.append(
+            CheckTask(
+                "affected tests",
+                "unit_tests",
+                _command_relative_to_workspace(list(command), workspace),
+                "fast",
+                "detected",
+                workspace=workspace,
+            )
+        )
     return sorted(selected_tasks, key=_task_order)
 
 
-def _run_logged(task: CheckTask, root: Path, logs_dir: Path) -> CommandResult:
+def _run_logged(
+    task: CheckTask,
+    root: Path,
+    logs_dir: Path,
+    index_entries: object,
+    use_cache: bool,
+) -> CommandResult:
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = logs_dir / f"check-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.log"
-    result = run_command(task.command, root)
+    working_directory = root / task.workspace if task.workspace else root
+    cache_key = validation_cache_key(index_entries, task.command, task.workspace)
+    result = load_validation_result(root, cache_key, task.command) if use_cache else None
+    if result is None:
+        result = run_command(task.command, working_directory)
+        if use_cache:
+            store_validation_result(root, cache_key, result)
     log_path.write_text(result.combined_output + "\n", encoding="utf-8")
     result.stdout += f"\nFULL_LOG: {log_path}"
     return result
@@ -486,19 +582,37 @@ def _int_value(value: object) -> int:
 def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]:
     tool_label = " ".join(task.command)
     parsed = parse_tool_output(tool_label, result.combined_output)
+    failure_signature = _failure_signature(task, parsed) if result.exit_code != 0 else None
     return {
         "name": task.name,
         "category": task.category,
+        "workspace": task.workspace,
         "command": " ".join(result.command),
         "exit_code": result.exit_code,
         "duration_seconds": result.duration_seconds,
         "timed_out": result.timed_out,
+        "cached": result.cached,
         "full_log": _full_log_from_output(result.stdout),
+        "failure_signature": failure_signature,
         **parsed,
     }
 
 
-def _task_order(task: CheckTask) -> tuple[int, str]:
+def _failure_signature(task: CheckTask, parsed: dict[str, object]) -> str:
+    failure = parsed.get("first_failure")
+    canonical = {
+        "tool": parsed.get("parser"),
+        "workspace": task.workspace,
+        "category": task.category,
+        "failure": failure,
+    }
+    text = json.dumps(canonical, sort_keys=True, ensure_ascii=True).lower()
+    text = re.sub(r"\b\d+\b", "#", text)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    return f"failure:{digest}"
+
+
+def _task_order(task: CheckTask) -> tuple[int, str, str]:
     category_order = {
         "format": 0,
         "lint": 1,
@@ -507,7 +621,62 @@ def _task_order(task: CheckTask) -> tuple[int, str]:
         "integration_tests": 4,
         "build": 5,
     }
-    return (category_order[task.category], task.name)
+    return (category_order[task.category], task.workspace, task.name)
+
+
+def _tasks_for_changed_workspaces(
+    plan: list[CheckTask], changed_files: list[str]
+) -> list[CheckTask]:
+    workspace_roots = sorted(
+        {task.workspace for task in plan if task.workspace},
+        key=len,
+        reverse=True,
+    )
+    selected: set[str] = set()
+    for path in changed_files:
+        normalized = path.replace(chr(92), "/").strip("/")
+        owner = next(
+            (
+                root
+                for root in workspace_roots
+                if normalized == root or normalized.startswith(root + "/")
+            ),
+            "",
+        )
+        selected.add(owner)
+    return [task for task in plan if task.workspace in selected]
+
+
+def _workspace_for_command(plan: list[CheckTask], command: list[str]) -> str:
+    normalized_arguments = [item.replace(chr(92), "/") for item in command]
+    roots = sorted({task.workspace for task in plan if task.workspace}, key=len, reverse=True)
+    return next(
+        (
+            root
+            for root in roots
+            if any(argument.startswith(root + "/") for argument in normalized_arguments)
+        ),
+        "",
+    )
+
+
+def _command_relative_to_workspace(command: list[str], workspace: str) -> list[str]:
+    if not workspace:
+        return command
+    prefix = workspace.replace(chr(92), "/").rstrip("/") + "/"
+    return [
+        item.replace(chr(92), "/")[len(prefix) :]
+        if item.replace(chr(92), "/").startswith(prefix)
+        else item
+        for item in command
+    ]
+
+
+def _deduplicate_tasks(tasks: list[CheckTask]) -> list[CheckTask]:
+    unique: dict[tuple[str, str, tuple[str, ...]], CheckTask] = {}
+    for task in tasks:
+        unique[(task.workspace, task.category, tuple(task.command))] = task
+    return list(unique.values())
 
 
 def _is_test_path(path: Path) -> bool:
@@ -535,6 +704,12 @@ def _full_log_from_output(output: str) -> str | None:
         if line.startswith("FULL_LOG:"):
             return line.split(":", 1)[1].strip()
     return None
+
+
+def _add_runtime_summary(report: Report, root: Path) -> None:
+    report.summary["runtime_requirements"] = [
+        item.to_dict() for item in detect_runtime_requirements(root)
+    ]
 
 
 def _write_check_reports(report: Report, mode: str) -> None:

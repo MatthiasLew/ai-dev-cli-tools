@@ -1,5 +1,7 @@
 # Report Schema
 
+The machine-readable JSON Schema is stored in `docs/report-schema.json` and is checked against the report model in the test suite.
+
 Current schema version: `1.1`.
 
 Required fields:

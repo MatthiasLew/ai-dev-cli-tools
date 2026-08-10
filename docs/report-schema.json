@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ai-dev/report-schema-1.1.json",
+  "title": "ai-dev report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool_version",
+    "command",
+    "status",
+    "exit_code",
+    "started_at",
+    "finished_at",
+    "duration_seconds",
+    "project_root",
+    "summary",
+    "issues",
+    "artifacts",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.1"},
+    "tool_version": {"type": "string"},
+    "command": {"type": "string"},
+    "status": {
+      "enum": [
+        "success",
+        "failed",
+        "partial",
+        "not_implemented",
+        "invalid_configuration",
+        "environment_error",
+        "blocked"
+      ]
+    },
+    "exit_code": {"type": "integer"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "project_root": {"type": "string"},
+    "summary": {"type": "object"},
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "message", "masked"]
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "description"]
+      }
+    },
+    "metadata": {"type": "object"}
+  },
+  "additionalProperties": false
+}

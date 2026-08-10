@@ -1,4 +1,4 @@
-﻿# Bootstrap
+# Bootstrap
 
 `ai-dev bootstrap` prepares a detected project for local development with conservative, project-local commands. It never installs runtimes globally, changes PATH, runs with elevated privileges, publishes packages, deploys, removes user files, or overwrites `.env`.
 
@@ -80,7 +80,7 @@ The JSON summary includes project type, package manager, dry-run/explain mode, p
 
 ## Limits
 
-- Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned after v0.4.0.
+- Monorepo/workspace detection and per-subproject command routing: implemented.
+- Per-subproject check and bootstrap working directories: implemented.
 - Runtime version validation: partial.
 - Integration tests for package managers are conditional on tools available locally.

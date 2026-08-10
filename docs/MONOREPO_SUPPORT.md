@@ -1,14 +1,14 @@
 # Monorepo Support
 
-0.2.0 lays groundwork for monorepo-aware validation but does not yet fully isolate every workspace runner.
+Version 0.4.0 detects monorepo signals but does not yet fully isolate every workspace runner.
 
 ## Status
 
-- Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned for v0.3.0.
+- Monorepo/workspace detection and per-subproject command routing: implemented.
+- Per-subproject check and bootstrap working directories: implemented.
 - Runtime version validation: partial and handled outside this monorepo routing layer.
 
-This document does not claim full runner isolation between subprojects in v0.2.0.
+This document does not claim full runner isolation between subprojects in v0.4.0.
 Current behavior:
 
 - `scan` reports project-level signals and can identify multiple technology signals in one repository.

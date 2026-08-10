@@ -21,7 +21,7 @@ def test_cli_quiet_scan(tmp_path: Path, capsys) -> None:  # type: ignore[no-unty
     assert "project-scan" in capsys.readouterr().out
 
 
-def test_placeholder_returns_not_implemented(tmp_path: Path) -> None:
+def test_run_blocks_without_safe_command(tmp_path: Path) -> None:
     assert main(["--project", str(tmp_path), "--json", "run"]) == 1
 
 

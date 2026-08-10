@@ -3,7 +3,15 @@ from typing import cast
 
 import pytest
 
-from ai_dev_tools.parsers.logs import clean_output, parse_tool_output
+from ai_dev_tools.parsers.logs import (
+    ParsedToolResult,
+    clean_output,
+    parse_tool_output,
+    parser_names,
+    register_parser,
+    unregister_parser,
+)
+from ai_dev_tools.utils.subprocess import CommandResult
 
 FIXTURES = Path("tests/fixtures/logs")
 
@@ -55,3 +63,32 @@ def test_parse_known_tool_names_and_generic_fallback() -> None:
 
 def test_clean_output_removes_ansi_crlf_and_blank_lines() -> None:
     assert clean_output("\x1b[32mok\x1b[0m\r\n\r\n") == "ok"
+
+
+class CustomParser:
+    tool_name = "acme"
+
+    def can_parse(self, command: CommandResult) -> bool:
+        return command.command[:1] == ["acme"]
+
+    def parse(self, command: CommandResult) -> ParsedToolResult:
+        return ParsedToolResult(
+            tool=self.tool_name,
+            parser=self.tool_name,
+            parser_confidence="high",
+            status="success" if command.exit_code == 0 else "failed",
+        )
+
+
+def test_parser_registry_supports_extension_and_guards_duplicate_names() -> None:
+    parser = CustomParser()
+    register_parser(parser)
+    try:
+        assert parser_names()[0] == "acme"
+        assert parse_tool_output("acme check", "all good")["parser"] == "acme"
+        with pytest.raises(ValueError, match="already registered"):
+            register_parser(parser)
+    finally:
+        unregister_parser("acme")
+    with pytest.raises(KeyError):
+        unregister_parser("acme")

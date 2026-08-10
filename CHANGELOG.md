@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Add workspace models and isolated check/bootstrap routing for mixed monorepos.
+- Detect and validate Python, Node.js, Java, Rust, and PHP runtime requirements.
+- Implement safe managed `run` and `stop` with supervisor-owned process termination.
+- Add bounded parallel check execution with `--jobs`.
+- Add a versioned repository index and content-addressed validation cache with bounded retention.
+- Add incremental context manifests and `context build --incremental`.
+- Add AST-aware Python symbol snippets for large context files.
+- Add stable failure signatures and a machine-readable report JSON Schema.
+- Add an extensible tool-output parser registry with deterministic precedence.
+- Raise and enforce the coverage threshold to 90%.
+- Add agent-efficiency and execution TODO roadmaps.
+
 ## 0.4.0
 
 - Add `ai-dev bootstrap` with safe explain, dry-run, and execution modes.

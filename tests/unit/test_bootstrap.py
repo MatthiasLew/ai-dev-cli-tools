@@ -217,3 +217,25 @@ def test_bootstrap_monorepo_reports_subprojects(tmp_path: Path) -> None:
     (app / "package.json").write_text("{}", encoding="utf-8")
     plan = build_bootstrap_plan(load_settings(tmp_path), BootstrapOptions(explain=True))
     assert plan.monorepo_subprojects == ["apps/web"]
+
+
+def test_bootstrap_workspace_cwd(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / "package.json").write_text('{"workspaces": ["packages/*"]}', encoding="utf-8")
+    child = tmp_path / "packages" / "web"
+    child.mkdir(parents=True)
+    (child / "package.json").write_text("{}", encoding="utf-8")
+    executed_in: list[Path] = []
+
+    monkeypatch.setattr(boot, "run_doctor", lambda root: _ok_doctor(root))
+
+    def fake_run(command: list[str], cwd: Path, timeout_seconds: int = 300) -> CommandResult:
+        executed_in.append(cwd)
+        return CommandResult(command, 0, "ok", "", 0.01)
+
+    monkeypatch.setattr(boot, "run_command", fake_run)
+    report = run_bootstrap(tmp_path, BootstrapOptions())
+
+    assert report.status == "success"
+    assert child in executed_in
+    steps = report.summary["plan"]["steps"]
+    assert any(item["workspace"] == "packages/web" for item in steps)

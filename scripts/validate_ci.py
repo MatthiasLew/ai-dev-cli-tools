@@ -11,7 +11,7 @@ REQUIRED_STEPS = [
     "ruff check .",
     "mypy src tests",
     "coverage run -m pytest",
-    "coverage report",
+    "coverage report --fail-under=90",
     "python -m build",
     "python scripts/test_installed_package.py",
     "ai-dev --version",

@@ -9,6 +9,8 @@ By default the command writes:
 - `.ai/context/context-latest.md`
 - `.ai/context/context-latest.json`
 
+Use `--incremental` to emit only candidate files whose content fingerprint changed since the previous incremental pack. The schema-versioned manifest is stored at `.ai/cache/context-manifest.json`; unchanged candidates are reported as reused and are not repeated.
+
 Use `--format markdown`, `--format json`, or `--format both` to control artifacts. Use `--output <directory>` to write to a different directory.
 
 ## Budget Controls
@@ -28,13 +30,21 @@ The builder reuses existing project scan, repository map, git inspection, and ch
 
 `--changed-only` and `--staged-only` narrow selection to Git changes. `--no-git` skips Git inspection and diffs, which is useful for fixture directories or unpacked source trees.
 
+## Symbol-aware Python snippets
+
+When a Python file exceeds `--max-file-chars`, the builder parses it with the standard-library
+AST and selects imports plus task-relevant top-level functions, async functions, or classes.
+Every selected snippet reports its symbol name, kind, line range, reason, referenced local
+symbols, and truncation state. Import text has a separate bounded budget so it cannot displace
+the matching implementation. Syntax errors, small files, and non-Python files use the existing
+bounded file-prefix fallback.
 ## Safety
 
 The builder excludes `.env`, private keys, binary files, cache directories, build outputs, and `.ai/logs` or `.ai/reports`. Snippets and diffs are masked with the same secret patterns used by git inspection.
 
 ## Current Limits
 
-- Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned after v0.3.0.
+- Monorepo/workspace detection and per-subproject command routing: implemented.
+- Per-subproject check and bootstrap working directories: implemented.
 - Runtime version validation: partial.
 - Dependency analysis is lightweight and static for Python, JS/TS, Java, Rust, and PHP.

@@ -4,7 +4,7 @@ import os
 import shutil
 import sys
 import tomllib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -12,6 +12,7 @@ from typing import Literal
 from ai_dev_tools.config import BootstrapSettings, Settings, load_settings
 from ai_dev_tools.detectors.environment import run_doctor
 from ai_dev_tools.detectors.project import scan_project
+from ai_dev_tools.detectors.workspaces import detect_workspaces
 from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.utils.subprocess import CommandResult, run_command
@@ -35,6 +36,7 @@ class BootstrapStep:
     modifies_project: bool = True
     required_tool: str | None = None
     action: str = "command"
+    workspace: str = ""
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -71,13 +73,28 @@ def run_bootstrap(project_root: Path, options: BootstrapOptions) -> Report:
     doctor = run_doctor(settings.project_root)
     plan = build_bootstrap_plan(settings, options)
     missing_tools = _missing_required_tools(plan, doctor)
+    incompatible_runtimes = list(doctor.summary.get("incompatible_runtimes", []))
     log_path = _log_path(settings.logs_directory)
 
     if settings.warnings:
         report.issues.extend(
             Issue("warning", warning, code="CONFIG_WARNING") for warning in settings.warnings
         )
-    if not plan.steps and plan.project_type == "unknown":
+    if incompatible_runtimes:
+        report.status = "blocked"
+        report.issues.extend(
+            Issue(
+                "error",
+                (
+                    f"Incompatible {item.get('runtime')} runtime: "
+                    f"requires {item.get('constraint')}, detected {item.get('detected')}."
+                ),
+                code="INCOMPATIBLE_RUNTIME",
+            )
+            for item in incompatible_runtimes
+            if isinstance(item, dict)
+        )
+    elif not plan.steps and plan.project_type == "unknown":
         report.status = "blocked"
         report.issues.append(
             Issue("error", "No supported project bootstrap strategy detected.", code="NO_STRATEGY")
@@ -142,6 +159,7 @@ def run_bootstrap(project_root: Path, options: BootstrapOptions) -> Report:
         "plan": plan.to_dict(),
         "executed": executed,
         "missing_tools": missing_tools,
+        "runtime_compatibility": doctor.summary.get("runtime_compatibility", []),
         "scan": scan.summary,
         "modifications": "NONE" if options.explain or options.dry_run else "PLANNED",
     }
@@ -181,7 +199,8 @@ def build_bootstrap_plan(settings: Settings, options: BootstrapOptions) -> Boots
 
     strategy = _strategy_for_root(settings)
     monorepo = _detect_subprojects(root)
-    if strategy is None:
+    workspace_steps, workspace_smoke, workspace_tools = _workspace_bootstrap_steps(settings)
+    if strategy is None and not workspace_steps:
         return BootstrapPlan(
             "unknown",
             None,
@@ -192,17 +211,60 @@ def build_bootstrap_plan(settings: Settings, options: BootstrapOptions) -> Boots
             env_will_create,
             monorepo,
         )
-    project_type, package_manager, steps, smoke, tools = strategy
+    if strategy is None:
+        project_type, package_manager = "monorepo", "multiple"
+        steps: list[BootstrapStep] = []
+        smoke: list[BootstrapStep] = []
+        tools: list[str] = []
+    else:
+        project_type, package_manager, steps, smoke, tools = strategy
+    if workspace_steps:
+        project_type = "monorepo"
+        package_manager = "multiple"
     return BootstrapPlan(
         project_type,
         package_manager,
-        [*before, *env_step, *steps, *after],
-        smoke,
-        tools,
+        [*before, *env_step, *steps, *workspace_steps, *after],
+        [*smoke, *workspace_smoke],
+        sorted({*tools, *workspace_tools}),
         env_available,
         env_will_create,
         monorepo,
     )
+
+
+def _workspace_bootstrap_steps(
+    settings: Settings,
+) -> tuple[list[BootstrapStep], list[BootstrapStep], list[str]]:
+    steps: list[BootstrapStep] = []
+    smoke_steps: list[BootstrapStep] = []
+    tools: list[str] = []
+    for workspace in detect_workspaces(settings.project_root):
+        if not workspace.root:
+            continue
+        child_settings = load_settings(settings.project_root / workspace.root)
+        strategy = _strategy_for_root(child_settings)
+        if strategy is None:
+            continue
+        _, _, child_steps, child_smoke, child_tools = strategy
+        steps.extend(
+            replace(
+                step,
+                name=f"{workspace.workspace_id}: {step.name}",
+                workspace=workspace.root,
+            )
+            for step in child_steps
+        )
+        smoke_steps.extend(
+            replace(
+                step,
+                name=f"{workspace.workspace_id}: {step.name}",
+                workspace=workspace.root,
+            )
+            for step in child_smoke
+        )
+        tools.extend(child_tools)
+    return steps, smoke_steps, sorted(set(tools))
 
 
 def _strategy_for_root(
@@ -454,18 +516,19 @@ def _pytest_smoke(command: list[str], root: Path, tool: str | None) -> list[Boot
 
 
 def _execute_step(step: BootstrapStep, settings: Settings, log_path: Path) -> CommandResult:
+    working_directory = (
+        settings.project_root / step.workspace if step.workspace else settings.project_root
+    )
     if step.action == "copy_env":
-        source = settings.project_root / ".env.example"
-        target = settings.project_root / ".env"
+        source = working_directory / ".env.example"
+        target = working_directory / ".env"
         if target.exists():
             result = CommandResult(step.command, 0, "Skipped existing .env", "", 0.0)
         else:
             shutil.copyfile(source, target)
             result = CommandResult(step.command, 0, "Created .env from .env.example", "", 0.0)
     else:
-        result = run_command(
-            step.command, settings.project_root, settings.bootstrap.timeout_seconds
-        )
+        result = run_command(step.command, working_directory, settings.bootstrap.timeout_seconds)
     _append_log(log_path, step, result)
     return result
 

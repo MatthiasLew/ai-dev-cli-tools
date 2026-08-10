@@ -31,8 +31,8 @@ Add small modules under `detectors/`, `runners/`, or `parsers/`. Keep runtime de
 
 Current context limitations:
 
-- Monorepo/workspace detection: experimental.
-- Per-subproject runner isolation: planned after v0.4.0.
+- Monorepo/workspace detection and per-subproject command routing: implemented.
+- Per-subproject check and bootstrap working directories: implemented.
 - Runtime version validation: partial.
 
 ## Packaging Smoke

@@ -22,7 +22,7 @@ jobs:
       - run: ruff check .
       - run: mypy src tests
       - run: coverage run -m pytest
-      - run: coverage report
+      - run: coverage report --fail-under=90
       - run: python -m build
       - run: python scripts/test_installed_package.py
       - run: python scripts/validate_ci.py
