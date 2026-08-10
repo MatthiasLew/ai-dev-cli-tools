@@ -38,6 +38,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--explain", action="store_true")
     run.add_argument("--foreground", action="store_true")
     run.add_argument("--timeout", type=int, default=300)
+    run.add_argument("--ready-http")
+    run.add_argument("--ready-tcp")
+    run.add_argument("--startup-timeout", type=int, default=10)
+    run.add_argument("--startup-log-lines", type=int, default=50)
 
     stop = sub.add_parser("stop")
     stop.add_argument("--explain", action="store_true")
@@ -152,6 +156,10 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 dry_run=args.dry_run,
                 foreground=args.foreground,
                 timeout_seconds=args.timeout,
+                readiness_http=args.ready_http,
+                readiness_tcp=args.ready_tcp,
+                startup_timeout_seconds=args.startup_timeout,
+                startup_log_lines=args.startup_log_lines,
             ),
         )
     if command == "stop":

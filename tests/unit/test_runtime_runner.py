@@ -1,5 +1,10 @@
+import socket
 import sys
+from contextlib import nullcontext
 from pathlib import Path
+from urllib import request as urllib_request
+
+import pytest
 
 from ai_dev_tools.config import load_settings
 from ai_dev_tools.runtime import runner
@@ -195,3 +200,94 @@ def test_wait_for_state_accepts_complete_atomic_pending_state(tmp_path: Path) ->
     state = runner._wait_for_state(metadata, {"stopped"}, 0.1)
 
     assert state["status"] == "stopped"
+
+
+def test_readiness_helpers_support_tcp_http_timeout_and_bounded_logs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    assert runner._parse_tcp_endpoint("127.0.0.1:8080") == ("127.0.0.1", 8080)
+    for invalid in ("localhost", "localhost:0", "localhost:70000"):
+        try:
+            runner._parse_tcp_endpoint(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"accepted invalid endpoint: {invalid}")
+
+    monkeypatch.setattr(
+        socket,
+        "create_connection",
+        lambda address, timeout: nullcontext(),
+    )
+    tcp = runner._wait_for_readiness(RunOptions(readiness_tcp="localhost:8080"))
+    assert tcp["status"] == "ready"
+
+    class Response:
+        status = 204
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    monkeypatch.setattr(urllib_request, "urlopen", lambda url, timeout: Response())
+    http = runner._wait_for_readiness(RunOptions(readiness_http="http://localhost/health"))
+    assert http["status"] == "ready"
+
+    monkeypatch.setattr(
+        urllib_request,
+        "urlopen",
+        lambda url, timeout: (_ for _ in ()).throw(OSError("not ready")),
+    )
+    timed_out = runner._wait_for_readiness(
+        RunOptions(readiness_http="http://localhost/health", startup_timeout_seconds=0)
+    )
+    assert timed_out["status"] == "timeout"
+    assert timed_out["last_error"] == "not ready"
+
+    log = tmp_path / "run.log"
+    log.write_text("one\ntwo\nthree\n", encoding="utf-8")
+    assert runner._tail_log(log, 2) == ["two", "three"]
+    assert runner._tail_log(log, 0) == []
+    assert runner._tail_log(tmp_path / "missing.log", 2) == []
+
+
+def test_background_readiness_failure_stops_owned_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        runner,
+        "resolve_run_plan",
+        lambda settings: RunPlan(["demo"], "test"),
+    )
+    monkeypatch.setattr(runner, "_spawn_supervisor", lambda command, cwd: None)
+    monkeypatch.setattr(
+        runner,
+        "_wait_for_state",
+        lambda path, statuses, timeout: {
+            "status": "running",
+            "supervisor_pid": 1,
+            "child_pid": 2,
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "_wait_for_readiness",
+        lambda options: {"status": "timeout", "attempts": 1},
+    )
+    stopped: list[str] = []
+    monkeypatch.setattr(
+        runner,
+        "_request_managed_stop",
+        lambda paths, token, timeout: stopped.append(token),
+    )
+
+    report = run_application(
+        tmp_path,
+        RunOptions(readiness_http="http://localhost/health", startup_timeout_seconds=0),
+    )
+
+    assert report.status == "failed"
+    assert report.issues[0].code == "READINESS_TIMEOUT"
+    assert len(stopped) == 1

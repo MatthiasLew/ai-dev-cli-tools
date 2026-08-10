@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import socket
 import subprocess
 import sys
 import time
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from ai_dev_tools.config import Settings, load_settings
 from ai_dev_tools.models.report import Artifact, Issue, Report
@@ -23,6 +26,10 @@ class RunOptions:
     dry_run: bool = False
     foreground: bool = False
     timeout_seconds: int = 300
+    readiness_http: str | None = None
+    readiness_tcp: str | None = None
+    startup_timeout_seconds: int = 10
+    startup_log_lines: int = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +68,7 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             "explain": options.explain,
             "dry_run": options.dry_run,
             "modifications": "NONE",
+            "readiness": _readiness_config(options),
         }
     elif options.foreground:
         result = run_command(
@@ -100,19 +108,35 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
         ]
         _spawn_supervisor(supervisor_command, settings.project_root)
         state = _wait_for_state(paths["metadata"], {"running", "exited"}, 5.0)
+        readiness: dict[str, object] = {"status": "not_configured"}
         if state.get("status") != "running":
             report.status = "failed"
             report.issues.append(
                 Issue("error", "Managed process failed to start.", code="START_FAILED")
             )
         else:
-            report.status = "success"
+            readiness = _wait_for_readiness(options)
+            if readiness["status"] == "ready":
+                report.status = "success"
+            else:
+                report.status = "failed"
+                report.issues.append(
+                    Issue(
+                        "error",
+                        "Managed process did not pass its readiness check in time.",
+                        code="READINESS_TIMEOUT",
+                    )
+                )
+                _request_managed_stop(paths, token, 5)
         report.summary = {
             "plan": plan.to_dict(),
             "mode": "background",
             "status": state.get("status", "unknown"),
             "supervisor_pid": state.get("supervisor_pid"),
             "child_pid": state.get("child_pid"),
+            "readiness": readiness,
+            "startup_log": _tail_log(paths["log"], options.startup_log_lines),
+            "stale_metadata_recovered": bool(current) and not _heartbeat_is_fresh(current),
         }
         report.artifacts.extend(
             [
@@ -237,6 +261,70 @@ def _spawn_supervisor(command: list[str], cwd: Path) -> None:
         start_new_session=start_new_session,
         creationflags=flags,
     )
+
+
+def _readiness_config(options: RunOptions) -> dict[str, object]:
+    return {
+        "http": options.readiness_http,
+        "tcp": options.readiness_tcp,
+        "timeout_seconds": options.startup_timeout_seconds,
+    }
+
+
+def _wait_for_readiness(options: RunOptions) -> dict[str, object]:
+    if options.readiness_http is None and options.readiness_tcp is None:
+        return {"status": "ready", "check": "process_started", "attempts": 0}
+    deadline = time.monotonic() + max(options.startup_timeout_seconds, 0)
+    attempts = 0
+    last_error = ""
+    while True:
+        attempts += 1
+        try:
+            if options.readiness_http is not None:
+                with urllib_request.urlopen(options.readiness_http, timeout=0.5) as response:
+                    if response.status >= 500:
+                        raise OSError(f"HTTP {response.status}")
+            if options.readiness_tcp is not None:
+                host, port = _parse_tcp_endpoint(options.readiness_tcp)
+                with socket.create_connection((host, port), timeout=0.5):
+                    pass
+            return {"status": "ready", "check": _readiness_config(options), "attempts": attempts}
+        except (OSError, ValueError, urllib_error.URLError) as exc:
+            last_error = mask_text(str(exc))
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.1)
+    return {
+        "status": "timeout",
+        "check": _readiness_config(options),
+        "attempts": attempts,
+        "last_error": last_error,
+    }
+
+
+def _parse_tcp_endpoint(value: str) -> tuple[str, int]:
+    host, separator, port_text = value.rpartition(":")
+    if not separator or not host:
+        raise ValueError("TCP readiness must use host:port")
+    port = int(port_text)
+    if not 1 <= port <= 65535:
+        raise ValueError("TCP readiness port must be between 1 and 65535")
+    return host, port
+
+
+def _tail_log(path: Path, max_lines: int) -> list[str]:
+    if max_lines <= 0:
+        return []
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").splitlines()[-max_lines:]
+    except OSError:
+        return []
+
+
+def _request_managed_stop(paths: dict[str, Path], token: str, timeout: int) -> None:
+    paths["request"].parent.mkdir(parents=True, exist_ok=True)
+    paths["request"].write_text(token, encoding="utf-8")
+    _wait_for_state(paths["metadata"], {"stopped", "exited"}, timeout)
 
 
 def _runtime_paths(root: Path) -> dict[str, Path]:

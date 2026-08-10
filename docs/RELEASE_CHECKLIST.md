@@ -56,3 +56,8 @@ local development command.
 - [ ] Create release notes from the changelog.
 - [ ] Install the published artifact into a new environment and run the entrypoint smoke test.
 - [ ] Record known limitations and rollback or yanking instructions.
+
+## Latest cross-platform evidence
+
+- GitHub Actions CI run 31382168325 passed on 2026-08-10 for Linux, Windows, and macOS across the configured Python 3.11-3.13 matrix.
+- Docs run 31382168329 passed for the same commit (11e372).

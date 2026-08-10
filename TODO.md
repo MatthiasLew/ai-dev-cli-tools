@@ -22,7 +22,7 @@ changes, and cross-platform behavior are covered where applicable.
   Remove stale promises that assign unfinished work to versions 0.3.0 or earlier.
 - [x] Choose one enforced coverage threshold. The contributor instructions currently use
   90%, while `pyproject.toml` and CI effectively use 85%.
-- [ ] Confirm that the full GitHub Actions matrix passes on Linux, Windows, and macOS with
+- [x] Confirm that the full GitHub Actions matrix passes on Linux, Windows, and macOS with
   Python 3.11, 3.12, and 3.13. Record any known platform exception explicitly.
 - [x] Add a release checklist covering version bumping, changelog updates, wheel validation,
   report-schema compatibility, and clean-install smoke tests.
@@ -59,7 +59,7 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Resolve run commands from project configuration and detected entrypoints.
 - [x] Store process metadata under `.ai/runtime/`; never terminate a process that was not
   started and positively identified by `ai-dev`.
-- [ ] Add foreground mode, bounded startup-log capture, readiness checks, timeout handling,
+- [x] Add foreground mode, bounded startup-log capture, readiness checks, timeout handling,
   stale metadata recovery, and clear exit statuses.
 - [x] Provide `--explain` and `--dry-run` behavior before allowing background execution.
 - [ ] Test signal and process handling on Linux, macOS, and Windows.

@@ -5,6 +5,7 @@
 - Add workspace models and isolated check/bootstrap routing for mixed monorepos.
 - Detect and validate Python, Node.js, Java, Rust, and PHP runtime requirements.
 - Implement safe managed `run` and `stop` with supervisor-owned process termination.
+- Add HTTP/TCP readiness probes, bounded startup logs, and readiness-timeout cleanup.
 - Add bounded parallel check execution with `--jobs`.
 - Add a versioned repository index and content-addressed validation cache with bounded retention.
 - Add incremental context manifests and `context build --incremental`.
