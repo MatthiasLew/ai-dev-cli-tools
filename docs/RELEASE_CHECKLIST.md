@@ -50,6 +50,9 @@ Publishing is an explicit maintainer action. The project must not publish automa
 local development command.
 
 - [ ] Create and inspect the release tag.
+- [ ] Confirm TestPyPI publication and clean-install verification pass.
+- [ ] Inspect the automatically generated draft GitHub release and its attached wheel/sdist.
+- [ ] Manually publish the draft only after the protected `pypi` environment is ready.
 - [ ] Build artifacts from the tagged commit in a clean environment.
 - [ ] If PyPI distribution is enabled, publish through trusted publishing or another documented,
   least-privilege mechanism.

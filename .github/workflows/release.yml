@@ -77,40 +77,26 @@ jobs:
           --version "${GITHUB_REF_NAME#v}"
           --index-url https://test.pypi.org/simple/
 
-  publish-pypi:
-    name: Publish to PyPI
+  draft-release:
+    name: Create manually promoted release draft
     needs: verify-testpypi
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/ai-dev-cli-tools
     permissions:
-      id-token: write
+      contents: write
     steps:
-      - name: Download verified distribution artifact
+      - name: Download TestPyPI-verified distribution artifact
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: python-package-distributions
           path: dist/
-      - name: Publish distribution to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
-        with:
-          packages-dir: dist/
-
-  verify-pypi:
-    name: Verify PyPI pipx installation
-    needs: publish-pypi
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.13"
-      - name: Install and smoke test from PyPI through pipx
+      - name: Create draft GitHub release for manual PyPI promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >-
-          python scripts/verify_published_package.py
-          --version "${GITHUB_REF_NAME#v}"
-          --index-url https://pypi.org/simple/
-          --installer pipx
+          gh release create "$GITHUB_REF_NAME"
+          dist/*
+          --draft
+          --prerelease
+          --verify-tag
+          --generate-notes
+          --title "ai-dev $GITHUB_REF_NAME"

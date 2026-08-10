@@ -6,9 +6,10 @@ ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 DOCS = ROOT / ".github" / "workflows" / "docs.yml"
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
+PUBLISH = ROOT / ".github" / "workflows" / "publish-pypi.yml"
 REQUIRED_OS = ["ubuntu-latest", "windows-latest", "macos-latest"]
 REQUIRED_PYTHON = ['"3.11"', '"3.12"', '"3.13"']
-REQUIRED_RELEASE_TOKENS = [
+REQUIRED_TESTPYPI_RELEASE_TOKENS = [
     'tags:',
     '- "v*"',
     "contents: read",
@@ -16,10 +17,24 @@ REQUIRED_RELEASE_TOKENS = [
     "python scripts/validate_release.py",
     "python scripts/test_installed_package.py",
     "name: testpypi",
-    "name: pypi",
     "id-token: write",
     "repository-url: https://test.pypi.org/legacy/",
     "needs: verify-testpypi",
+    "gh release create",
+    "--draft",
+    "--prerelease",
+    "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
+]
+REQUIRED_PYPI_PUBLISH_TOKENS = [
+    "release:",
+    "- published",
+    "contents: read",
+    "persist-credentials: false",
+    "ref: ${{ github.event.release.tag_name }}",
+    "gh release download",
+    "python scripts/validate_release.py",
+    "name: pypi",
+    "id-token: write",
     "--installer pipx",
     "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
 ]
@@ -45,6 +60,7 @@ def main() -> int:
     ci = _read(CI, errors)
     docs = _read(DOCS, errors)
     release = _read(RELEASE, errors)
+    publish = _read(PUBLISH, errors)
     for item in REQUIRED_OS:
         if item not in ci:
             errors.append(f"missing CI OS matrix entry: {item}")
@@ -57,11 +73,16 @@ def main() -> int:
     for step in ["python -m ai_dev_tools.cli --help", "python -m ai_dev_tools.cli check --help"]:
         if step not in docs:
             errors.append(f"missing Docs step: {step}")
-    for token in REQUIRED_RELEASE_TOKENS:
+    for token in REQUIRED_TESTPYPI_RELEASE_TOKENS:
         if token not in release:
-            errors.append(f"missing release workflow token: {token}")
+            errors.append(f"missing TestPyPI release workflow token: {token}")
+    for token in REQUIRED_PYPI_PUBLISH_TOKENS:
+        if token not in publish:
+            errors.append(f"missing PyPI publish workflow token: {token}")
+    if "name: pypi" in release:
+        errors.append("tag workflow must not publish directly to production PyPI")
     for forbidden in ("password:", "PYPI_API_TOKEN", "TEST_PYPI_API_TOKEN"):
-        if forbidden in release:
+        if forbidden in release or forbidden in publish:
             errors.append(f"forbidden release credential configuration: {forbidden}")
     if errors:
         for error in errors:

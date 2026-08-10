@@ -24,17 +24,26 @@ Editable installs are development-only.
 ## Trusted Publishing configuration
 
 The dedicated `.github/workflows/release.yml` workflow builds one artifact, publishes it to
-TestPyPI, verifies a clean installation, and only then makes the same artifact eligible for PyPI.
-It does not use long-lived API-token secrets. Configure pending Trusted Publishers with exactly:
+TestPyPI, verifies a clean installation, and attaches that exact artifact to a draft GitHub
+release. Publishing the draft is the explicit promotion decision that triggers the separate
+`.github/workflows/publish-pypi.yml` production workflow. Neither workflow uses long-lived API
+secrets. Configure pending Trusted Publishers with exactly:
 
 | Registry | Owner | Repository | Workflow | GitHub environment |
 | --- | --- | --- | --- | --- |
 | TestPyPI | `MatthiasLew` | `ai-dev-cli-tools` | `release.yml` | `testpypi` |
-| PyPI | `MatthiasLew` | `ai-dev-cli-tools` | `release.yml` | `pypi` |
+| PyPI | `MatthiasLew` | `ai-dev-cli-tools` | `publish-pypi.yml` | `pypi` |
 
-Create both GitHub environments and require manual approval for `pypi`. Protect `main`, restrict
-release-tag creation to maintainers, and review changes to `release.yml` as credential-equivalent
-changes. The publishing jobs alone receive `id-token: write`; build and verification jobs do not.
+Create both GitHub environments, restrict them to release tags matching `v*`, and require manual
+approval for `pypi`. On a private GitHub Free repository, required environment reviewers and
+branch protection are unavailable; do not treat an unprotected production environment as
+approved. Make the repository public or enable a GitHub plan that supports those protections
+before production publication. Manual publication of the generated draft release remains an
+additional promotion gate, not a replacement for environment protection.
+
+Review changes to both publishing workflows as credential-equivalent changes. Only their small
+publishing jobs receive `id-token: write`; build, artifact validation, and installation jobs do
+not.
 
 ## Release sequence
 
@@ -42,9 +51,10 @@ changes. The publishing jobs alone receive `id-token: write`; build and verifica
 2. Confirm the TestPyPI and PyPI Trusted Publisher records and GitHub environments above.
 3. Create and push the signed tag `v0.5.0a1` from that exact commit.
 4. Approve the `testpypi` environment if configured to require review.
-5. Confirm the TestPyPI installation smoke job passes.
-6. Review and approve the protected `pypi` environment.
-7. Confirm the PyPI `pipx` installation smoke job passes before announcing the release.
+5. Confirm the TestPyPI installation smoke job passes and inspect the generated draft release.
+6. Review the attached wheel/sdist, release notes, and protected `pypi` environment.
+7. Manually publish the draft release to trigger `.github/workflows/publish-pypi.yml`.
+8. Confirm the PyPI `pipx` installation smoke job passes before announcing the release.
 
 If production verification fails, do not reuse the version. Fix forward with a new PEP 440
 pre-release version. Yank a broken release in PyPI when installation is unsafe or materially
