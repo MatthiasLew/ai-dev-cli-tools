@@ -44,3 +44,15 @@ commands, validation subprocesses, masked agent-visible bytes, estimated tokens,
 correctness, fixture identity, and a local machine profile. Token estimates use
 masked_utf8_bytes_divided_by_4; they are a stable approximation, not a model tokenizer claim.
 Raw JSON and compact Markdown reports stay under .ai/benchmarks/.
+## Included suites
+
+`examples/benchmarks/mcp-recurring-status.json` compares recurring project status collection.
+`examples/benchmarks/symbol-diff-context.json` compares a broad raw unified diff with the compact,
+structured symbol-level summary for the same deterministic source change. Both suites require
+successful validation on every trial before their efficiency results may be compared.
+
+A five-trial cold run of `symbol-diff-context` on the Windows development fixture produced a valid
+`adopt_candidate` comparison: median agent-visible bytes fell from 2,451 to 566 (-76.91%),
+estimated tokens from 613 to 142 (-76.84%), and median duration from 1.052 s to 0.953 s
+(-9.41%). These are fixture measurements, not universal performance claims; rerun the suite on
+the target repository and machine before making product decisions.

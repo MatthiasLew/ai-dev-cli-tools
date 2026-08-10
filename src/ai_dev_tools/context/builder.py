@@ -117,7 +117,11 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
 
     selected, snippet_rejections = _read_selected_files(root, ordered_paths, candidates, options)
     rejected.extend(snippet_rejections)
-    diffs = [] if not git_available else _limited_diffs(root, options)
+    diffs = (
+        []
+        if not git_available or git_report is None
+        else _context_diffs(root, options, git_report.summary)
+    )
     latest_errors = _latest_error_reports(root)
     summary = _base_summary(
         options,
@@ -245,6 +249,8 @@ def _base_summary(
         },
         "git_state": git_summary,
         "changed_files": _extract_changed_files(git_summary),
+        "changed_symbols": git_summary.get("changed_symbols", []) if git_summary else [],
+        "symbol_diff_summary": git_summary.get("symbol_diff_summary", {}) if git_summary else {},
         "related_tests": changed_dict.get("selected_tests", []) if changed_dict else [],
         "validation_plan": validation_plan,
         "changed_analysis": changed_dict,
@@ -257,6 +263,42 @@ def _base_summary(
         },
         "options": _options_dict(options),
     }
+
+
+def _context_diffs(
+    root: Path, options: ContextOptions, git_summary: dict[str, object]
+) -> list[dict[str, object]]:
+    symbols = _dict_list(git_summary.get("changed_symbols", []))
+    fallbacks = _dict_list(git_summary.get("symbol_diff_fallbacks", []))
+    if options.profile not in {"minimal", "review"} or not symbols or fallbacks:
+        return _limited_diffs(root, options)
+    if options.staged_only:
+        staged = set(_object_list(git_summary.get("staged_files", [])))
+        symbols = [item for item in symbols if item.get("path") in staged]
+    if not symbols:
+        return _limited_diffs(root, options)
+    payload = json.dumps(
+        {
+            "selection": "changed top-level symbols",
+            "symbols": symbols,
+            "raw_diff_omitted": True,
+        },
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    content, truncated = _truncate_text(mask_text(payload), max(options.max_diff_chars, 0))
+    return [
+        {
+            "name": "symbol-aware-working-tree",
+            "content": content,
+            "truncated": truncated,
+            "chars": len(content),
+            "selection_strategy": "symbol-diff",
+            "omitted_content": True,
+            "reason_code": "SYMBOL_DIFF_COMPACTION",
+        }
+    ]
 
 
 def _limited_diffs(root: Path, options: ContextOptions) -> list[dict[str, object]]:
@@ -327,6 +369,9 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
         "",
         "## Changed Files",
         _bullet_list(_object_list(summary.get("changed_files"))),
+        "",
+        "## Changed Symbols",
+        _json_block(summary.get("changed_symbols", [])),
         "",
         "## Related Tests",
         _bullet_list(_object_list(summary.get("related_tests"))),

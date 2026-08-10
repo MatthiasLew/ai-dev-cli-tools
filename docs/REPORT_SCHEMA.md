@@ -72,9 +72,9 @@ Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing field
 `check --mode changed` includes `changed_analysis` with `strategy`, `confidence`, `changed_files`, `selected_tests`, `selected_commands`, and `fallback_reason`.
 ## Context Build Summary
 
-`context build` reports include `technologies`, `git_state`, `changed_files`, `related_tests`, `validation_plan`, `selected_files`, `rejected_files`, `diffs`, `latest_errors`, `secret_findings`, `recent_commits`, and `budget` under `summary`.
+`context build` reports include `technologies`, `git_state`, `changed_files`, `changed_symbols`, `symbol_diff_summary`, `related_tests`, `validation_plan`, `selected_files`, `rejected_files`, `diffs`, `latest_errors`, `secret_findings`, `recent_commits`, and `budget` under `summary`. Each changed symbol includes its path, name, kind, change type, current line range, added/deleted line counts, bounded signature, signature-change flag, risk, related tests, confidence, and reason code.
 
-Consumers should treat snippet and diff content as optional because budget limits may omit or truncate them. Secret values are masked before being written to Markdown or JSON artifacts.
+Consumers should treat snippet and diff content as optional because budget limits may omit or truncate them. Minimal and review profiles may set `selection_strategy: symbol-diff` and `omitted_content: true`; `symbol_diff_fallbacks` identifies files for which conservative parsing was not possible. Secret values are masked before being written to Markdown or JSON artifacts.
 
 ## Bootstrap Summary
 

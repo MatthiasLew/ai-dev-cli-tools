@@ -235,3 +235,30 @@ def test_incremental_context_reuses_unchanged_files_and_invalidates_changes(
     artifact_paths = {item["path"] for item in data["artifacts"]}
     assert str(tmp_path / ".ai" / "context" / "context-latest.json") in artifact_paths
     assert str(tmp_path / ".ai" / "cache" / "context-manifest.json") in artifact_paths
+
+
+def test_review_context_compacts_raw_diff_to_changed_symbols(tmp_path: Path) -> None:
+    from ai_dev_tools.utils.subprocess import run_command
+
+    run_command(["git", "init", "-b", "main"], tmp_path)
+    run_command(["git", "config", "user.email", "agent@example.com"], tmp_path)
+    run_command(["git", "config", "user.name", "Agent"], tmp_path)
+    source = tmp_path / "service.py"
+    source.write_text("def calculate(value):\n    return value + 1\n", encoding="utf-8")
+    run_command(["git", "add", "service.py"], tmp_path)
+    run_command(["git", "commit", "-m", "initial"], tmp_path)
+    source.write_text(
+        "def calculate(value, offset=2):\n    return value + offset\n", encoding="utf-8"
+    )
+
+    report = build_context(
+        tmp_path,
+        ContextOptions(profile="review", task="review calculation", max_chars=30_000),
+    )
+
+    assert report.summary["changed_symbols"][0]["name"] == "calculate"
+    diff = report.summary["diffs"][0]
+    assert diff["selection_strategy"] == "symbol-diff"
+    assert diff["omitted_content"] is True
+    assert "raw_diff_omitted" in diff["content"]
+    assert "@@" not in diff["content"]

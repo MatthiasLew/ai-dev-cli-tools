@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from ai_dev_tools.config import load_settings
+from ai_dev_tools.git.symbol_diff import analyze_symbol_diff
 from ai_dev_tools.models.report import Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.security.secrets import scan_paths_for_secrets
@@ -47,6 +48,11 @@ def inspect_git(
         has_changes=bool(changed),
         has_conflicts=bool(conflicted_files),
     )
+    deleted_files = [
+        entry["path"]
+        for entry in [*staged_entries, *unstaged_entries]
+        if entry["status"].startswith("D")
+    ]
     summary: dict[str, object] = {
         "state": states[0],
         "states": states,
@@ -67,11 +73,7 @@ def inspect_git(
             for entry in [*staged_entries, *unstaged_entries]
             if entry["status"].startswith("R")
         ],
-        "deleted_files": [
-            entry["path"]
-            for entry in [*staged_entries, *unstaged_entries]
-            if entry["status"].startswith("D")
-        ],
+        "deleted_files": deleted_files,
         "stash_count": len(
             [
                 line
@@ -87,8 +89,17 @@ def inspect_git(
             else 0
         )
         scan_paths = [settings.project_root / item for item in changed]
+        symbol_diff = analyze_symbol_diff(
+            settings.project_root,
+            changed,
+            untracked_files=untracked_files,
+            deleted_files=deleted_files,
+        )
         summary.update(
             {
+                "changed_symbols": symbol_diff["symbols"],
+                "symbol_diff_summary": symbol_diff["summary"],
+                "symbol_diff_fallbacks": symbol_diff["fallbacks"],
                 "recent_commits": _text(
                     ["git", "log", "--oneline", "-5"], settings.project_root
                 ).splitlines(),

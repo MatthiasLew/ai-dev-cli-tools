@@ -42,6 +42,8 @@ The current implementation now includes:
 - one-shot compact `feedback` reports with stage timings and local session state;
 - incrementally reused import/test impact edges and focused rerun hints;
 - a dependency-free local MCP STDIO adapter with focused project tools and strict schemas.
+- symbol-level working-tree diff summaries for Python and JavaScript/TypeScript, including
+  signatures, related tests, risk, and conservative fallback metadata.
 
 The sections below remain the long-term target design. JavaScript and TypeScript now have a
 conservative top-level symbol extractor; additional language adapters are still planned. A first
@@ -81,6 +83,11 @@ Each snippet should include:
 - reason for selection;
 - referenced local symbols;
 - whether surrounding content was omitted.
+
+**Implementation status:** top-level symbol selection and working-tree symbol diffs are implemented
+for Python and JavaScript/TypeScript. Minimal and review context profiles replace eligible raw
+diffs with bounded symbol summaries; ambiguous or unsupported files retain the raw-diff fallback.
+Additional language and method-level adapters remain planned.
 
 **Expected impact:** very high for large source files and review tasks.
 
