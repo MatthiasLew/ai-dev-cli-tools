@@ -392,6 +392,42 @@ Measurements remain local and should not include repository contents.
 **Expected impact:** indirect but essential for preventing new functionality from making the CLI
 progressively slower.
 
+### 22. Reproducible agent workflow benchmarks
+
+Build a local A/B benchmark suite that measures complete coding-agent workflows with and without
+`ai-dev`. Representative tasks should include a small single-file fix, a failure in a large test
+suite, a multi-turn repair, and a change inside a monorepo workspace. Both variants must start
+from the same repository commit, environment state, task description, and validation policy.
+
+Record at least:
+
+- time to the first actionable failure and to final verified completion;
+- commands and validation subprocesses executed;
+- files, source characters, log bytes, and report bytes read by the agent;
+- estimated input and output tokens, with the estimation method and model tokenizer identified;
+- cache, checkpoint, focused-rerun, and incremental-context reuse;
+- task correctness, affected-test false negatives, and whether final full validation passed.
+
+Store machine-readable results and a compact comparison report so changes can be compared across
+versions. Repeated trials should report medians and variability, while warm-cache and cold-cache
+runs must remain separate. A benchmark result is valid only when both variants produce the same
+correct outcome and required final verification.
+
+Possible interface:
+
+```bash
+ai-dev benchmark run --suite agent-workflows --variant baseline
+ai-dev benchmark run --suite agent-workflows --variant ai-dev
+ai-dev benchmark compare <baseline-run> <ai-dev-run>
+```
+
+Benchmark fixtures should be local, deterministic, versioned, and safe to run without network
+access. Published performance claims must link to the fixture version, raw measurements, machine
+profile, and configuration used.
+
+**Expected impact:** essential for proving real time and context savings, finding regressions, and
+prioritizing the remaining roadmap by measured agent benefit.
+
 ## Suggested implementation order
 
 1. Stable evidence IDs, timing data, and budget metrics.
@@ -405,6 +441,7 @@ progressively slower.
 9. Watch mode, task-aware profiles, and adapters for additional languages.
 10. Baselines, focused reruns, flaky-test awareness, and local session state.
 11. A compact, documented agent integration protocol.
+12. Reproducible A/B agent workflow benchmarks and published local comparison reports.
 
 The first five items provide meaningful time and context savings without requiring a full
 semantic model of every supported language.
@@ -425,7 +462,11 @@ Efficiency should be evaluated on representative small projects and monorepos. R
 - obsolete watch runs cancelled before expensive work completed;
 - number of progressive-expansion requests;
 - false-negative rate for affected tests and relevant-file selection;
-- percentage of runs that fall back because confidence is too low.
+- percentage of runs that fall back because confidence is too low;
+- successful task completion rate and final full-validation pass rate;
+- median end-to-end task time, command count, and agent-visible bytes for equivalent A/B runs;
+- estimated agent input/output tokens, reported together with the tokenizer and estimation method;
+- benchmark variability across repeated cold-cache and warm-cache trials.
 
 Token estimates may be shown as an approximation, but raw character and byte counts should remain
 the reproducible source metrics.
