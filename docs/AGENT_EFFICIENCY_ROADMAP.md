@@ -44,6 +44,8 @@ The current implementation now includes:
 - a dependency-free local MCP STDIO adapter with focused project tools and strict schemas.
 - symbol-level working-tree diff summaries for Python and JavaScript/TypeScript, including
   signatures, related tests, risk, and conservative fallback metadata.
+- local multi-agent task coordination with atomic state, expiring leases, dependency gates,
+  and declared-path conflict detection through CLI and MCP.
 
 The sections below remain the long-term target design. JavaScript and TypeScript now have a
 conservative top-level symbol extractor; additional language adapters are still planned. A first

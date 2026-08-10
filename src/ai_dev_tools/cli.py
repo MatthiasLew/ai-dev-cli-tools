@@ -134,6 +134,23 @@ def build_parser() -> argparse.ArgumentParser:
     session = sub.add_parser("session")
     session_sub = session.add_subparsers(dest="session_command", required=True)
     session_sub.add_parser("status")
+    agents = sub.add_parser("agents")
+    agents_sub = agents.add_subparsers(dest="agents_command", required=True)
+    agents_sub.add_parser("status")
+    agents_add = agents_sub.add_parser("add")
+    agents_add.add_argument("task_id")
+    agents_add.add_argument("--title", required=True)
+    agents_add.add_argument("--path", action="append", required=True, dest="paths")
+    agents_add.add_argument("--depends-on", action="append", default=[], dest="dependencies")
+    for action in ("claim", "heartbeat"):
+        agent_action = agents_sub.add_parser(action)
+        agent_action.add_argument("task_id")
+        agent_action.add_argument("--agent", required=True, dest="agent_id")
+        agent_action.add_argument("--lease-seconds", type=int, default=900)
+    for action in ("release", "complete"):
+        agent_action = agents_sub.add_parser(action)
+        agent_action.add_argument("task_id")
+        agent_action.add_argument("--agent", required=True, dest="agent_id")
 
     baseline = sub.add_parser("baseline")
     baseline_sub = baseline.add_subparsers(dest="baseline_command", required=True)
@@ -352,6 +369,19 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         from ai_dev_tools.runners.feedback import run_session_status
 
         return run_session_status(project_root)
+    if command == "agents":
+        from ai_dev_tools.runners.coordination import coordinate_agents
+
+        return coordinate_agents(
+            project_root,
+            args.agents_command,
+            task_id=getattr(args, "task_id", ""),
+            agent_id=getattr(args, "agent_id", ""),
+            title=getattr(args, "title", ""),
+            paths=getattr(args, "paths", []),
+            dependencies=getattr(args, "dependencies", []),
+            lease_seconds=getattr(args, "lease_seconds", 900),
+        )
     if command == "baseline":
         from ai_dev_tools.runners.baseline import run_baseline
 
@@ -422,6 +452,12 @@ def _capabilities_report(project_root: Path) -> Report:
         "watch",
         "feedback",
         "session status",
+        "agents status",
+        "agents add",
+        "agents claim",
+        "agents heartbeat",
+        "agents release",
+        "agents complete",
         "baseline create",
         "baseline compare",
         "baseline list",

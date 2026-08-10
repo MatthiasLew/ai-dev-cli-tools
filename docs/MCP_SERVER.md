@@ -48,6 +48,7 @@ The official Codex MCP configuration reference is available in the
 | `feedback` | Changes, validation state, failures, timings, and bounded context | Plans checks unless `execute_checks=true` | local write |
 | `build_context` | Task-relevant files, symbols, diffs, tests, and evidence | Preview-only unless `write_artifacts=true` | local write |
 | `run_checks` | Deterministic validation plan or execution | Plans checks unless `execute=true` | local write |
+| `coordinate_agents` | Register, claim, renew, release, complete, or inspect local tasks | Mutates local coordination state | local write |
 | `explain_evidence` | Expand one stable evidence ID | Read-only | read-only |
 
 Tool results use a one-line text status plus `structuredContent`. The text does not duplicate

@@ -235,6 +235,41 @@ class LocalMcpServer:
                 handler=self._checks,
             ),
             ToolDefinition(
+                name="coordinate_agents",
+                title="Coordinate local coding agents",
+                description=(
+                    "Register, claim, renew, release, complete, or inspect local tasks with "
+                    "expiring leases and path-conflict detection."
+                ),
+                input_schema=_object_schema(
+                    {
+                        "action": {
+                            "type": "string",
+                            "enum": ["status", "add", "claim", "heartbeat", "release", "complete"],
+                        },
+                        "task_id": {"type": "string", "maxLength": 100, "default": ""},
+                        "agent_id": {"type": "string", "maxLength": 100, "default": ""},
+                        "title": {"type": "string", "maxLength": 500, "default": ""},
+                        "paths": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+                        "dependencies": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 100,
+                        },
+                        "lease_seconds": {
+                            "type": "integer",
+                            "minimum": 30,
+                            "maximum": 86400,
+                            "default": 900,
+                        },
+                    },
+                    required=["action"],
+                ),
+                output_schema=common_output,
+                annotations=_annotations(read_only=False),
+                handler=self._coordinate_agents,
+            ),
+            ToolDefinition(
                 name="explain_evidence",
                 title="Expand local evidence",
                 description=(
@@ -367,6 +402,39 @@ class LocalMcpServer:
             )
         )
 
+    def _coordinate_agents(self, arguments: JsonObject) -> JsonObject:
+        allowed = {
+            "action",
+            "task_id",
+            "agent_id",
+            "title",
+            "paths",
+            "dependencies",
+            "lease_seconds",
+        }
+        _validate_keys(arguments, allowed)
+        action = _choice(
+            arguments,
+            "action",
+            "status",
+            {"status", "add", "claim", "heartbeat", "release", "complete"},
+        )
+        _require_project(self.project_root)
+        from ai_dev_tools.runners.coordination import coordinate_agents
+
+        return _finish_report(
+            coordinate_agents(
+                self.project_root,
+                action,
+                task_id=_optional_string(arguments, "task_id", 100),
+                agent_id=_optional_string(arguments, "agent_id", 100),
+                title=_optional_string(arguments, "title", 500),
+                paths=_string_array(arguments, "paths", 100),
+                dependencies=_string_array(arguments, "dependencies", 100),
+                lease_seconds=_integer(arguments, "lease_seconds", 900, 30, 86400),
+            )
+        )
+
     def _explain(self, arguments: JsonObject) -> JsonObject:
         _validate_keys(arguments, {"reference", "tail"})
         reference = _string(arguments, "reference", None, 200)
@@ -478,6 +546,22 @@ def _string(
         if default == "" and value == "":
             return ""
         raise ToolInputError(f"{name} must be a non-empty string up to {maximum} characters.")
+    return value
+
+
+def _optional_string(arguments: Mapping[str, object], name: str, maximum: int) -> str:
+    value = arguments.get(name, "")
+    if not isinstance(value, str) or len(value) > maximum or "\x00" in value:
+        raise ToolInputError(f"{name} must be a string up to {maximum} characters.")
+    return value
+
+
+def _string_array(arguments: Mapping[str, object], name: str, maximum: int) -> list[str]:
+    value = arguments.get(name, [])
+    if not isinstance(value, list) or len(value) > maximum:
+        raise ToolInputError(f"{name} must be an array with at most {maximum} strings.")
+    if any(not isinstance(item, str) or not item or len(item) > 500 for item in value):
+        raise ToolInputError(f"{name} contains an invalid string.")
     return value
 
 

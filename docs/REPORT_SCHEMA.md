@@ -81,3 +81,11 @@ Consumers should treat snippet and diff content as optional because budget limit
 `bootstrap` reports include `project_type`, `package_manager`, `dry_run`, `explain`, `planned_commands`, `executed_commands`, `created_venv`, `created_env`, `smoke_check`, `plan`, `executed`, `missing_tools`, and `full_log` when commands ran.
 
 A `blocked` status means a required runtime or package manager is unavailable, or no supported bootstrap strategy could be detected.
+
+## Agent Coordination Summary
+
+`agents` reports expose coordination schema `1.0`, a sorted `tasks` list, `active_claims`, the
+number of expired claims pruned, and a stable `reason_code`. Task entries contain declared paths,
+dependencies, state, timestamps, and an optional claim with agent identity and lease expiry.
+Blocked claims use reason codes such as `DEPENDENCIES_INCOMPLETE`, `TASK_CLAIMED`,
+`CLAIM_NOT_OWNED`, or `PATH_CONFLICT`.
