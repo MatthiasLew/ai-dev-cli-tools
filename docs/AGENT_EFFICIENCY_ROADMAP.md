@@ -34,10 +34,12 @@ The current implementation now includes:
 - content-addressed validation caching with bounded retention and explicit bypass;
 - stable failure signatures, bounded parallel checks, and workspace-aware execution;
 - Python AST-aware snippets with line ranges, selection reasons, and referenced local symbols;
-- local index/cache status and maintenance commands.
+- local index/cache status and maintenance commands;
+- stable evidence IDs with targeted local expansion;
+- named local baselines with failure and status regression comparison.
 
-The sections below remain the target design. Items such as broader multi-language symbol-aware snippets, baselines,
-progressive expansion, checkpoint/resume, and the unified feedback command are still planned.
+The sections below remain the target design. Items such as broader multi-language symbol-aware
+snippets, checkpoint/resume, and the unified feedback command are still planned.
 ## Recommended capabilities
 
 ### 1. Incremental context packs

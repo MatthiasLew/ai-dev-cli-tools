@@ -73,9 +73,11 @@ class Report:
         return round((finished - self.started_at).total_seconds(), 3)
 
     def to_dict(self) -> dict[str, Any]:
+        from ai_dev_tools.reporters.progressive import add_progressive_metadata
+
         finished = self.finished_at or utc_now()
         status = "partial" if self.status == "warning" else self.status
-        return {
+        payload = {
             "schema_version": self.schema_version,
             "tool_version": self.tool_version,
             "command": self.command,
@@ -88,5 +90,6 @@ class Report:
             "summary": self.summary,
             "issues": [asdict(issue) for issue in self.issues],
             "artifacts": [asdict(artifact) for artifact in self.artifacts],
-            "metadata": self.metadata,
+            "metadata": dict(self.metadata),
         }
+        return add_progressive_metadata(payload)

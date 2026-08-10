@@ -54,6 +54,13 @@ branch on codes and display prose; prose may improve without a schema-version ch
 Context file and symbol entries, bootstrap steps, changed-check fallback analysis, missing
 index/log/check outcomes, and finish blockers all follow this rule.
 
+## Progressive evidence and baselines
+
+Expandable entries receive deterministic `evidence_id` values. `metadata.progressive` reports
+the available references and the command template for targeted `ai-dev explain` calls. Named
+baselines are local schema-versioned snapshots under `.ai/cache/baselines/`; comparisons expose
+new/resolved failure signatures and issue codes, changed statuses, and blocking regressions.
+
 ## Migration From 1.0
 
 Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing fields from schema 1.0 as `exit_code: 0` for successful reports and `{}` for metadata. Consumers should accept `partial` where schema 1.0 reports may have used `warning`.

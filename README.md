@@ -58,6 +58,9 @@ ai-dev check --mode changed  # reports changed files and falls back safely when 
 ai-dev check --mode full --jobs 4
 ai-dev index update
 ai-dev cache status
+ai-dev baseline create main
+ai-dev baseline compare main
+ai-dev explain issue:<id> --tail 100
 ai-dev diagnostics
 ai-dev completion bash
 ai-dev test affected
@@ -108,6 +111,8 @@ Validation results are cached by default using repository, command, workspace, r
 Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 
 JSON reports use schema `1.1` with `schema_version`, `tool_version`, `command`, `status`, `exit_code`, timestamps, `project_root`, `summary`, `issues`, `artifacts`, and `metadata`.
+
+Every expandable issue, check, file, snippet, diff, workspace, and artifact receives a stable local `evidence_id`. The report metadata lists references; `ai-dev explain <evidence-id> --tail 100` retrieves only that evidence. `ai-dev baseline create <name>` stores a compact local snapshot under `.ai/cache/baselines/`, and `baseline compare <name>` leads with new/resolved failures, issue codes, and status regressions.
 
 ## Auto Detection
 

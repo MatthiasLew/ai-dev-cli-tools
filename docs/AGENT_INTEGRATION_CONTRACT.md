@@ -17,8 +17,9 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 1. Run `ai-dev scan --json` and `ai-dev diagnostics --json` once.
 2. Build `ai-dev context build --profile minimal --incremental --json`.
 3. Execute `ai-dev check --mode changed --jobs 4 --json`.
-4. Follow `artifacts` for full evidence; use failure signatures to deduplicate retries.
-5. Before handoff, run `ai-dev finish --json`.
+4. Read `metadata.progressive.references` and call `ai-dev explain <evidence-id> --json` only for needed evidence.
+5. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
+6. Before handoff, run `ai-dev finish --json`.
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
 metrics.

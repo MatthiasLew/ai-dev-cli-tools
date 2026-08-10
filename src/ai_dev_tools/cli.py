@@ -109,6 +109,17 @@ def build_parser() -> argparse.ArgumentParser:
     completion = sub.add_parser("completion")
     completion.add_argument("shell", choices=["bash", "zsh", "fish", "powershell"])
 
+    baseline = sub.add_parser("baseline")
+    baseline_sub = baseline.add_subparsers(dest="baseline_command", required=True)
+    baseline_sub.add_parser("list")
+    for action in ("create", "compare"):
+        baseline_action = baseline_sub.add_parser(action)
+        baseline_action.add_argument("name")
+
+    explain = sub.add_parser("explain")
+    explain.add_argument("reference")
+    explain.add_argument("--tail", type=int, default=100)
+
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
     sub.add_parser("finish")
@@ -255,6 +266,18 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         from ai_dev_tools.runners.index import run_index
 
         return run_index(project_root, args.index_command)
+    if command == "baseline":
+        from ai_dev_tools.runners.baseline import run_baseline
+
+        return run_baseline(
+            project_root,
+            args.baseline_command,
+            getattr(args, "name", None),
+        )
+    if command == "explain":
+        from ai_dev_tools.reporters.progressive import run_explain
+
+        return run_explain(project_root, args.reference, args.tail)
     if command == "diagnostics":
         from ai_dev_tools.runners.diagnostics import run_diagnostics
 
@@ -294,6 +317,10 @@ def _capabilities_report(project_root: Path) -> Report:
         "git status",
         "git inspect",
         "finish",
+        "baseline create",
+        "baseline compare",
+        "baseline list",
+        "explain",
         "diagnostics",
         "capabilities",
     ]
