@@ -1,6 +1,7 @@
 .ai/tmp/
 .ai/runtime/
 .ai/cache/
+.ai/benchmarks/
 .ai/context/
 .ai/logs/
 .ai/reports/

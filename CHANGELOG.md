@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add reproducible, correctness-gated local A/B workflow benchmarks and comparison reports.
+
 ## 0.5.0a1 - 2026-08-10
 
 - Add workspace models and isolated check/bootstrap routing for mixed monorepos.

@@ -111,6 +111,8 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Provide example integrations that consume JSON reports without parsing Markdown.
 - [x] Add a local-only diagnostics command for cache size, report retention, and configuration
   provenance.
+- [x] Add reproducible local A/B workflow benchmarks with versioned fixtures, correctness
+  validation, repeated cold/warm trials, machine-readable results, and compact comparisons.
 - [x] Evaluate opt-in, local metrics that estimate context size and tokens avoided without
   transmitting repository contents.
 
