@@ -103,15 +103,15 @@ changes, and cross-platform behavior are covered where applicable.
 
 ## P3 — Distribution and ecosystem
 
-- [ ] Decide whether the package will be published to PyPI and document the supported install
+- [x] Decide whether the package will be published to PyPI and document the supported install
   and upgrade path.
 - [ ] Add shell completion for Bash, Zsh, Fish, and PowerShell if it can be done without adding
   heavy runtime dependencies.
-- [ ] Document a stable integration contract for coding agents and editor extensions.
-- [ ] Provide example integrations that consume JSON reports without parsing Markdown.
-- [ ] Add a local-only diagnostics command for cache size, report retention, and configuration
+- [x] Document a stable integration contract for coding agents and editor extensions.
+- [x] Provide example integrations that consume JSON reports without parsing Markdown.
+- [x] Add a local-only diagnostics command for cache size, report retention, and configuration
   provenance.
-- [ ] Evaluate opt-in, local metrics that estimate context size and tokens avoided without
+- [x] Evaluate opt-in, local metrics that estimate context size and tokens avoided without
   transmitting repository contents.
 
 ## Deferred or explicitly out of scope

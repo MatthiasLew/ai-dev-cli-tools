@@ -106,6 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     git_sub.add_parser("status")
     git_sub.add_parser("inspect")
 
+    sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
     sub.add_parser("finish")
     return parser
@@ -246,6 +247,10 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         from ai_dev_tools.runners.index import run_index
 
         return run_index(project_root, args.index_command)
+    if command == "diagnostics":
+        from ai_dev_tools.runners.diagnostics import run_diagnostics
+
+        return run_diagnostics(project_root)
     if command == "capabilities":
         return _capabilities_report(project_root)
     if command == "git":
@@ -281,6 +286,7 @@ def _capabilities_report(project_root: Path) -> Report:
         "git status",
         "git inspect",
         "finish",
+        "diagnostics",
         "capabilities",
     ]
     planned: list[str] = []

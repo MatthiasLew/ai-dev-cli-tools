@@ -58,6 +58,7 @@ ai-dev check --mode changed  # reports changed files and falls back safely when 
 ai-dev check --mode full --jobs 4
 ai-dev index update
 ai-dev cache status
+ai-dev diagnostics
 ai-dev test affected
 ai-dev logs summarize
 ai-dev context build
@@ -172,6 +173,7 @@ git diff --check
 | cache status/prune/clear | implemented |
 | logs summarize | implemented |
 | context build | implemented |
+| diagnostics | implemented |
 | capabilities | implemented |
 | git status | implemented |
 | git inspect | implemented |
