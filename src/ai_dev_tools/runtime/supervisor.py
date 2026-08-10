@@ -9,7 +9,10 @@ import time
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
+from typing import TextIO
+
+from ai_dev_tools.security.secrets import mask_text
 
 _STOP = Event()
 
@@ -41,11 +44,18 @@ def main(argv: list[str] | None = None) -> int:
             command,
             cwd=args.cwd,
             stdin=subprocess.DEVNULL,
-            stdout=log,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             shell=False,
             env=os.environ.copy(),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
+        if child.stdout is None:
+            return 2
+        output_thread = Thread(target=_copy_output, args=(child.stdout, log), daemon=True)
+        output_thread.start()
         state: dict[str, object] = {
             "schema_version": "1",
             "status": "running",
@@ -74,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             if exit_code is None:
                 _terminate(child)
                 exit_code = child.poll()
+            output_thread.join(timeout=1)
             state["status"] = "stopped" if _STOP.is_set() or args.request.exists() else "exited"
             state["exit_code"] = exit_code
             state["finished_at"] = _now()
@@ -97,13 +108,19 @@ def _stop_requested(path: Path, token: str) -> bool:
         return False
 
 
-def _terminate(process: subprocess.Popen[bytes]) -> None:
+def _terminate(process: subprocess.Popen[str]) -> None:
     process.terminate()
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(timeout=5)
+
+
+def _copy_output(stream: TextIO, log: TextIO) -> None:
+    for line in stream:
+        log.write(mask_text(line))
+        log.flush()
 
 
 def _write_json(path: Path, data: dict[str, object]) -> None:

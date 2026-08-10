@@ -13,6 +13,7 @@
 - Add stable failure signatures and a machine-readable report JSON Schema.
 - Add an extensible tool-output parser registry with deterministic precedence.
 - Add compatibility fixtures and prevent cross-line test-count overcounting.
+- Apply defense-in-depth secret masking to command logs, diagnostics, runtime streams, and report writers.
 - Raise and enforce the coverage threshold to 90%.
 - Add agent-efficiency and execution TODO roadmaps.
 

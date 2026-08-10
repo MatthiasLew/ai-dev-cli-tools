@@ -25,7 +25,7 @@ from ai_dev_tools.runners.check import (
     build_validation_plan,
     select_changed_checks,
 )
-from ai_dev_tools.security.secrets import SECRET_PATTERNS, scan_paths_for_secrets
+from ai_dev_tools.security.secrets import mask_text, scan_paths_for_secrets
 from ai_dev_tools.utils.subprocess import run_command
 
 ContextFormat = Literal["markdown", "json", "both"]
@@ -244,9 +244,9 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     if manifest_artifact is not None:
         report.artifacts.append(manifest_artifact)
     if options.format in {"markdown", "both"}:
-        md_path.write_text(_render_markdown(report, report.summary), encoding="utf-8")
+        md_path.write_text(mask_text(_render_markdown(report, report.summary)), encoding="utf-8")
     if options.format in {"json", "both"}:
-        json_text = json.dumps(report.to_dict(), indent=2, sort_keys=True)
+        json_text = mask_text(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         json_path.write_text(json_text, encoding="utf-8")
     return report
 
@@ -396,7 +396,7 @@ def _read_selected_files(
         except OSError as exc:
             rejected.append(RejectedFile(rel, f"unreadable: {exc}"))
             continue
-        masked = _mask_secrets(text)
+        masked = mask_text(text)
         symbol_selection = (
             select_python_symbols(text, masked, options.task, options.max_file_chars)
             if path.suffix.lower() == ".py"
@@ -445,7 +445,7 @@ def _limited_diffs(root: Path, options: ContextOptions) -> list[dict[str, object
                 {"name": name, "error": result.stderr.strip(), "truncated": False, "chars": 0}
             )
             continue
-        text, truncated = _truncate_text(_mask_secrets(result.stdout), remaining)
+        text, truncated = _truncate_text(mask_text(result.stdout), remaining)
         remaining -= len(text)
         diffs.append({"name": name, "content": text, "truncated": truncated, "chars": len(text)})
     return diffs
@@ -661,13 +661,6 @@ def _truncate_text(text: str, max_chars: int) -> tuple[str, bool]:
     marker = "\n[TRUNCATED]\n"
     keep = max(max_chars - len(marker), 0)
     return text[:keep] + marker, True
-
-
-def _mask_secrets(text: str) -> str:
-    masked = text
-    for kind, pattern in SECRET_PATTERNS:
-        masked = pattern.sub(f"***MASKED_{kind.upper()}***", masked)
-    return masked
 
 
 def _changed_files(git_report: Report | None, staged_only: bool) -> list[str]:

@@ -13,6 +13,7 @@ from pathlib import Path
 from ai_dev_tools.config import Settings, load_settings
 from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
+from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import run_command, split_command
 
 
@@ -70,7 +71,7 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
         report.status = "success" if result.exit_code == 0 else "failed"
         report.exit_code = result.exit_code
         paths["log"].parent.mkdir(parents=True, exist_ok=True)
-        paths["log"].write_text(result.combined_output + "\n", encoding="utf-8")
+        paths["log"].write_text(mask_text(result.combined_output) + "\n", encoding="utf-8")
         report.artifacts.append(Artifact(str(paths["log"]), "log", "Application output"))
         report.summary = {
             "plan": plan.to_dict(),

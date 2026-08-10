@@ -5,12 +5,16 @@ from pathlib import Path
 from typing import Any
 
 from ai_dev_tools.models.report import Artifact, Report
+from ai_dev_tools.security.secrets import mask_text
 
 
 def write_json(report: Report, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     _register_artifact(report, path, "json", "Structured report")
-    path.write_text(json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        mask_text(json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n"),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -37,7 +41,7 @@ def render_markdown(report: Report) -> str:
 def write_markdown(report: Report, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     _register_artifact(report, path, "markdown", "Human report")
-    path.write_text(render_markdown(report), encoding="utf-8")
+    path.write_text(mask_text(render_markdown(report)), encoding="utf-8")
     return path
 
 

@@ -15,6 +15,7 @@ from ai_dev_tools.detectors.project import scan_project
 from ai_dev_tools.detectors.workspaces import detect_workspaces
 from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
+from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command
 
 BootstrapStatus = Literal["planned", "executed", "skipped", "failed"]
@@ -529,6 +530,8 @@ def _execute_step(step: BootstrapStep, settings: Settings, log_path: Path) -> Co
             result = CommandResult(step.command, 0, "Created .env from .env.example", "", 0.0)
     else:
         result = run_command(step.command, working_directory, settings.bootstrap.timeout_seconds)
+    result.stdout = mask_text(result.stdout)
+    result.stderr = mask_text(result.stderr)
     _append_log(log_path, step, result)
     return result
 

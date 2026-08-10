@@ -96,9 +96,9 @@ changes, and cross-platform behavior are covered where applicable.
   explicit invalidation rules, pruning, and local diagnostics.
 - [x] Add configurable context profiles such as `minimal`, `debug`, `review`, and `full`.
 - [ ] Add machine-readable reason codes wherever reports currently expose only prose.
-- [ ] Ensure secret masking is applied consistently to snippets, diffs, command output,
+- [x] Ensure secret masking is applied consistently to snippets, diffs, command output,
   environment diagnostics, and generated reports.
-- [ ] Add tests proving that blocked files, private keys, tokens, and `.env` values never enter
+- [x] Add tests proving that blocked files, private keys, tokens, and `.env` values never enter
   context artifacts in clear text.
 
 ## P3 — Distribution and ecosystem

@@ -49,3 +49,10 @@ def scan_paths_for_secrets(root: Path, paths: list[Path]) -> list[SecretFinding]
                 for match in pattern.finditer(line):
                     findings.append(SecretFinding(rel, line_number, kind, match.group(0)))
     return findings
+
+
+def mask_text(text: str) -> str:
+    masked = text
+    for kind, pattern in SECRET_PATTERNS:
+        masked = pattern.sub(f"***MASKED_{kind.upper()}***", masked)
+    return masked

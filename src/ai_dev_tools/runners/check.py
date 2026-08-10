@@ -23,6 +23,7 @@ from ai_dev_tools.detectors.workspaces import detect_workspaces
 from ai_dev_tools.models.report import Report
 from ai_dev_tools.parsers.logs import parse_tool_output
 from ai_dev_tools.reporters.writer import write_json, write_markdown
+from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command, split_command
 
 CheckCategory = Literal["format", "lint", "typecheck", "unit_tests", "integration_tests", "build"]
@@ -546,6 +547,8 @@ def _run_logged(
     result = load_validation_result(root, cache_key, task.command) if use_cache else None
     if result is None:
         result = run_command(task.command, working_directory)
+        result.stdout = mask_text(result.stdout)
+        result.stderr = mask_text(result.stderr)
         if use_cache:
             store_validation_result(root, cache_key, result)
     log_path.write_text(result.combined_output + "\n", encoding="utf-8")

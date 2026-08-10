@@ -99,3 +99,33 @@ def test_supervisor_rejects_empty_command(tmp_path: Path) -> None:
         )
         == 2
     )
+
+
+def test_supervisor_masks_streamed_application_output(tmp_path: Path) -> None:
+    metadata = tmp_path / "process.json"
+    log = tmp_path / "application.log"
+    secret = "sk-" + "s" * 24
+
+    exit_code = supervisor.main(
+        [
+            "--metadata",
+            str(metadata),
+            "--request",
+            str(tmp_path / "stop.request"),
+            "--token",
+            "control-token",
+            "--cwd",
+            str(tmp_path),
+            "--log",
+            str(log),
+            "--",
+            sys.executable,
+            "-c",
+            f"print('{secret}')",
+        ]
+    )
+
+    output = log.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert secret not in output
+    assert "MASKED_OPENAI_KEY" in output

@@ -11,6 +11,7 @@ from ai_dev_tools.detectors.runtime import (
 )
 from ai_dev_tools.models.report import Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
+from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import run_command
 
 
@@ -60,7 +61,7 @@ def run_doctor(project_root: Path) -> Report:
             continue
         result = run_command(spec.version_command, project_root, timeout_seconds=20)
         version = (
-            (result.stdout or result.stderr).splitlines()[0]
+            mask_text(result.stdout or result.stderr).splitlines()[0]
             if result.combined_output
             else "available"
         )
