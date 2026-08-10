@@ -84,6 +84,9 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add stable failure signatures to validation reports.
 - [x] Add Python AST-aware context snippets with symbol names, kinds, line ranges,
   selection reasons, local references, and conservative fallback.
+- [x] Add conservative JavaScript/TypeScript top-level symbol selection for functions,
+  classes, interfaces, types, enums, namespaces, and arrow functions, with task matching,
+  local-reference metadata, secret masking, bounded imports, and safe file-prefix fallback.
 - [x] Continue the remaining high-priority features from
   `docs/AGENT_EFFICIENCY_ROADMAP.md`, starting with progressive report expansion and
   baseline-aware reports.
