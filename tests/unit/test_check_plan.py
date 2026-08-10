@@ -172,3 +172,23 @@ def test_changed_mode_selects_owning_workspace(monkeypatch, tmp_path: Path) -> N
     assert isinstance(selected, list)
     assert selected
     assert {item["workspace"] for item in selected} == {"packages/web"}
+
+
+def test_configured_mapping_accepts_a_directory_pattern(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.runners import check
+
+    (tmp_path / ".ai-dev-tools.toml").write_text(
+        '[changed_tests]\n"src/auth/**" = ["tests/auth"]\n[commands]\ntest="pytest"\n',
+        encoding="utf-8",
+    )
+    target = tmp_path / "tests" / "auth" / "nested" / "test_login.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("def test_login(): pass", encoding="utf-8")
+    monkeypatch.setattr(check, "collect_changed_files", lambda root: ["src/auth/service.py"])
+
+    selection = select_changed_checks(
+        load_settings(tmp_path), build_validation_plan(load_settings(tmp_path))
+    )
+
+    assert selection.strategy == "configured_mapping"
+    assert selection.selected_tests == [str(Path("tests/auth/nested/test_login.py"))]

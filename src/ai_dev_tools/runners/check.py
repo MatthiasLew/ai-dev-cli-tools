@@ -432,10 +432,21 @@ def _configured_changed_tests(settings: Settings, changed_files: list[str]) -> l
         ):
             continue
         for pattern in test_patterns:
-            for match in settings.project_root.glob(pattern):
-                if match.is_file():
-                    selected[str(match.relative_to(settings.project_root))] = None
+            for match in _matching_test_files(settings.project_root, pattern):
+                selected[str(match.relative_to(settings.project_root))] = None
     return sorted(selected)
+
+
+def _matching_test_files(root: Path, pattern: str) -> list[Path]:
+    files: dict[Path, None] = {}
+    for match in root.glob(pattern):
+        if match.is_file():
+            files[match] = None
+        elif match.is_dir():
+            for child in match.rglob("*"):
+                if child.is_file():
+                    files[child] = None
+    return sorted(files)
 
 
 def _commands_for_selected_tests(
