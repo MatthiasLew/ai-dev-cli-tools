@@ -44,6 +44,8 @@ class Settings:
     changed_tests: dict[str, list[str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     bootstrap: BootstrapSettings = field(default_factory=BootstrapSettings)
+    performance_budgets: dict[str, float] = field(default_factory=dict)
+    performance_retention: int = 50
 
 
 def load_settings(project_root: Path) -> Settings:
@@ -58,6 +60,7 @@ def load_settings(project_root: Path) -> Settings:
     commands = _section(data, "commands")
     project = _section(data, "project")
     bootstrap = _bootstrap_settings(data)
+    performance = _section(data, "performance")
 
     reports_dir = Path(_string_value(reports, "directory", ".ai/reports"))
     logs_dir = Path(_string_value(reports, "logs_directory", ".ai/logs"))
@@ -77,6 +80,8 @@ def load_settings(project_root: Path) -> Settings:
         changed_tests=changed_tests,
         warnings=warnings,
         bootstrap=bootstrap,
+        performance_budgets=_performance_budgets(data),
+        performance_retention=_int_value(performance, "retention", 50),
     )
 
 
@@ -103,7 +108,15 @@ def _string_list(data: dict[str, Any], key: str) -> list[str]:
 
 
 def _config_warnings(data: dict[str, Any]) -> list[str]:
-    known = {"project", "commands", "ignore", "reports", "changed_tests", "bootstrap"}
+    known = {
+        "project",
+        "commands",
+        "ignore",
+        "reports",
+        "changed_tests",
+        "bootstrap",
+        "performance",
+    }
     warnings = [f"Unknown top-level config key: {key}" for key in sorted(data) if key not in known]
     for section in known & data.keys():
         if not isinstance(data[section], dict):
@@ -115,6 +128,46 @@ def _config_warnings(data: dict[str, Any]) -> list[str]:
     )
     warnings.extend(_path_list_warning(data, "ignore", "paths"))
     warnings.extend(_bootstrap_warnings(data))
+    warnings.extend(_performance_warnings(data))
+    return warnings
+
+
+def _performance_budgets(data: dict[str, Any]) -> dict[str, float]:
+    raw = _section(_section(data, "performance"), "budgets")
+    return {
+        key: float(value)
+        for key, value in raw.items()
+        if isinstance(key, str)
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value > 0
+    }
+
+
+def _performance_warnings(data: dict[str, Any]) -> list[str]:
+    raw = data.get("performance", {})
+    if not isinstance(raw, dict):
+        return []
+    warnings = [
+        f"Unknown config key: [performance].{key}"
+        for key in sorted(raw)
+        if key not in {"retention", "budgets"}
+    ]
+    if "retention" in raw and (
+        not isinstance(raw["retention"], int)
+        or isinstance(raw["retention"], bool)
+        or raw["retention"] <= 0
+    ):
+        warnings.append("Config value [performance].retention must be a positive integer")
+    budgets = raw.get("budgets", {})
+    if "budgets" in raw and not isinstance(budgets, dict):
+        warnings.append("Config value [performance].budgets must be a table")
+    elif isinstance(budgets, dict):
+        for key, value in budgets.items():
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                warnings.append(
+                    f"Config value [performance.budgets].{key} must be a positive number"
+                )
     return warnings
 
 
@@ -181,7 +234,9 @@ def _bool_value(data: dict[str, Any], key: str, default: bool) -> bool:
 
 def _int_value(data: dict[str, Any], key: str, default: int) -> int:
     value = data.get(key, default)
-    return value if isinstance(value, int) and value > 0 else default
+    return (
+        value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
+    )
 
 
 def _command_list(data: dict[str, Any], key: str) -> list[list[str]]:

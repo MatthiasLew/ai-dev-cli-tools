@@ -4,6 +4,7 @@
 .ai/benchmarks/
 .ai/context/
 .ai/logs/
+.ai/performance/
 .ai/reports/
 .coverage
 .mypy_cache/

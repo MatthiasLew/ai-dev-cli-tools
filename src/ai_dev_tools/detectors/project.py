@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import tomllib
 from pathlib import Path
 
@@ -43,13 +44,23 @@ FRAMEWORK_HINTS = {
 
 
 def scan_project(project_root: Path, *, write_reports: bool = True) -> Report:
+    stage_started = time.monotonic()
+    timings: dict[str, float] = {}
     settings = load_settings(project_root)
+    timings["configuration"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     report = Report(command="scan", project_root=settings.project_root)
     files = {path.name: path for path in settings.project_root.iterdir() if path.is_file()}
     scripts = _detect_scripts(settings.project_root)
     dependencies = _dependency_names(settings.project_root)
+    timings["project_detection"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     workspaces = detect_workspaces(settings.project_root)
+    timings["workspace_detection"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     runtime_requirements = detect_runtime_requirements(settings.project_root)
+    timings["runtime_detection"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     report.summary = {
         "project_name": settings.project_name or settings.project_root.name,
         "languages": sorted({language for name, language in SIGNALS.items() if name in files}),
@@ -78,12 +89,19 @@ def scan_project(project_root: Path, *, write_reports: bool = True) -> Report:
         "runtime_requirements": [requirement.to_dict() for requirement in runtime_requirements],
         "workspaces": [workspace.to_dict() for workspace in workspaces],
         "workspace_count": len(workspaces),
+        "performance": {"stages_seconds": timings},
     }
+    timings["summary_generation"] = _elapsed(stage_started)
+    report.summary["performance"] = {"stages_seconds": timings}
     report.finish()
     if write_reports:
         write_markdown(report, settings.reports_directory / "project-scan.md")
         write_json(report, settings.reports_directory / "project-scan.json")
     return report
+
+
+def _elapsed(started: float) -> float:
+    return round(time.monotonic() - started, 6)
 
 
 def _detect_package_managers(files: dict[str, Path]) -> list[str]:

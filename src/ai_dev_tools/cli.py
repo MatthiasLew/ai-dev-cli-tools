@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -171,6 +172,13 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_compare.add_argument("baseline", type=Path)
     benchmark_compare.add_argument("candidate", type=Path)
 
+    performance = sub.add_parser("performance")
+    performance_sub = performance.add_subparsers(dest="performance_command", required=True)
+    performance_sub.add_parser("latest")
+    performance_compare = performance_sub.add_parser("compare")
+    performance_compare.add_argument("baseline", type=Path)
+    performance_compare.add_argument("candidate", type=Path)
+
     explain = sub.add_parser("explain")
     explain.add_argument("reference")
     explain.add_argument("--tail", type=int, default=100)
@@ -186,9 +194,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    command_started = time.monotonic()
     parser = build_parser()
     args = parser.parse_args(_normalize_global_flags(argv))
     project_root = args.project.resolve()
+    startup_seconds = time.monotonic() - command_started
     if args.command == "mcp" and args.mcp_command == "serve":
         from ai_dev_tools.mcp_server import serve_mcp
 
@@ -198,7 +208,10 @@ def main(argv: list[str] | None = None) -> int:
 
         print(render_completion(args.shell), end="")
         return EXIT_SUCCESS
+    dispatch_started = time.monotonic()
     report = _dispatch(args, project_root).finish()
+    dispatch_seconds = time.monotonic() - dispatch_started
+    _record_command_performance(report, args, startup_seconds, dispatch_seconds)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
     elif not args.quiet:
@@ -207,6 +220,53 @@ def main(argv: list[str] | None = None) -> int:
         for artifact in report.artifacts:
             print(artifact.path)
     return EXIT_SUCCESS if report.status in {"success", "warning", "partial"} else EXIT_FAILED
+
+
+def _record_command_performance(
+    report: Report,
+    args: argparse.Namespace,
+    startup_seconds: float,
+    dispatch_seconds: float,
+) -> None:
+    operation = ""
+    if args.command == "scan":
+        operation = "scan"
+    elif args.command == "check" and args.explain:
+        operation = "check-explain"
+    elif args.command == "context" and args.context_command == "build" and args.incremental:
+        operation = "context-incremental"
+    if not operation:
+        return
+    stages = {"startup": startup_seconds, "command": dispatch_seconds}
+    measured = report.summary.get("performance")
+    if isinstance(measured, dict):
+        measured_stages = measured.get("stages_seconds")
+        if isinstance(measured_stages, dict):
+            stages.update(
+                {
+                    str(key): float(value)
+                    for key, value in measured_stages.items()
+                    if isinstance(value, (int, float)) and not isinstance(value, bool)
+                }
+            )
+    execution = report.summary.get("execution")
+    if isinstance(execution, dict):
+        for source, target in (
+            ("aggregate_subprocess_seconds", "subprocess_execution"),
+            ("wall_seconds", "scheduler_wall"),
+        ):
+            value = execution.get(source)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                stages[target] = float(value)
+    from ai_dev_tools.runners.performance import record_performance
+
+    record_performance(
+        report,
+        operation,
+        stages,
+        startup_seconds + dispatch_seconds,
+    )
+    report.finish()
 
 
 def _normalize_global_flags(argv: list[str] | None) -> list[str] | None:
@@ -403,6 +463,12 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 timeout_seconds=args.timeout,
             )
         return compare_benchmarks(project_root, args.baseline, args.candidate)
+    if command == "performance":
+        from ai_dev_tools.runners.performance import compare_performance, run_performance_latest
+
+        if args.performance_command == "latest":
+            return run_performance_latest(project_root)
+        return compare_performance(project_root, args.baseline, args.candidate)
     if command == "explain":
         from ai_dev_tools.reporters.progressive import run_explain
 
@@ -463,6 +529,8 @@ def _capabilities_report(project_root: Path) -> Report:
         "baseline list",
         "benchmark run",
         "benchmark compare",
+        "performance latest",
+        "performance compare",
         "explain",
         "diagnostics",
         "capabilities",

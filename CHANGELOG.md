@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add local stage timing records, configurable performance budgets, and latest/compare diagnostics.
 - Add versioned real-agent benchmark fixtures for repair, affected tests, multi-turn context, and monorepo routing, with private measured workflow telemetry and published raw trials.
 - Add a dependency-free local MCP STDIO server with focused, bounded project tools.
 - Add symbol-level Python and JavaScript/TypeScript working-tree diffs with compact review contexts.

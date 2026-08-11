@@ -217,6 +217,7 @@ git diff --check
 | mcp serve | implemented |
 | watch | implemented |
 | benchmark run/compare | implemented |
+| performance latest/compare | implemented |
 | capabilities | implemented |
 | git status | implemented |
 | git inspect | implemented |

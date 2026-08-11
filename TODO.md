@@ -136,6 +136,9 @@ changes, and cross-platform behavior are covered where applicable.
   including real repair, affected-test, multi-turn, and monorepo-routing scenarios.
 - [x] Evaluate opt-in, local metrics that estimate context size and tokens avoided without
   transmitting repository contents.
+- [x] Add local stage timing records, configurable performance budgets, bounded retention, and
+  `performance latest/compare` regression diagnostics for scan, check explain, and incremental
+  context creation.
 
 ## Deferred or explicitly out of scope
 
