@@ -85,6 +85,13 @@ Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing field
 `check` command entries include compact log-derived fields so agents do not need to read full logs by default. Parser results include `tool`, `parser`, `parser_confidence`, counts, first failure, project frames, repeated-message grouping, and full log paths.
 
 `check --mode changed` includes `changed_analysis` with `strategy`, `confidence`, `changed_files`, `selected_tests`, `selected_commands`, and `fallback_reason`.
+## Safe compression
+
+Context reports expose `compression` with mode, considered/compressed/skipped files, original/final
+characters, savings, methods, reason codes, preserved categories, protected fingerprint, and
+`protected_integrity`. Conservative compression is limited to exact prose paragraph and safe
+repetitive natural-language log deduplication.
+
 ## Hierarchical retrieval refinement
 
 Context reports expose `refinement` with signal count, round/file limits, per-round additions,

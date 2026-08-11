@@ -155,7 +155,7 @@ The supporting evidence, trade-offs, and source links are documented in
   diffs, tests, logs, maps, history, cached input, and output.
 - [x] Add bounded hierarchical retrieval refinement driven by failure signatures, changed symbols,
   and explicit evidence expansion.
-- [ ] Evaluate optional semantic compression only for prose and repetitive natural-language logs;
+- [x] Evaluate optional semantic compression only for prose and repetitive natural-language logs;
   preserve exact code, JSON, diffs, commands, locations, hashes, and verification evidence.
 
 ## Deferred or explicitly out of scope

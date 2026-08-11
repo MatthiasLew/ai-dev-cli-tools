@@ -7,6 +7,7 @@
 - Add a relocatable deterministic prompt-cache layout manifest with stable-prefix fingerprints and OpenAI, Anthropic, and provider-neutral breakpoint recommendations.
 - Add optional exact tiktoken accounting, provider usage normalization, and enforced per-category token budgets for context packs.
 - Add bounded multi-round context refinement driven by failures, changed symbols, dependencies, and expandable evidence.
+- Add opt-in deterministic prose/log deduplication with fail-closed protected-evidence fingerprints.
 
 - Document research-backed selective retrieval, prompt-cache layout, observation lifecycle, token accounting, and safe compression priorities.
 - Add local stage timing records, configurable performance budgets, and latest/compare diagnostics.

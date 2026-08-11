@@ -6,6 +6,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from ai_dev_tools.config import load_settings
+from ai_dev_tools.context.compression import apply_safe_compression
 from ai_dev_tools.context.incremental import (
     IncrementalSelection,
     save_incremental_manifest,
@@ -188,6 +189,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         }
     )
 
+    summary["compression"] = apply_safe_compression(summary, options.compression)
     token_accounting = apply_token_accounting(
         root,
         summary,
@@ -468,6 +470,9 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
         "",
         "## Latest Errors",
         _json_block(summary.get("latest_errors", [])),
+        "",
+        "## Compression",
+        _json_block(summary.get("compression", {})),
         "",
         "## Token Accounting",
         _json_block(summary.get("token_accounting", {})),
