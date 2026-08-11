@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -45,14 +46,24 @@ from ai_dev_tools.utils.subprocess import run_command
 
 
 def build_context(project_root: Path, options: ContextOptions) -> Report:
+    stage_started = time.monotonic()
+    timings: dict[str, float] = {}
     options = _apply_context_profile(options)
     settings = load_settings(project_root)
     root = settings.project_root
     report = Report(command="context build", project_root=root)
+    timings["configuration"] = _elapsed(stage_started)
 
+    stage_started = time.monotonic()
     scan = scan_project(root)
+    timings["project_detection"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     repo_map = map_repository(root, max_files=max(options.max_files * 4, 100), max_depth=8)
+    timings["repository_mapping"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     git_report = None if options.no_git else inspect_git(root, detailed=True)
+    timings["git_inspection"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     git_available = (
         git_report is not None and git_report.summary.get("state") != "NOT_A_GIT_REPOSITORY"
     )
@@ -60,6 +71,8 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     changed_analysis = None
     if git_available:
         changed_analysis = select_changed_checks(settings, plan)
+    timings["validation_planning"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
 
     changed_files = _changed_files(git_report, staged_only=options.staged_only)
     candidates, rejected = _select_candidates(
@@ -85,6 +98,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     ordered_paths = ordered_paths[: max(options.max_files, 0)]
 
     secret_findings = scan_paths_for_secrets(root, ordered_paths)
+    timings["context_selection"] = _elapsed(stage_started)
     if options.explain:
         summary = _base_summary(
             options,
@@ -109,12 +123,14 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
                 "secret_findings": [finding.masked_dict() for finding in secret_findings],
                 "budget": _budget_summary(options, 0, False),
                 "incremental": _incremental_summary(incremental_state),
+                "performance": {"stages_seconds": timings},
             }
         )
         report.summary = summary
         report.finish()
         return report
 
+    stage_started = time.monotonic()
     selected, snippet_rejections = _read_selected_files(root, ordered_paths, candidates, options)
     rejected.extend(snippet_rejections)
     diffs = (
@@ -123,6 +139,8 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         else _context_diffs(root, options, git_report.summary)
     )
     latest_errors = _latest_error_reports(root)
+    timings["content_collection"] = _elapsed(stage_started)
+    stage_started = time.monotonic()
     summary = _base_summary(
         options,
         scan.summary,
@@ -165,6 +183,9 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     else:
         summary["truncated"] = any(item.truncated for item in selected)
         report.status = "partial" if summary["truncated"] else "success"
+    timings["report_generation"] = _elapsed(stage_started)
+    summary["performance"] = {"stages_seconds": timings}
+    stage_started = time.monotonic()
     manifest_artifact: Artifact | None = None
     if incremental_state is not None:
         manifest_path, context_id = save_incremental_manifest(
@@ -198,7 +219,13 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     if options.format in {"json", "both"}:
         json_text = mask_text(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         json_path.write_text(json_text, encoding="utf-8")
+    timings["output_write"] = _elapsed(stage_started)
+    summary["performance"] = {"stages_seconds": timings}
     return report
+
+
+def _elapsed(started: float) -> float:
+    return round(time.monotonic() - started, 6)
 
 
 def _apply_context_profile(options: ContextOptions) -> ContextOptions:

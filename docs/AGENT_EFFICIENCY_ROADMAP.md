@@ -420,6 +420,10 @@ Measurements remain local and should not include repository contents.
 **Expected impact:** indirect but essential for preventing new functionality from making the CLI
 progressively slower.
 
+**Implemented:** schema-versioned local timing records, opt-in total and per-stage budgets, bounded
+retention, and `performance latest/compare` diagnostics now cover scan, check explain, and
+incremental context creation.
+
 ### 22. Reproducible agent workflow benchmarks
 
 Build a local A/B benchmark suite that measures complete coding-agent workflows with and without

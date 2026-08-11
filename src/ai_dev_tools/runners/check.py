@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,10 @@ from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command, split_command
 
 
+def _elapsed(started: float) -> float:
+    return round(time.monotonic() - started, 6)
+
+
 def collect_changed_files(root: Path) -> list[str]:
     return _selection.collect_changed_files(root, run_command)
 
@@ -61,10 +66,14 @@ def run_check(
     resume: bool = False,
     retry_flaky: int = 0,
 ) -> Report:
+    stage_started = time.monotonic()
     settings = load_settings(project_root)
     plan = build_validation_plan(settings)
+    timings = {"detection": _elapsed(stage_started)}
+    stage_started = time.monotonic()
     changed_selection = select_changed_checks(settings, plan) if mode == "changed" else None
     tasks = _tasks_for_mode(plan, mode, changed_selection)
+    timings["selection"] = _elapsed(stage_started)
     command = f"check --mode {mode}" + (" --explain" if explain else "")
     report = Report(command=command, project_root=settings.project_root)
     if not 0 <= retry_flaky <= 3:
@@ -76,14 +85,18 @@ def run_check(
         }
         return report.finish()
     if explain:
+        stage_started = time.monotonic()
+        schedule = schedule_graph(tasks, policy)
+        timings["scheduling"] = _elapsed(stage_started)
         report.summary = {
             "mode": mode,
             "plan": [task.to_dict() for task in plan],
             "selected_checks": [task.to_dict() for task in tasks],
             "changed_analysis": changed_selection.to_dict() if changed_selection else None,
             "explain_only": True,
-            "schedule": schedule_graph(tasks, policy),
+            "schedule": schedule,
             "resume_requested": resume,
+            "performance": {"stages_seconds": timings},
         }
         _add_runtime_summary(report, settings.project_root)
         report.finish()
@@ -456,14 +469,10 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
     tool_label = " ".join(task.command)
     parsed = parse_tool_output(tool_label, result.combined_output)
     initial_parsed = (
-        parse_tool_output(tool_label, result.initial_output)
-        if result.initial_output
-        else parsed
+        parse_tool_output(tool_label, result.initial_output) if result.initial_output else parsed
     )
     failure_signature = (
-        _failure_signature(task, initial_parsed)
-        if result.exit_code != 0 or result.flaky
-        else None
+        _failure_signature(task, initial_parsed) if result.exit_code != 0 or result.flaky else None
     )
     return {
         "name": task.name,
@@ -477,14 +486,10 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
         "attempts": result.attempts,
         "flaky": result.flaky,
         "initial_exit_code": result.initial_exit_code,
-        "initial_failure": (
-            initial_parsed.get("first_failure") if result.attempts > 1 else None
-        ),
+        "initial_failure": (initial_parsed.get("first_failure") if result.attempts > 1 else None),
         "full_log": _full_log_from_output(result.stdout),
         "failure_signature": failure_signature,
-        "focused_rerun": (
-            focused_rerun(task, initial_parsed) if failure_signature else None
-        ),
+        "focused_rerun": (focused_rerun(task, initial_parsed) if failure_signature else None),
         **parsed,
     }
 
