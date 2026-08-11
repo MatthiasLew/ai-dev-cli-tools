@@ -132,7 +132,8 @@ changes, and cross-platform behavior are covered where applicable.
 - [x] Add foreground watch mode with ignored generated roots, debounced change coalescing,
   changed validation, queued changes, bounded automation, and latest-result reports.
 - [x] Add reproducible local A/B workflow benchmarks with versioned fixtures, correctness
-  validation, repeated cold/warm trials, machine-readable results, and compact comparisons.
+  validation, repeated cold/warm trials, machine-readable results, and compact comparisons,
+  including real repair, affected-test, multi-turn, and monorepo-routing scenarios.
 - [x] Evaluate opt-in, local metrics that estimate context size and tokens avoided without
   transmitting repository contents.
 

@@ -1,0 +1,32 @@
+{
+    "schema_version":  "1.0",
+    "name":  "agent-multiturn-workflow",
+    "fixture_version":  "1",
+    "working_directory":  "examples/benchmarks/fixtures/agent-workflow",
+    "reset_command":  [
+                          "python",
+                          "../../../../scripts/benchmark_agent_workflow.py",
+                          "multiturn",
+                          "reset"
+                      ],
+    "validation_command":  [
+                               "python",
+                               "../../../../scripts/benchmark_agent_workflow.py",
+                               "multiturn",
+                               "validate"
+                           ],
+    "variants":  {
+                     "baseline":  [
+                                      "python",
+                                      "../../../../scripts/benchmark_agent_workflow.py",
+                                      "multiturn",
+                                      "baseline"
+                                  ],
+                     "ai-dev":  [
+                                    "python",
+                                    "../../../../scripts/benchmark_agent_workflow.py",
+                                    "multiturn",
+                                    "ai-dev"
+                                ]
+                 }
+}

@@ -17,6 +17,7 @@ from ai_dev_tools.utils.subprocess import CommandResult, run_command
 
 SCHEMA_VERSION = "1.0"
 TOKEN_ESTIMATION = "masked_utf8_bytes_divided_by_4"
+METRICS_PREFIX = "AI_DEV_BENCHMARK_METRICS="
 
 
 def run_benchmark(
@@ -133,8 +134,7 @@ def compare_benchmarks(project_root: Path, baseline: Path, candidate: Path) -> R
         "median_commands",
     )
     metrics = {
-        key: _comparison(float(left_stats[key]), float(right_stats[key]))
-        for key in metric_names
+        key: _comparison(float(left_stats[key]), float(right_stats[key])) for key in metric_names
     }
     report.status = "success" if valid else "failed"
     report.summary = {
@@ -176,8 +176,7 @@ def _load_spec(project_root: Path, path: Path) -> dict[str, Any]:
     if not isinstance(variants_raw, dict) or len(variants_raw) < 2:
         raise ValueError("Benchmark suite requires at least two variants")
     variants = {
-        str(name): _command(value, f"variants.{name}")
-        for name, value in variants_raw.items()
+        str(name): _command(value, f"variants.{name}") for name, value in variants_raw.items()
     }
     working = (project_root / str(data.get("working_directory", "."))).resolve()
     root = project_root.resolve()
@@ -196,11 +195,7 @@ def _load_spec(project_root: Path, path: Path) -> dict[str, Any]:
 
 
 def _command(value: object, key: str) -> list[str]:
-    if (
-        not isinstance(value, list)
-        or not value
-        or not all(isinstance(item, str) for item in value)
-    ):
+    if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
         raise ValueError(f"{key} must be a non-empty list of strings")
     return list(value)
 
@@ -211,7 +206,11 @@ def _trial_row(
     execution: CommandResult,
     validation: CommandResult,
 ) -> dict[str, Any]:
-    visible = mask_text(execution.combined_output + validation.combined_output).encode("utf-8")
+    metrics, execution_visible = _execution_metrics(execution)
+    visible = mask_text(execution_visible + validation.combined_output).encode("utf-8")
+    actionable = metrics.get("actionable_seconds", execution.duration_seconds)
+    commands = metrics.get("commands", 3)
+    validation_subprocesses = metrics.get("validation_subprocesses", 1)
     return {
         "trial": number,
         "correct": reset.exit_code == execution.exit_code == validation.exit_code == 0,
@@ -219,11 +218,9 @@ def _trial_row(
             reset.duration_seconds + execution.duration_seconds + validation.duration_seconds,
             3,
         ),
-        "time_to_actionable_result_seconds": round(
-            reset.duration_seconds + execution.duration_seconds, 3
-        ),
-        "commands": 3,
-        "validation_subprocesses": 1,
+        "time_to_actionable_result_seconds": round(reset.duration_seconds + float(actionable), 3),
+        "commands": int(commands),
+        "validation_subprocesses": int(validation_subprocesses),
         "agent_visible_bytes": len(visible),
         "estimated_tokens": math.ceil(len(visible) / 4),
         "exit_codes": {
@@ -231,13 +228,48 @@ def _trial_row(
             "variant": execution.exit_code,
             "validation": validation.exit_code,
         },
-        "outcome_signature": hashlib.sha256(
-            validation.stdout.strip().encode("utf-8")
-        ).hexdigest(),
+        "outcome_signature": hashlib.sha256(validation.stdout.strip().encode("utf-8")).hexdigest(),
         "timed_out": reset.timed_out or execution.timed_out or validation.timed_out,
     }
 
 
+def _execution_metrics(execution: CommandResult) -> tuple[dict[str, float | int], str]:
+    metrics: dict[str, float | int] = {}
+    visible_stderr: list[str] = []
+    for line in execution.stderr.splitlines():
+        if not line.startswith(METRICS_PREFIX):
+            visible_stderr.append(line)
+            continue
+        try:
+            payload = json.loads(line[len(METRICS_PREFIX) :])
+        except json.JSONDecodeError:
+            visible_stderr.append(line)
+            continue
+        if not isinstance(payload, dict):
+            visible_stderr.append(line)
+            continue
+        parsed: dict[str, float | int] = {}
+        for key in ("commands", "validation_subprocesses"):
+            value = payload.get(key)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                parsed[key] = value
+        actionable = payload.get("actionable_seconds")
+        if (
+            isinstance(actionable, (int, float))
+            and not isinstance(actionable, bool)
+            and math.isfinite(actionable)
+            and 0 <= actionable <= execution.duration_seconds
+        ):
+            parsed["actionable_seconds"] = float(actionable)
+        if not parsed:
+            visible_stderr.append(line)
+            continue
+        metrics.update(parsed)
+    visible = execution.stdout
+    if visible_stderr:
+        stderr_text = "\n".join(visible_stderr)
+        visible = f"{visible}\n{stderr_text}".strip()
+    return metrics, visible
 def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
     def values(key: str) -> list[float]:
         return [float(row[key]) for row in rows]
@@ -251,12 +283,8 @@ def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
         "median_time_to_actionable_result_seconds": round(
             statistics.median(values("time_to_actionable_result_seconds")), 3
         ),
-        "median_agent_visible_bytes": round(
-            statistics.median(values("agent_visible_bytes")), 3
-        ),
-        "median_estimated_tokens": round(
-            statistics.median(values("estimated_tokens")), 3
-        ),
+        "median_agent_visible_bytes": round(statistics.median(values("agent_visible_bytes")), 3),
+        "median_estimated_tokens": round(statistics.median(values("estimated_tokens")), 3),
         "median_commands": round(statistics.median(values("commands")), 3),
     }
 
@@ -271,9 +299,7 @@ def _comparison(baseline: float, candidate: float) -> dict[str, float | None]:
     }
 
 
-def _recommendation(
-    metrics: dict[str, dict[str, float | None]], valid: bool
-) -> str:
+def _recommendation(metrics: dict[str, dict[str, float | None]], valid: bool) -> str:
     if not valid:
         return "reject_incorrect_candidate"
     time_change = metrics["median_seconds"]["percent_change"]
@@ -303,9 +329,7 @@ def _outcomes(summary: dict[str, Any]) -> list[str]:
 def _load_run(project_root: Path, path: Path) -> dict[str, Any]:
     resolved = path if path.is_absolute() else project_root / path
     data = json.loads(resolved.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or not str(data.get("command", "")).startswith(
-        "benchmark run"
-    ):
+    if not isinstance(data, dict) or not str(data.get("command", "")).startswith("benchmark run"):
         raise ValueError(f"Not a benchmark run: {resolved}")
     return data
 

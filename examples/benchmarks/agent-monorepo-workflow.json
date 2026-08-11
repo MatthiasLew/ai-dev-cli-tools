@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "name": "agent-monorepo-workflow",
+  "fixture_version": "1",
+  "working_directory": "examples/benchmarks/fixtures/agent-workflow",
+  "reset_command": [
+    "python",
+    "../../../../scripts/benchmark_agent_workflow.py",
+    "monorepo",
+    "reset"
+  ],
+  "validation_command": [
+    "python",
+    "../../../../scripts/benchmark_agent_workflow.py",
+    "monorepo",
+    "validate"
+  ],
+  "variants": {
+    "baseline": [
+      "python",
+      "../../../../scripts/benchmark_agent_workflow.py",
+      "monorepo",
+      "baseline"
+    ],
+    "ai-dev": [
+      "python",
+      "../../../../scripts/benchmark_agent_workflow.py",
+      "monorepo",
+      "ai-dev"
+    ]
+  }
+}
