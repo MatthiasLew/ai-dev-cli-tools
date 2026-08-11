@@ -12,6 +12,25 @@ ai-dev index rebuild
 
 The schema-versioned index records relative path, size, modification time, SHA-256, and a bounded local impact graph for eligible project files. Import and source-to-test edges are recomputed only for changed files and reused for unchanged files. An update reuses hashes when size and modification time are unchanged; rebuild hashes every eligible file. Generated, dependency, VCS, fixture, and `.ai` paths are excluded. Deleting the index is safe because it can always be rebuilt.
 
+## Prompt cache layout
+
+```bash
+ai-dev cache layout --json
+```
+
+This writes `.ai/cache/cache-layout.json`. The manifest defines a deterministic section order:
+protocol, project identity, content-addressed repository facts, then volatile Git state, task,
+current observation, and model response. It fingerprints every stable section and the combined
+stable prefix. OpenAI, Anthropic, and provider-neutral recommendations place the cache breakpoint
+after repository facts and before volatile content.
+
+The manifest is relocatable and contains no absolute paths, timestamps, random IDs, or repository
+contents. Configuration and repository identities use project-relative paths and SHA-256 values.
+Re-running it with identical contents produces the same manifest; changing repository content
+invalidates the repository and combined-prefix fingerprints while leaving unchanged section
+fingerprints reusable. `diagnostics` and MCP `project_status` report whether a layout is available
+and its current stable-prefix fingerprint.
+
 ## Validation cache
 
 Successful, non-timeout check results are cached by default. A cache key includes repository content, workspace, exact command, operating system, machine architecture, and Python runtime. A changed input produces a different key; failures and ambiguous entries are never reused.

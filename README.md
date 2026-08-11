@@ -63,6 +63,7 @@ ai-dev check --mode changed --policy feedback-first --resume
 ai-dev check --mode changed --retry-flaky 1
 ai-dev index update
 ai-dev cache status
+ai-dev cache layout
 ai-dev baseline create main
 ai-dev baseline compare main
 ai-dev benchmark run --suite examples/benchmarks/output-budget-smoke.json --variant baseline
@@ -140,7 +141,7 @@ Selective retrieval defaults to `auto`: focused includes or changed files can ab
 Incremental mode stores a schema-versioned manifest under `.ai/cache/` and reports changed versus reused files. Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
 
-Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `check --resume` reuses only exact successful checkpoint fingerprints. `--policy feedback-first` runs cheaper waves first and cancels later expensive waves after a required failure; `complete` retains comprehensive execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance. See `docs/CACHE_AND_INDEX.md`.
+Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `check --resume` reuses only exact successful checkpoint fingerprints. `--policy feedback-first` runs cheaper waves first and cancels later expensive waves after a required failure; `complete` retains comprehensive execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance, while `cache layout` emits a deterministic stable-prefix manifest and provider breakpoint recommendations. See `docs/CACHE_AND_INDEX.md`.
 
 Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 
@@ -214,7 +215,7 @@ git diff --check
 | test affected | implemented |
 | test flaky / check --retry-flaky | implemented |
 | index status/update/rebuild | implemented |
-| cache status/prune/clear | implemented |
+| cache status/prune/clear/layout | implemented |
 | logs summarize | implemented |
 | context build | implemented |
 | diagnostics | implemented |

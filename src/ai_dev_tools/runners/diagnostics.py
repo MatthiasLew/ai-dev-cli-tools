@@ -4,6 +4,7 @@ import json
 import math
 from pathlib import Path
 
+from ai_dev_tools.cache.prompt_layout import read_cache_layout_manifest
 from ai_dev_tools.cache.repository import read_repository_index
 from ai_dev_tools.cache.validation import validation_cache_stats
 from ai_dev_tools.config import load_settings
@@ -18,6 +19,7 @@ def run_diagnostics(project_root: Path) -> Report:
     report.summary = {
         "cache": validation_cache_stats(root),
         "repository_index": _index_summary(read_repository_index(root)),
+        "cache_layout": _cache_layout_summary(read_cache_layout_manifest(root)),
         "reports": _directory_stats(settings.reports_directory),
         "logs": _directory_stats(settings.logs_directory),
         "configuration": {
@@ -50,6 +52,19 @@ def _index_summary(index: dict[str, object]) -> dict[str, object]:
         "available": bool(index),
         "schema_version": index.get("schema_version"),
         **(summary if isinstance(summary, dict) else {}),
+    }
+
+
+def _cache_layout_summary(layout: dict[str, object]) -> dict[str, object]:
+    prefix = layout.get("stable_prefix")
+    breakpoints = layout.get("provider_breakpoints")
+    return {
+        "available": bool(layout),
+        "schema_version": layout.get("schema_version"),
+        "stable_prefix_fingerprint": (
+            prefix.get("fingerprint") if isinstance(prefix, dict) else None
+        ),
+        "provider_breakpoints": len(breakpoints) if isinstance(breakpoints, list) else 0,
     }
 
 

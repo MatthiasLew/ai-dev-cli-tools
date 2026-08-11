@@ -15,13 +15,14 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 
 ## Recommended loop
 
-1. Prefer `ai-dev feedback --task "<task>" --json` for the normal compact loop.
-2. Inspect `decision`, `changes`, `validation`, `context`, and `performance`.
-3. Use `ai-dev session status --json` after an interrupted handoff.
-4. Read `metadata.progressive.references` and call `ai-dev explain <evidence-id> --json` only for needed evidence.
-5. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
-6. Treat FLAKY_PASS and checks_flaky as unresolved warning evidence; never report them as a clean first-pass success.
-6. Before handoff, run `ai-dev finish --json`.
+1. Run `ai-dev cache layout --json` once per content state and place its stable sections before task-specific content at the recommended breakpoint.
+2. Prefer `ai-dev feedback --task "<task>" --json` for the normal compact loop.
+3. Inspect `decision`, `changes`, `validation`, `context`, `observations`, and `performance`.
+4. Use `ai-dev session status --json` after an interrupted handoff.
+5. Read `metadata.progressive.references` and call `ai-dev explain <evidence-id> --json` only for needed evidence.
+6. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
+7. Treat FLAKY_PASS and checks_flaky as unresolved warning evidence; never report them as a clean first-pass success.
+8. Before handoff, run `ai-dev finish --json`.
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
 metrics.
