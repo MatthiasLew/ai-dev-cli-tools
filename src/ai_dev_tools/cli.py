@@ -119,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--refine", action="append", default=[])
     context_build.add_argument("--refinement-rounds", type=int, choices=range(0, 4), default=1)
     context_build.add_argument("--refinement-max-files", type=int, default=5)
+    context_build.add_argument("--compression", choices=["off", "conservative"], default="off")
 
     git = sub.add_parser("git")
     git_sub = git.add_subparsers(dest="git_command", required=True)
@@ -369,6 +370,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 refine=tuple(args.refine),
                 refinement_rounds=args.refinement_rounds,
                 refinement_max_files=max(args.refinement_max_files, 0),
+                compression=args.compression,
             ),
         )
     if command == "bootstrap":

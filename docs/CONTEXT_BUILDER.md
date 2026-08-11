@@ -82,6 +82,15 @@ The `minimal` and `review` profiles compact eligible raw diffs into a bounded `s
 summary. Raw diffs remain the fallback whenever parsing is ambiguous, a file is unsupported, or
 no useful symbol mapping exists. The default, debug, and full profiles retain their raw diffs.
 
+## Safe prose and log compression
+
+`--compression conservative` optionally deduplicates exact repeated prose paragraphs and consecutive
+identical natural-language `.log` lines. The default is `off`. Fenced Markdown code and protected
+code/JSON/config/diff/command/location/hash/verification categories remain exact. A protected-content
+fingerprint is checked before and after and the operation fails closed on any mismatch. Reports
+include per-file savings, methods, skipped reason codes, total characters saved, and integrity.
+See `SEMANTIC_COMPRESSION.md` for the evaluation and deliberately excluded model paraphrasing.
+
 ## Hierarchical refinement
 
 `--refine <text-or-evidence-id>` adds an explicit failure/evidence signal. Current failure summaries

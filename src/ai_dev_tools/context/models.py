@@ -39,6 +39,7 @@ class ContextOptions:
     refine: tuple[str, ...] = ()
     refinement_rounds: int = 1
     refinement_max_files: int = 5
+    compression: str = "off"
 
 
 @dataclass(slots=True)

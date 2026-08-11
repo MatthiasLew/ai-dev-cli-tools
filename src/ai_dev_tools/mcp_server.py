@@ -228,6 +228,11 @@ class LocalMcpServer:
                             "maximum": 20,
                             "default": 5,
                         },
+                        "compression": {
+                            "type": "string",
+                            "enum": ["off", "conservative"],
+                            "default": "off",
+                        },
                         "retrieval": {
                             "type": "string",
                             "enum": ["auto", "always", "never"],
@@ -388,6 +393,7 @@ class LocalMcpServer:
             "refine",
             "refinement_rounds",
             "refinement_max_files",
+            "compression",
             "write_artifacts",
         }
         _validate_keys(arguments, allowed)
@@ -428,6 +434,7 @@ class LocalMcpServer:
                     refine=tuple(_string_array(arguments, "refine", 10)),
                     refinement_rounds=_integer(arguments, "refinement_rounds", 1, 0, 3),
                     refinement_max_files=_integer(arguments, "refinement_max_files", 5, 0, 20),
+                    compression=_choice(arguments, "compression", "off", {"off", "conservative"}),
                     format="json",
                     explain=not write_artifacts,
                 ),

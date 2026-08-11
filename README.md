@@ -132,6 +132,7 @@ ai-dev context build --profile review
 ai-dev context build --retrieval auto --explain  # explains retrieval or abstention
 ai-dev context build --tokenizer o200k_base --token-budget source=8000 --token-budget diffs=2000
 ai-dev context build --refine issue:<id> --refinement-rounds 2 --refinement-max-files 5
+ai-dev context build --compression conservative
 ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
 ai-dev context build --explain --json
 ```
