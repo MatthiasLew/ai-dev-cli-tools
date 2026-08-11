@@ -33,6 +33,9 @@ class ContextOptions:
     incremental: bool = False
     profile: str = "default"
     retrieval: RetrievalMode = "auto"
+    tokenizer: str = "estimate"
+    token_budgets: tuple[str, ...] = ()
+    provider_usage: Path | None = None
 
 
 @dataclass(slots=True)

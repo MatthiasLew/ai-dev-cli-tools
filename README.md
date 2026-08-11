@@ -130,6 +130,7 @@ ai-dev context build --changed-only --max-chars 50000
 ai-dev context build --incremental  # emits only candidates changed since the last pack
 ai-dev context build --profile review
 ai-dev context build --retrieval auto --explain  # explains retrieval or abstention
+ai-dev context build --tokenizer o200k_base --token-budget source=8000 --token-budget diffs=2000
 ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
 ai-dev context build --explain --json
 ```
@@ -138,10 +139,12 @@ Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/contex
 
 Selective retrieval defaults to `auto`: focused includes or changed files can abstain from broad cross-file retrieval, while missing focus, broad configuration changes, and broad task scopes fall back to the full candidate set. Use `--retrieval always` to expand or `--retrieval never` to keep only focused roots and inferred related tests. The JSON and Markdown reports explain the decision and expose a related-test false-negative proxy.
 
+Install `ai-dev-cli-tools[tokenizers]` to enable exact local `cl100k_base` or `o200k_base` counting. Without that optional extra, accounting uses the explicit UTF-8-bytes/4 estimate and reports a fallback if an exact tokenizer was requested. Repeated `--token-budget category=N` limits source, diffs, tests, logs, maps, history, cached input, or output independently. `--provider-usage <json>` normalizes OpenAI or Anthropic usage fields from a project-local file without network access.
+
 Incremental mode stores a schema-versioned manifest under `.ai/cache/` and reports changed versus reused files. Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
 
-Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `check --resume` reuses only exact successful checkpoint fingerprints. `--policy feedback-first` runs cheaper waves first and cancels later expensive waves after a required failure; `complete` retains comprehensive execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance, while `cache layout` emits a deterministic stable-prefix manifest and provider breakpoint recommendations. See `docs/CACHE_AND_INDEX.md`.
+Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `check --resume` reuses only exact successful checkpoint fingerprints. `--policy feedback-first` runs cheaper waves first and cancels later expensive waves after a required failure; `complete` retains comprehensive execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance; `cache layout` emits a deterministic stable-prefix manifest and provider breakpoint recommendations. See `docs/CACHE_AND_INDEX.md`.
 
 Short reports are written to `.ai/reports/` as Markdown and JSON. Full command output is written to `.ai/logs/` and ignored by Git. Check summaries include exit codes, durations, first failure hints, grouped repeated messages, test counts, and full log paths.
 

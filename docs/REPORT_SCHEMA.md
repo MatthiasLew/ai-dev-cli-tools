@@ -85,6 +85,13 @@ Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing field
 `check` command entries include compact log-derived fields so agents do not need to read full logs by default. Parser results include `tool`, `parser`, `parser_confidence`, counts, first failure, project frames, repeated-message grouping, and full log paths.
 
 `check --mode changed` includes `changed_analysis` with `strategy`, `confidence`, `changed_files`, `selected_tests`, `selected_commands`, and `fallback_reason`.
+## Token accounting
+
+Context reports expose `token_accounting` with requested/used tokenizer, exactness, fallback reason,
+per-category characters, UTF-8 bytes, original/final tokens, budgets and truncation, total input,
+normalized provider usage, and violations. Categories are source, diffs, tests, logs, repository
+maps, history, cached input, and output.
+
 ## Context Build Summary
 
 `context build` reports include `technologies`, `git_state`, `changed_files`, `changed_symbols`, `symbol_diff_summary`, `related_tests`, `validation_plan`, `selected_files`, `rejected_files`, `diffs`, `latest_errors`, `secret_findings`, `recent_commits`, `retrieval`, and `budget` under `summary`. The `retrieval` block records the requested mode, retrieve/abstain decision, confidence, reason code, signals, focused roots, bounded omitted paths, conservative fallback, expansion command, and expected/selected/missed related tests as a false-negative proxy. Each changed symbol includes its path, name, kind, change type, current line range, added/deleted line counts, bounded signature, signature-change flag, risk, related tests, confidence, and reason code.

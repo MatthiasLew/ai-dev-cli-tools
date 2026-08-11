@@ -199,6 +199,17 @@ class LocalMcpServer:
                         "changed_only": {"type": "boolean", "default": False},
                         "staged_only": {"type": "boolean", "default": False},
                         "incremental": {"type": "boolean", "default": True},
+                        "tokenizer": {
+                            "type": "string",
+                            "enum": ["estimate", "cl100k_base", "o200k_base"],
+                            "default": "estimate",
+                        },
+                        "token_budgets": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 8,
+                            "default": [],
+                        },
                         "retrieval": {
                             "type": "string",
                             "enum": ["auto", "always", "never"],
@@ -354,6 +365,8 @@ class LocalMcpServer:
             "staged_only",
             "incremental",
             "retrieval",
+            "tokenizer",
+            "token_budgets",
             "write_artifacts",
         }
         _validate_keys(arguments, allowed)
@@ -384,6 +397,13 @@ class LocalMcpServer:
                         Literal["auto", "always", "never"],
                         _choice(arguments, "retrieval", "auto", {"auto", "always", "never"}),
                     ),
+                    tokenizer=_choice(
+                        arguments,
+                        "tokenizer",
+                        "estimate",
+                        {"estimate", "cl100k_base", "o200k_base"},
+                    ),
+                    token_budgets=tuple(_string_array(arguments, "token_budgets", 8)),
                     format="json",
                     explain=not write_artifacts,
                 ),

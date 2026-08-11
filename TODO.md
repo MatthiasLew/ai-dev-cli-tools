@@ -151,7 +151,7 @@ The supporting evidence, trade-offs, and source links are documented in
   references while retaining current failures and final verification.
 - [x] Add a deterministic cache-layout manifest with stable-prefix fingerprints and recommended
   provider cache breakpoints, without embedding volatile timestamps or absolute paths.
-- [ ] Add optional exact tokenizer/provider usage accounting and separate budgets for source,
+- [x] Add optional exact tokenizer/provider usage accounting and separate budgets for source,
   diffs, tests, logs, maps, history, cached input, and output.
 - [ ] Add bounded hierarchical retrieval refinement driven by failure signatures, changed symbols,
   and explicit evidence expansion.

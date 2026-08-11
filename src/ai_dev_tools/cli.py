@@ -111,6 +111,11 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--explain", action="store_true")
     context_build.add_argument("--incremental", action="store_true")
     context_build.add_argument("--retrieval", choices=["auto", "always", "never"], default="auto")
+    context_build.add_argument(
+        "--tokenizer", choices=["estimate", "cl100k_base", "o200k_base"], default="estimate"
+    )
+    context_build.add_argument("--token-budget", action="append", default=[])
+    context_build.add_argument("--provider-usage", type=Path)
 
     git = sub.add_parser("git")
     git_sub = git.add_subparsers(dest="git_command", required=True)
@@ -355,6 +360,9 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 explain=args.explain,
                 incremental=args.incremental,
                 retrieval=args.retrieval,
+                tokenizer=args.tokenizer,
+                token_budgets=tuple(args.token_budget),
+                provider_usage=args.provider_usage,
             ),
         )
     if command == "bootstrap":

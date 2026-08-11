@@ -262,3 +262,31 @@ def test_review_context_compacts_raw_diff_to_changed_symbols(tmp_path: Path) -> 
     assert diff["omitted_content"] is True
     assert "raw_diff_omitted" in diff["content"]
     assert "@@" not in diff["content"]
+
+
+def test_context_reports_token_categories_and_enforces_source_budget(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text("print('large source')\n" * 20, encoding="utf-8")
+    usage = tmp_path / "usage.json"
+    usage.write_text(
+        '{"input_tokens":100,"output_tokens":12,"input_tokens_details":{"cached_tokens":80}}',
+        encoding="utf-8",
+    )
+
+    report = build_context(
+        tmp_path,
+        ContextOptions(
+            no_git=True,
+            include=("app.py",),
+            max_chars=20_000,
+            token_budgets=("source=3", "cached_input=100", "output=20"),
+            provider_usage=Path("usage.json"),
+        ),
+    )
+
+    accounting = report.summary["token_accounting"]
+    assert report.status == "partial"
+    assert accounting["categories"]["source"]["tokens"] <= 3
+    assert accounting["categories"]["source"]["truncated"] is True
+    assert accounting["provider_usage"]["cached_input_tokens"] == 80
+    assert accounting["provider_usage"]["output_tokens"] == 12
+    assert report.summary["selected_files"][0]["token_budget_truncated"] is True
