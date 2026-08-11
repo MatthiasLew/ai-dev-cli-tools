@@ -32,6 +32,7 @@ from ai_dev_tools.context.selection import (
     _selection_reason_code,
     _truncate_text,
 )
+from ai_dev_tools.context.tokens import apply_token_accounting
 from ai_dev_tools.detectors.project import scan_project
 from ai_dev_tools.detectors.repository_map import map_repository
 from ai_dev_tools.git.inspect import inspect_git
@@ -168,6 +169,36 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         }
     )
 
+    token_accounting = apply_token_accounting(
+        root,
+        summary,
+        options.tokenizer,
+        options.token_budgets,
+        options.provider_usage,
+    )
+    summary["token_accounting"] = token_accounting
+    accounting_partial = bool(
+        token_accounting["fallback_reason"]
+        or token_accounting["budget_violations"]
+        or any(item.get("truncated") is True for item in token_accounting["categories"].values())
+    )
+    if token_accounting["fallback_reason"]:
+        report.issues.append(
+            Issue(
+                severity="warning",
+                message="Requested exact tokenizer is unavailable; UTF-8 estimation was used.",
+                code=str(token_accounting["fallback_reason"]),
+            )
+        )
+    if token_accounting["budget_violations"]:
+        report.issues.append(
+            Issue(
+                severity="warning",
+                message="One or more provider usage token budgets were exceeded.",
+                code="TOKEN_BUDGET_EXCEEDED",
+            )
+        )
+
     markdown = _render_markdown(report, summary)
     markdown, markdown_truncated = _truncate_text(markdown, options.max_chars)
     json_payload = _context_payload(report, summary, markdown_truncated, len(markdown))
@@ -188,7 +219,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
             )
         )
     else:
-        summary["truncated"] = any(item.truncated for item in selected)
+        summary["truncated"] = any(item.truncated for item in selected) or accounting_partial
         report.status = "partial" if summary["truncated"] else "success"
     timings["report_generation"] = _elapsed(stage_started)
     summary["performance"] = {"stages_seconds": timings}
@@ -419,6 +450,9 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
         "## Latest Errors",
         _json_block(summary.get("latest_errors", [])),
         "",
+        "## Token Accounting",
+        _json_block(summary.get("token_accounting", {})),
+        "",
         "## Context Budget",
         _json_block(summary.get("budget", {})),
         "",
@@ -519,9 +553,10 @@ def _incremental_summary(
 
 def _options_dict(options: ContextOptions) -> dict[str, object]:
     data = asdict(options)
-    output = data.get("output")
-    if output is not None:
-        data["output"] = str(output)
+    for key in ("output", "provider_usage"):
+        value = data.get(key)
+        if value is not None:
+            data[key] = str(value)
     return data
 
 

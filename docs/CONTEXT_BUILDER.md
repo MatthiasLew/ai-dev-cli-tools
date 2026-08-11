@@ -82,6 +82,21 @@ The `minimal` and `review` profiles compact eligible raw diffs into a bounded `s
 summary. Raw diffs remain the fallback whenever parsing is ambiguous, a file is unsupported, or
 no useful symbol mapping exists. The default, debug, and full profiles retain their raw diffs.
 
+## Token accounting and category budgets
+
+The default tokenizer is the dependency-free `estimate` method: masked UTF-8 bytes divided by four,
+rounded up. Install `ai-dev-cli-tools[tokenizers]` and select `--tokenizer cl100k_base` or
+`--tokenizer o200k_base` for exact local tiktoken counts. If the optional tokenizer is unavailable,
+the report exposes `TOKENIZER_UNAVAILABLE` and uses the documented estimate.
+
+Repeat `--token-budget category=N` for `source`, `diffs`, `tests`, `logs`, `maps`, `history`,
+`cached_input`, or `output`. Content categories are truncated or structurally omitted before report
+rendering. Cached-input and output budgets validate provider-reported usage. Use
+`--provider-usage <project-relative-json>` to normalize OpenAI `input_tokens_details.cached_tokens`
+or Anthropic cache read/write fields. Files outside the project root and files over 64 KiB are
+rejected. The `token_accounting` report block records method, exactness, original/final counts,
+truncation, budgets, normalized provider usage, totals, and violations.
+
 ## Safety
 
 The builder excludes `.env`, private keys, binary files, cache directories, build outputs, and `.ai/logs` or `.ai/reports`. Snippets and diffs are masked with the same secret patterns used by git inspection. Report writers also apply a final mask before serializing Markdown or JSON. Check, bootstrap, doctor, foreground runtime, and supervised background output are masked before being persisted.
