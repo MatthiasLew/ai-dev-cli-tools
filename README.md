@@ -146,6 +146,7 @@ JSON reports use schema `1.1` with `schema_version`, `tool_version`, `command`, 
 `ai-dev feedback` combines Git changes, changed validation, incremental context, focused rerun hints, stage timings, and local session state into one compact agent protocol report.
 
 Every expandable issue, check, file, snippet, diff, workspace, and artifact receives a stable local `evidence_id`. The report metadata lists references; `ai-dev explain <evidence-id> --tail 100` retrieves only that evidence. `ai-dev baseline create <name>` stores a compact local snapshot under `.ai/cache/baselines/`, and `baseline compare <name>` leads with new/resolved failures, issue codes, and status regressions. Reproducible local A/B suites use benchmark run and benchmark compare; see docs/BENCHMARKS.md.
+Research-backed context and token-efficiency recommendations are documented in `docs/TOKEN_EFFICIENCY_RESEARCH.md`.
 
 ## Auto Detection
 

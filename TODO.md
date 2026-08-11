@@ -140,6 +140,24 @@ changes, and cross-platform behavior are covered where applicable.
   `performance latest/compare` regression diagnostics for scan, check explain, and incremental
   context creation.
 
+## Research-backed next improvements
+
+The supporting evidence, trade-offs, and source links are documented in
+`docs/TOKEN_EFFICIENCY_RESEARCH.md`.
+
+- [ ] Add an explainable selective-retrieval gate that can abstain from cross-file retrieval,
+  preserves conservative fallback behavior, and measures selection false negatives.
+- [ ] Add an observation lifecycle that replaces superseded tool output with stable evidence
+  references while retaining current failures and final verification.
+- [ ] Add a deterministic cache-layout manifest with stable-prefix fingerprints and recommended
+  provider cache breakpoints, without embedding volatile timestamps or absolute paths.
+- [ ] Add optional exact tokenizer/provider usage accounting and separate budgets for source,
+  diffs, tests, logs, maps, history, cached input, and output.
+- [ ] Add bounded hierarchical retrieval refinement driven by failure signatures, changed symbols,
+  and explicit evidence expansion.
+- [ ] Evaluate optional semantic compression only for prose and repetitive natural-language logs;
+  preserve exact code, JSON, diffs, commands, locations, hashes, and verification evidence.
+
 ## Deferred or explicitly out of scope
 
 The following must not be added implicitly as part of another task. They require a separate
