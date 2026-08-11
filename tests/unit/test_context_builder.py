@@ -290,3 +290,27 @@ def test_context_reports_token_categories_and_enforces_source_budget(tmp_path: P
     assert accounting["provider_usage"]["cached_input_tokens"] == 80
     assert accounting["provider_usage"]["output_tokens"] == 12
     assert report.summary["selected_files"][0]["token_budget_truncated"] is True
+
+
+def test_context_hierarchical_refinement_reports_rounds_and_limits(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text("import helper\n", encoding="utf-8")
+    (tmp_path / "helper.py").write_text("import leaf\n", encoding="utf-8")
+    (tmp_path / "leaf.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    report = build_context(
+        tmp_path,
+        ContextOptions(
+            no_git=True,
+            include=("app.py",),
+            refine=("failure in app",),
+            refinement_rounds=2,
+            refinement_max_files=2,
+            max_chars=20_000,
+        ),
+    )
+
+    refinement = report.summary["refinement"]
+    assert refinement["added_files"] == ["helper.py", "leaf.py"]
+    assert refinement["added_count"] == 2
+    selected = {item["path"] for item in report.summary["selected_files"]}
+    assert {"app.py", "helper.py", "leaf.py"} <= selected

@@ -82,6 +82,19 @@ The `minimal` and `review` profiles compact eligible raw diffs into a bounded `s
 summary. Raw diffs remain the fallback whenever parsing is ambiguous, a file is unsupported, or
 no useful symbol mapping exists. The default, debug, and full profiles retain their raw diffs.
 
+## Hierarchical refinement
+
+`--refine <text-or-evidence-id>` adds an explicit failure/evidence signal. Current failure summaries
+and changed symbols are also used automatically. Up to `--refinement-rounds 0..3` rounds follow
+local static dependencies and exact/path-stem matches from the bounded candidate pool. The total
+number of additions is capped by `--refinement-max-files` (default 5). Evidence IDs are expanded
+through the existing local `ai-dev explain` mechanism before matching.
+
+The report records every round, added project-relative paths, the triggering reason code, total
+additions, configured limits, and a deterministic stop reason such as no new high-confidence
+evidence, file budget reached, or round budget reached. No embeddings, model calls, or network
+service are used.
+
 ## Token accounting and category budgets
 
 The default tokenizer is the dependency-free `estimate` method: masked UTF-8 bytes divided by four,

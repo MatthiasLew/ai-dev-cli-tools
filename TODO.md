@@ -153,7 +153,7 @@ The supporting evidence, trade-offs, and source links are documented in
   provider cache breakpoints, without embedding volatile timestamps or absolute paths.
 - [x] Add optional exact tokenizer/provider usage accounting and separate budgets for source,
   diffs, tests, logs, maps, history, cached input, and output.
-- [ ] Add bounded hierarchical retrieval refinement driven by failure signatures, changed symbols,
+- [x] Add bounded hierarchical retrieval refinement driven by failure signatures, changed symbols,
   and explicit evidence expansion.
 - [ ] Evaluate optional semantic compression only for prose and repetitive natural-language logs;
   preserve exact code, JSON, diffs, commands, locations, hashes, and verification evidence.

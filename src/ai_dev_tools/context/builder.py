@@ -21,6 +21,7 @@ from ai_dev_tools.context.models import (
     ContextOptions as ContextOptions,
 )
 from ai_dev_tools.context.profiles import get_context_profile
+from ai_dev_tools.context.refinement import refine_candidates
 from ai_dev_tools.context.retrieval import apply_retrieval_gate
 from ai_dev_tools.context.selection import (
     ALWAYS_IGNORE,
@@ -77,6 +78,8 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     stage_started = time.monotonic()
 
     changed_files = _changed_files(git_report, staged_only=options.staged_only)
+    latest_errors = _latest_error_reports(root)
+
     related_tests = _related_tests(changed_analysis)
     candidates, rejected = _select_candidates(
         root=root,
@@ -86,8 +89,22 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         map_summary=repo_map.summary,
         related_tests=related_tests,
     )
+    candidate_pool = dict(candidates)
     candidates, retrieval_decision = apply_retrieval_gate(
         root, options, candidates, changed_files, related_tests
+    )
+    refinement_signals = [
+        *latest_errors,
+        *(git_report.summary.get("changed_symbols", []) if git_report else []),
+        *_expanded_refinement_signals(root, options.refine),
+    ]
+    candidates, refinement = refine_candidates(
+        root,
+        candidates,
+        candidate_pool,
+        refinement_signals,
+        options.refinement_rounds,
+        options.refinement_max_files,
     )
     dependency_files = _dependency_files(root, candidates)
     for path, reason in dependency_files.items():
@@ -130,6 +147,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
                 "budget": _budget_summary(options, 0, False),
                 "incremental": _incremental_summary(incremental_state),
                 "retrieval": retrieval_decision.to_dict(),
+                "refinement": refinement,
                 "performance": {"stages_seconds": timings},
             }
         )
@@ -145,7 +163,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         if not git_available or git_report is None
         else _context_diffs(root, options, git_report.summary)
     )
-    latest_errors = _latest_error_reports(root)
+
     timings["content_collection"] = _elapsed(stage_started)
     stage_started = time.monotonic()
     summary = _base_summary(
@@ -160,6 +178,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         {
             "incremental": _incremental_summary(incremental_state, len(selected)),
             "retrieval": retrieval_decision.to_dict(),
+            "refinement": refinement,
             "selected_files": [item.to_dict() for item in selected],
             "rejected_files": [item.to_dict() for item in rejected],
             "diffs": diffs,
@@ -572,6 +591,19 @@ def _is_context_generated_path(rel: str) -> bool:
     return any(
         pattern in parts or normalized.startswith(f"{pattern}/") for pattern in ALWAYS_IGNORE
     )
+
+
+def _expanded_refinement_signals(root: Path, references: tuple[str, ...]) -> list[object]:
+    from ai_dev_tools.reporters.progressive import run_explain
+
+    signals: list[object] = []
+    for reference in references:
+        if ":" not in reference:
+            signals.append(reference)
+            continue
+        expanded = run_explain(root, reference, tail=100)
+        signals.append(expanded.summary.get("evidence", reference))
+    return signals
 
 
 def _related_tests(changed_analysis: ChangedSelection | None) -> list[str]:

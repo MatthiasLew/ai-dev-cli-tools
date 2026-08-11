@@ -85,6 +85,12 @@ Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing field
 `check` command entries include compact log-derived fields so agents do not need to read full logs by default. Parser results include `tool`, `parser`, `parser_confidence`, counts, first failure, project frames, repeated-message grouping, and full log paths.
 
 `check --mode changed` includes `changed_analysis` with `strategy`, `confidence`, `changed_files`, `selected_tests`, `selected_commands`, and `fallback_reason`.
+## Hierarchical retrieval refinement
+
+Context reports expose `refinement` with signal count, round/file limits, per-round additions,
+all added files, stable reason codes, and the stop reason. Refinement is bounded to three rounds and
+uses current failures, changed symbols, explicit evidence expansion, and static dependencies.
+
 ## Token accounting
 
 Context reports expose `token_accounting` with requested/used tokenizer, exactness, fallback reason,

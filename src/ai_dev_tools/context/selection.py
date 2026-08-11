@@ -177,6 +177,7 @@ def _selection_reason_code(reason: str) -> str:
         "repository test file": "TEST_FILE",
         "CI workflow": "CI_WORKFLOW",
         "documentation": "DOCUMENTATION",
+        "hierarchical retrieval refinement": "HIERARCHICAL_REFINEMENT",
         "Python dependency": "PYTHON_DEPENDENCY",
         "JavaScript/TypeScript dependency": "JS_TS_DEPENDENCY",
         "Rust dependency": "RUST_DEPENDENCY",
