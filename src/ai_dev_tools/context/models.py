@@ -7,6 +7,7 @@ from typing import Literal
 from ai_dev_tools.context.symbols import SymbolSnippet
 
 ContextFormat = Literal["markdown", "json", "both"]
+RetrievalMode = Literal["auto", "always", "never"]
 
 DEFAULT_MAX_CHARS = 50_000
 DEFAULT_MAX_FILES = 30
@@ -31,6 +32,7 @@ class ContextOptions:
     explain: bool = False
     incremental: bool = False
     profile: str = "default"
+    retrieval: RetrievalMode = "auto"
 
 
 @dataclass(slots=True)

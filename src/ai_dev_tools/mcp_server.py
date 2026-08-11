@@ -5,7 +5,7 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, Literal, TextIO, cast
 
 from ai_dev_tools import __version__
 from ai_dev_tools.security.secrets import mask_text
@@ -199,6 +199,11 @@ class LocalMcpServer:
                         "changed_only": {"type": "boolean", "default": False},
                         "staged_only": {"type": "boolean", "default": False},
                         "incremental": {"type": "boolean", "default": True},
+                        "retrieval": {
+                            "type": "string",
+                            "enum": ["auto", "always", "never"],
+                            "default": "auto",
+                        },
                         "write_artifacts": {"type": "boolean", "default": False},
                     }
                 ),
@@ -348,6 +353,7 @@ class LocalMcpServer:
             "changed_only",
             "staged_only",
             "incremental",
+            "retrieval",
             "write_artifacts",
         }
         _validate_keys(arguments, allowed)
@@ -374,6 +380,10 @@ class LocalMcpServer:
                     changed_only=_boolean(arguments, "changed_only", False),
                     staged_only=_boolean(arguments, "staged_only", False),
                     incremental=_boolean(arguments, "incremental", True),
+                    retrieval=cast(
+                        Literal["auto", "always", "never"],
+                        _choice(arguments, "retrieval", "auto", {"auto", "always", "never"}),
+                    ),
                     format="json",
                     explain=not write_artifacts,
                 ),
