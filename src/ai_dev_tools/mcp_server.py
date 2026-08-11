@@ -210,6 +210,24 @@ class LocalMcpServer:
                             "maxItems": 8,
                             "default": [],
                         },
+                        "refine": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "maxItems": 10,
+                            "default": [],
+                        },
+                        "refinement_rounds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 3,
+                            "default": 1,
+                        },
+                        "refinement_max_files": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 20,
+                            "default": 5,
+                        },
                         "retrieval": {
                             "type": "string",
                             "enum": ["auto", "always", "never"],
@@ -367,6 +385,9 @@ class LocalMcpServer:
             "retrieval",
             "tokenizer",
             "token_budgets",
+            "refine",
+            "refinement_rounds",
+            "refinement_max_files",
             "write_artifacts",
         }
         _validate_keys(arguments, allowed)
@@ -404,6 +425,9 @@ class LocalMcpServer:
                         {"estimate", "cl100k_base", "o200k_base"},
                     ),
                     token_budgets=tuple(_string_array(arguments, "token_budgets", 8)),
+                    refine=tuple(_string_array(arguments, "refine", 10)),
+                    refinement_rounds=_integer(arguments, "refinement_rounds", 1, 0, 3),
+                    refinement_max_files=_integer(arguments, "refinement_max_files", 5, 0, 20),
                     format="json",
                     explain=not write_artifacts,
                 ),

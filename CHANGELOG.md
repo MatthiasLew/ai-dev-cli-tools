@@ -6,6 +6,7 @@
 - Add a local observation lifecycle that replaces superseded feedback with expandable content-addressed evidence while retaining current failures, warnings, and final verification.
 - Add a relocatable deterministic prompt-cache layout manifest with stable-prefix fingerprints and OpenAI, Anthropic, and provider-neutral breakpoint recommendations.
 - Add optional exact tiktoken accounting, provider usage normalization, and enforced per-category token budgets for context packs.
+- Add bounded multi-round context refinement driven by failures, changed symbols, dependencies, and expandable evidence.
 
 - Document research-backed selective retrieval, prompt-cache layout, observation lifecycle, token accounting, and safe compression priorities.
 - Add local stage timing records, configurable performance budgets, and latest/compare diagnostics.

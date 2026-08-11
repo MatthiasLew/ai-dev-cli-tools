@@ -36,6 +36,9 @@ class ContextOptions:
     tokenizer: str = "estimate"
     token_budgets: tuple[str, ...] = ()
     provider_usage: Path | None = None
+    refine: tuple[str, ...] = ()
+    refinement_rounds: int = 1
+    refinement_max_files: int = 5
 
 
 @dataclass(slots=True)
