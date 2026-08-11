@@ -11,6 +11,7 @@ from ai_dev_tools.context import ContextOptions, build_context
 from ai_dev_tools.git.inspect import inspect_git
 from ai_dev_tools.models.report import Artifact, Report
 from ai_dev_tools.runners.check import run_check
+from ai_dev_tools.runners.observations import update_observation_lifecycle
 from ai_dev_tools.security.secrets import mask_text
 
 SESSION_SCHEMA_VERSION = "1"
@@ -65,7 +66,36 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
     ]
     if check_report.status == "failed" and not blocking_codes:
         blocking_codes.append("VALIDATION_FAILED")
+    warning_codes = sorted(
+        {
+            str(issue.code or "VALIDATION_WARNING")
+            for issue in check_report.issues
+            if issue.severity == "warning"
+        }
+    )
     ready = check_report.status in {"success", "partial"} and not blocking_codes
+    observations, observations_path = update_observation_lifecycle(
+        root,
+        {
+            "command": "feedback",
+            "task": options.task,
+            "status": check_report.status,
+            "changed_files": changed,
+            "failure_signatures": failures,
+            "unresolved_warnings": warning_codes,
+            "validation": {
+                "checks_total": check_report.summary.get("checks_total", 0),
+                "checks_failed": check_report.summary.get("checks_failed", 0),
+                "first_failure": check_report.summary.get("first_failure"),
+                "results": _compact_validation_results(check_report),
+            },
+            "context": {
+                "selected_files": _selected_paths(context_report),
+                "incremental": context_report.summary.get("incremental", {}),
+                "retrieval": context_report.summary.get("retrieval", {}),
+            },
+        },
+    )
     report.status = "success" if ready else "failed"
     report.summary = {
         "agent_protocol_version": "1",
@@ -95,6 +125,7 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
             "incremental": context_report.summary.get("incremental", {}),
             "budget": context_report.summary.get("budget", {}),
         },
+        "observations": observations,
         "performance": {
             "stages_seconds": timings,
             "total_seconds": round(sum(timings.values()), 3),
@@ -114,9 +145,13 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
             "failure_signatures": failures,
             "context_incremental": context_report.summary.get("incremental", {}),
             "performance": timings,
+            "observations": observations,
         },
     )
     report.artifacts.append(Artifact(str(session_path), "session", "Local agent session state"))
+    report.artifacts.append(
+        Artifact(str(observations_path), "observations", "Observation lifecycle manifest")
+    )
     report.artifacts.extend(_unique_artifacts([*check_report.artifacts, *context_report.artifacts]))
     return report
 
@@ -157,6 +192,40 @@ def _failure_signatures(report: Report) -> list[str]:
             for item in results
             if isinstance(item, dict) and item.get("failure_signature")
         }
+    )
+
+
+def _compact_validation_results(report: Report) -> list[dict[str, object]]:
+    results = report.summary.get("results")
+    if not isinstance(results, list):
+        return []
+    keep = {
+        "name",
+        "command",
+        "workspace",
+        "status",
+        "exit_code",
+        "failure_signature",
+        "first_failure",
+        "flaky",
+        "reuse",
+        "reason_code",
+    }
+    return [
+        {key: item[key] for key in keep if key in item}
+        for item in results
+        if isinstance(item, dict)
+    ]
+
+
+def _selected_paths(report: Report) -> list[str]:
+    selected = report.summary.get("selected_files")
+    if not isinstance(selected, list):
+        return []
+    return sorted(
+        str(item["path"])
+        for item in selected
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
     )
 
 

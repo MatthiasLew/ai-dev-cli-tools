@@ -147,7 +147,7 @@ The supporting evidence, trade-offs, and source links are documented in
 
 - [x] Add an explainable selective-retrieval gate that can abstain from cross-file retrieval,
   preserves conservative fallback behavior, and measures selection false negatives.
-- [ ] Add an observation lifecycle that replaces superseded tool output with stable evidence
+- [x] Add an observation lifecycle that replaces superseded tool output with stable evidence
   references while retaining current failures and final verification.
 - [ ] Add a deterministic cache-layout manifest with stable-prefix fingerprints and recommended
   provider cache breakpoints, without embedding volatile timestamps or absolute paths.

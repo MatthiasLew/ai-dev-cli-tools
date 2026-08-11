@@ -50,7 +50,7 @@ def run_explain(project_root: Path, reference: str, tail: int = 100) -> Report:
         report.summary = {
             "message": f"Evidence reference was not found: {reference}",
             "reason_code": "EVIDENCE_NOT_FOUND",
-            "searched": [".ai/reports", ".ai/context"],
+            "searched": [".ai/reports", ".ai/context", ".ai/cache/evidence"],
         }
         return report
     report.summary = {
@@ -113,6 +113,7 @@ def _find_reference(root: Path, reference: str) -> tuple[dict[str, object] | Non
     candidates = [
         *sorted((root / ".ai" / "reports").glob("*latest.json")),
         *sorted((root / ".ai" / "context").glob("*latest.json")),
+        *sorted((root / ".ai" / "cache" / "evidence").glob("observation-*.json")),
     ]
     for path in reversed(candidates):
         try:

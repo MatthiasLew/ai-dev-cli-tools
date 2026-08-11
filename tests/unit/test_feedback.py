@@ -66,7 +66,9 @@ def test_feedback_combines_changes_validation_context_and_session(
     assert report.summary["validation"]["execution"]["resumed"] == 1
     assert report.summary["context"]["incremental"]["reused"] == 2
     assert report.summary["performance"]["stages_seconds"]
+    assert report.summary["observations"]["current_retained_reasons"] == ["final_verification"]
     assert any(artifact.kind == "session" for artifact in report.artifacts)
+    assert any(artifact.kind == "observations" for artifact in report.artifacts)
 
     session = run_session_status(tmp_path)
     assert session.status == "success"
