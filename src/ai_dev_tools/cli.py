@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     cache = sub.add_parser("cache")
     cache_sub = cache.add_subparsers(dest="cache_command", required=True)
-    for action in ["status", "prune", "clear"]:
+    for action in ["status", "prune", "clear", "layout"]:
         cache_sub.add_parser(action)
 
     index = sub.add_parser("index")

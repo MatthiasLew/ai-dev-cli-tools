@@ -54,6 +54,13 @@ branch on codes and display prose; prose may improve without a schema-version ch
 Context file and symbol entries, bootstrap steps, changed-check fallback analysis, missing
 index/log/check outcomes, and finish blockers all follow this rule.
 
+## Prompt cache layout
+
+`cache layout` returns a relocatable `cache_layout` manifest with stable and volatile section order,
+per-section and combined-prefix SHA-256 fingerprints, recommended OpenAI/Anthropic/provider-neutral
+breakpoints, and machine-readable invariants proving timestamps, absolute paths, and random IDs are
+excluded. The generated artifact is `.ai/cache/cache-layout.json`.
+
 ## Observation lifecycle
 
 `feedback` and `session status` expose `observations` with schema version, a full `current`
