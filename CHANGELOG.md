@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Add explainable `auto|always|never` selective retrieval with conservative fallback and related-test false-negative measurement.
+- Add a local observation lifecycle that replaces superseded feedback with expandable content-addressed evidence while retaining current failures, warnings, and final verification.
 
 - Document research-backed selective retrieval, prompt-cache layout, observation lifecycle, token accounting, and safe compression priorities.
 - Add local stage timing records, configurable performance budgets, and latest/compare diagnostics.

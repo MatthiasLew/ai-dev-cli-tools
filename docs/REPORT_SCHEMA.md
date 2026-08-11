@@ -54,6 +54,14 @@ branch on codes and display prose; prose may improve without a schema-version ch
 Context file and symbol entries, bootstrap steps, changed-check fallback analysis, missing
 index/log/check outcomes, and finish blockers all follow this rule.
 
+## Observation lifecycle
+
+`feedback` and `session status` expose `observations` with schema version, a full `current`
+observation, `current_retained_reasons`, at most 20 compact `referenced` observations,
+`superseded_count`, duplicate suppression, avoided-character metrics, and an expansion command.
+Referenced observations have stable `observation:<hash>` evidence IDs and can be retrieved through
+`ai-dev explain` from the local content-addressed evidence archive.
+
 ## Progressive evidence and baselines
 
 Expandable entries receive deterministic `evidence_id` values. `metadata.progressive` reports
