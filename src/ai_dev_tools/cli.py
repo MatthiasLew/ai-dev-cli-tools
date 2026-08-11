@@ -110,6 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--output", type=Path)
     context_build.add_argument("--explain", action="store_true")
     context_build.add_argument("--incremental", action="store_true")
+    context_build.add_argument("--retrieval", choices=["auto", "always", "never"], default="auto")
 
     git = sub.add_parser("git")
     git_sub = git.add_subparsers(dest="git_command", required=True)
@@ -353,6 +354,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 format=args.format,
                 explain=args.explain,
                 incremental=args.incremental,
+                retrieval=args.retrieval,
             ),
         )
     if command == "bootstrap":

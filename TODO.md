@@ -145,7 +145,7 @@ changes, and cross-platform behavior are covered where applicable.
 The supporting evidence, trade-offs, and source links are documented in
 `docs/TOKEN_EFFICIENCY_RESEARCH.md`.
 
-- [ ] Add an explainable selective-retrieval gate that can abstain from cross-file retrieval,
+- [x] Add an explainable selective-retrieval gate that can abstain from cross-file retrieval,
   preserves conservative fallback behavior, and measures selection false negatives.
 - [ ] Add an observation lifecycle that replaces superseded tool output with stable evidence
   references while retaining current failures and final verification.

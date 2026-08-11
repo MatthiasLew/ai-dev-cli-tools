@@ -21,6 +21,7 @@ from ai_dev_tools.context.models import (
     ContextOptions as ContextOptions,
 )
 from ai_dev_tools.context.profiles import get_context_profile
+from ai_dev_tools.context.retrieval import apply_retrieval_gate
 from ai_dev_tools.context.selection import (
     ALWAYS_IGNORE,
     _dependency_files,
@@ -75,13 +76,17 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     stage_started = time.monotonic()
 
     changed_files = _changed_files(git_report, staged_only=options.staged_only)
+    related_tests = _related_tests(changed_analysis)
     candidates, rejected = _select_candidates(
         root=root,
         options=options,
         changed_files=changed_files,
         scan_summary=scan.summary,
         map_summary=repo_map.summary,
-        related_tests=_related_tests(changed_analysis),
+        related_tests=related_tests,
+    )
+    candidates, retrieval_decision = apply_retrieval_gate(
+        root, options, candidates, changed_files, related_tests
     )
     dependency_files = _dependency_files(root, candidates)
     for path, reason in dependency_files.items():
@@ -123,6 +128,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
                 "secret_findings": [finding.masked_dict() for finding in secret_findings],
                 "budget": _budget_summary(options, 0, False),
                 "incremental": _incremental_summary(incremental_state),
+                "retrieval": retrieval_decision.to_dict(),
                 "performance": {"stages_seconds": timings},
             }
         )
@@ -152,6 +158,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     summary.update(
         {
             "incremental": _incremental_summary(incremental_state, len(selected)),
+            "retrieval": retrieval_decision.to_dict(),
             "selected_files": [item.to_dict() for item in selected],
             "rejected_files": [item.to_dict() for item in rejected],
             "diffs": diffs,
@@ -402,6 +409,9 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
         "",
         "## Related Tests",
         _bullet_list(_object_list(summary.get("related_tests"))),
+        "",
+        "## Retrieval Decision",
+        _json_block(summary.get("retrieval", {})),
         "",
         "## Validation Plan",
         _json_block(summary.get("validation_plan", [])),

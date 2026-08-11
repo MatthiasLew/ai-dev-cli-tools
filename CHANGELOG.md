@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add explainable `auto|always|never` selective retrieval with conservative fallback and related-test false-negative measurement.
+
 - Document research-backed selective retrieval, prompt-cache layout, observation lifecycle, token accounting, and safe compression priorities.
 - Add local stage timing records, configurable performance budgets, and latest/compare diagnostics.
 - Add versioned real-agent benchmark fixtures for repair, affected tests, multi-turn context, and monorepo routing, with private measured workflow telemetry and published raw trials.

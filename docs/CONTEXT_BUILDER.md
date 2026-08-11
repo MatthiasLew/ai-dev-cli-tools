@@ -30,6 +30,21 @@ Defaults:
 
 The report records truncation and reasons for selected or rejected files.
 
+## Selective retrieval
+
+`--retrieval auto|always|never` controls broad cross-file candidate expansion. The default `auto`
+abstains only when explicit includes or Git changes provide focused roots. It preserves inferred or
+changed-test evidence and adds static dependencies after the gate. Missing focus, broad task terms,
+or changes to project/workflow configuration trigger a conservative full-candidate fallback.
+
+`always` is the stable expansion override. `never` is an explicit user override that keeps focused
+roots and related tests even when the automatic policy would expand. Every report includes a
+`retrieval` object with the decision, confidence, reason code, input signals, focused roots,
+omitted-candidate count (with at most 100 paths), fallback state, and
+`ai-dev context build --retrieval always` as the expansion command. `expected_related_tests`,
+`selected_related_tests`, `missed_related_tests`, and `false_negative_proxy` make the measurable
+selection safety check explicit.
+
 ## Selection Inputs
 
 The builder reuses existing project scan, repository map, git inspection, and changed-test analysis. It selects changed files, related tests, detected entrypoints, important config, CI workflows, documentation, and files matched by `--include`.

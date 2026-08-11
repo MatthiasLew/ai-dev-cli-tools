@@ -128,11 +128,14 @@ ai-dev context build --task "fix auth tests"
 ai-dev context build --changed-only --max-chars 50000
 ai-dev context build --incremental  # emits only candidates changed since the last pack
 ai-dev context build --profile review
+ai-dev context build --retrieval auto --explain  # explains retrieval or abstention
 ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
 ai-dev context build --explain --json
 ```
 
 Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/context-latest.json` by default. The builder includes detected technologies, git state, changed files, related tests, validation plan, recent commits, selected snippets, limited diffs, latest check errors, masked secret findings, and budget/truncation metadata. Large Python files use AST-aware symbol snippets, while large JavaScript and TypeScript files use conservative top-level symbol selection instead of blindly returning only the beginning of the file.
+
+Selective retrieval defaults to `auto`: focused includes or changed files can abstain from broad cross-file retrieval, while missing focus, broad configuration changes, and broad task scopes fall back to the full candidate set. Use `--retrieval always` to expand or `--retrieval never` to keep only focused roots and inferred related tests. The JSON and Markdown reports explain the decision and expose a related-test false-negative proxy.
 
 Incremental mode stores a schema-versioned manifest under `.ai/cache/` and reports changed versus reused files. Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
