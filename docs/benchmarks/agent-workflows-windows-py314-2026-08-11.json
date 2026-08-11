@@ -1,0 +1,671 @@
+{
+    "schema_version":  "1.0",
+    "measured_at":  "2026-08-11",
+    "fixture_version":  "1",
+    "cache_state":  "cold",
+    "trials_per_variant":  3,
+    "machine":  {
+                    "platform":  "Windows-11-10.0.26200-SP0",
+                    "python":  "3.14.0",
+                    "implementation":  "cpython"
+                },
+    "token_estimation":  "masked_utf8_bytes_divided_by_4",
+    "suites":  {
+                   "agent-repair-workflow":  {
+                                                 "baseline":  {
+                                                                  "statistics":  {
+                                                                                     "duration_stdev_seconds":  0.26,
+                                                                                     "median_agent_visible_bytes":  8881.0,
+                                                                                     "median_commands":  3.0,
+                                                                                     "median_estimated_tokens":  2221.0,
+                                                                                     "median_seconds":  4.193,
+                                                                                     "median_time_to_actionable_result_seconds":  0.39
+                                                                                 },
+                                                                  "trials":  [
+                                                                                 {
+                                                                                     "agent_visible_bytes":  8881,
+                                                                                     "commands":  3,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  4.193,
+                                                                                     "estimated_tokens":  2221,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "9886640e51704f5db2d79e99a42e745c1b98ecd7f0461adea6d16d7fab91d52d",
+                                                                                     "time_to_actionable_result_seconds":  0.39,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  1,
+                                                                                     "validation_subprocesses":  1
+                                                                                 },
+                                                                                 {
+                                                                                     "agent_visible_bytes":  8881,
+                                                                                     "commands":  3,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  4.424,
+                                                                                     "estimated_tokens":  2221,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "9886640e51704f5db2d79e99a42e745c1b98ecd7f0461adea6d16d7fab91d52d",
+                                                                                     "time_to_actionable_result_seconds":  0.757,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  2,
+                                                                                     "validation_subprocesses":  1
+                                                                                 },
+                                                                                 {
+                                                                                     "agent_visible_bytes":  8881,
+                                                                                     "commands":  3,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  3.905,
+                                                                                     "estimated_tokens":  2221,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "9886640e51704f5db2d79e99a42e745c1b98ecd7f0461adea6d16d7fab91d52d",
+                                                                                     "time_to_actionable_result_seconds":  0.356,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  3,
+                                                                                     "validation_subprocesses":  1
+                                                                                 }
+                                                                             ]
+                                                              },
+                                                 "ai_dev":  {
+                                                                "statistics":  {
+                                                                                   "duration_stdev_seconds":  1.04,
+                                                                                   "median_agent_visible_bytes":  3813.0,
+                                                                                   "median_commands":  4.0,
+                                                                                   "median_estimated_tokens":  954.0,
+                                                                                   "median_seconds":  4.178,
+                                                                                   "median_time_to_actionable_result_seconds":  0.718
+                                                                               },
+                                                                "trials":  [
+                                                                               {
+                                                                                   "agent_visible_bytes":  3813,
+                                                                                   "commands":  4,
+                                                                                   "correct":  true,
+                                                                                   "duration_seconds":  3.218,
+                                                                                   "estimated_tokens":  954,
+                                                                                   "exit_codes":  {
+                                                                                                      "reset":  0,
+                                                                                                      "validation":  0,
+                                                                                                      "variant":  0
+                                                                                                  },
+                                                                                   "outcome_signature":  "9886640e51704f5db2d79e99a42e745c1b98ecd7f0461adea6d16d7fab91d52d",
+                                                                                   "time_to_actionable_result_seconds":  0.375,
+                                                                                   "timed_out":  false,
+                                                                                   "trial":  1,
+                                                                                   "validation_subprocesses":  1
+                                                                               },
+                                                                               {
+                                                                                   "agent_visible_bytes":  3813,
+                                                                                   "commands":  4,
+                                                                                   "correct":  true,
+                                                                                   "duration_seconds":  5.296,
+                                                                                   "estimated_tokens":  954,
+                                                                                   "exit_codes":  {
+                                                                                                      "reset":  0,
+                                                                                                      "validation":  0,
+                                                                                                      "variant":  0
+                                                                                                  },
+                                                                                   "outcome_signature":  "9886640e51704f5db2d79e99a42e745c1b98ecd7f0461adea6d16d7fab91d52d",
+                                                                                   "time_to_actionable_result_seconds":  0.797,
+                                                                                   "timed_out":  false,
+                                                                                   "trial":  2,
+                                                                                   "validation_subprocesses":  1
+                                                                               },
+                                                                               {
+                                                                                   "agent_visible_bytes":  3813,
+                                                                                   "commands":  4,
+                                                                                   "correct":  true,
+                                                                                   "duration_seconds":  4.178,
+                                                                                   "estimated_tokens":  954,
+                                                                                   "exit_codes":  {
+                                                                                                      "reset":  0,
+                                                                                                      "validation":  0,
+                                                                                                      "variant":  0
+                                                                                                  },
+                                                                                   "outcome_signature":  "9886640e51704f5db2d79e99a42e745c1b98ecd7f0461adea6d16d7fab91d52d",
+                                                                                   "time_to_actionable_result_seconds":  0.718,
+                                                                                   "timed_out":  false,
+                                                                                   "trial":  3,
+                                                                                   "validation_subprocesses":  1
+                                                                               }
+                                                                           ]
+                                                            },
+                                                 "comparison":  {
+                                                                    "valid":  true,
+                                                                    "decision":  null,
+                                                                    "metrics":  {
+                                                                                    "median_agent_visible_bytes":  {
+                                                                                                                       "absolute_change":  -5068.0,
+                                                                                                                       "baseline":  8881.0,
+                                                                                                                       "candidate":  3813.0,
+                                                                                                                       "percent_change":  -57.07
+                                                                                                                   },
+                                                                                    "median_commands":  {
+                                                                                                            "absolute_change":  1.0,
+                                                                                                            "baseline":  3.0,
+                                                                                                            "candidate":  4.0,
+                                                                                                            "percent_change":  33.33
+                                                                                                        },
+                                                                                    "median_estimated_tokens":  {
+                                                                                                                    "absolute_change":  -1267.0,
+                                                                                                                    "baseline":  2221.0,
+                                                                                                                    "candidate":  954.0,
+                                                                                                                    "percent_change":  -57.05
+                                                                                                                },
+                                                                                    "median_seconds":  {
+                                                                                                           "absolute_change":  -0.015,
+                                                                                                           "baseline":  4.193,
+                                                                                                           "candidate":  4.178,
+                                                                                                           "percent_change":  -0.36
+                                                                                                       },
+                                                                                    "median_time_to_actionable_result_seconds":  {
+                                                                                                                                     "absolute_change":  0.328,
+                                                                                                                                     "baseline":  0.39,
+                                                                                                                                     "candidate":  0.718,
+                                                                                                                                     "percent_change":  84.1
+                                                                                                                                 }
+                                                                                }
+                                                                }
+                                             },
+                   "agent-affected-workflow":  {
+                                                   "baseline":  {
+                                                                    "statistics":  {
+                                                                                       "duration_stdev_seconds":  0.878,
+                                                                                       "median_agent_visible_bytes":  559.0,
+                                                                                       "median_commands":  4.0,
+                                                                                       "median_estimated_tokens":  140.0,
+                                                                                       "median_seconds":  5.074,
+                                                                                       "median_time_to_actionable_result_seconds":  2.439
+                                                                                   },
+                                                                    "trials":  [
+                                                                                   {
+                                                                                       "agent_visible_bytes":  559,
+                                                                                       "commands":  4,
+                                                                                       "correct":  true,
+                                                                                       "duration_seconds":  6.14,
+                                                                                       "estimated_tokens":  140,
+                                                                                       "exit_codes":  {
+                                                                                                          "reset":  0,
+                                                                                                          "validation":  0,
+                                                                                                          "variant":  0
+                                                                                                      },
+                                                                                       "outcome_signature":  "b2bebdc23b913ca13a69b3024c0d118b6f1f6692da12236551546584dce5ebf3",
+                                                                                       "time_to_actionable_result_seconds":  3.494,
+                                                                                       "timed_out":  false,
+                                                                                       "trial":  1,
+                                                                                       "validation_subprocesses":  2
+                                                                                   },
+                                                                                   {
+                                                                                       "agent_visible_bytes":  559,
+                                                                                       "commands":  4,
+                                                                                       "correct":  true,
+                                                                                       "duration_seconds":  4.399,
+                                                                                       "estimated_tokens":  140,
+                                                                                       "exit_codes":  {
+                                                                                                          "reset":  0,
+                                                                                                          "validation":  0,
+                                                                                                          "variant":  0
+                                                                                                      },
+                                                                                       "outcome_signature":  "b2bebdc23b913ca13a69b3024c0d118b6f1f6692da12236551546584dce5ebf3",
+                                                                                       "time_to_actionable_result_seconds":  2.198,
+                                                                                       "timed_out":  false,
+                                                                                       "trial":  2,
+                                                                                       "validation_subprocesses":  2
+                                                                                   },
+                                                                                   {
+                                                                                       "agent_visible_bytes":  559,
+                                                                                       "commands":  4,
+                                                                                       "correct":  true,
+                                                                                       "duration_seconds":  5.074,
+                                                                                       "estimated_tokens":  140,
+                                                                                       "exit_codes":  {
+                                                                                                          "reset":  0,
+                                                                                                          "validation":  0,
+                                                                                                          "variant":  0
+                                                                                                      },
+                                                                                       "outcome_signature":  "b2bebdc23b913ca13a69b3024c0d118b6f1f6692da12236551546584dce5ebf3",
+                                                                                       "time_to_actionable_result_seconds":  2.439,
+                                                                                       "timed_out":  false,
+                                                                                       "trial":  3,
+                                                                                       "validation_subprocesses":  2
+                                                                                   }
+                                                                               ]
+                                                                },
+                                                   "ai_dev":  {
+                                                                  "statistics":  {
+                                                                                     "duration_stdev_seconds":  0.869,
+                                                                                     "median_agent_visible_bytes":  182.0,
+                                                                                     "median_commands":  5.0,
+                                                                                     "median_estimated_tokens":  46.0,
+                                                                                     "median_seconds":  5.628,
+                                                                                     "median_time_to_actionable_result_seconds":  2.937
+                                                                                 },
+                                                                  "trials":  [
+                                                                                 {
+                                                                                     "agent_visible_bytes":  182,
+                                                                                     "commands":  5,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  4.943,
+                                                                                     "estimated_tokens":  46,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "b2bebdc23b913ca13a69b3024c0d118b6f1f6692da12236551546584dce5ebf3",
+                                                                                     "time_to_actionable_result_seconds":  2.781,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  1,
+                                                                                     "validation_subprocesses":  2
+                                                                                 },
+                                                                                 {
+                                                                                     "agent_visible_bytes":  182,
+                                                                                     "commands":  5,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  5.628,
+                                                                                     "estimated_tokens":  46,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "b2bebdc23b913ca13a69b3024c0d118b6f1f6692da12236551546584dce5ebf3",
+                                                                                     "time_to_actionable_result_seconds":  2.937,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  2,
+                                                                                     "validation_subprocesses":  2
+                                                                                 },
+                                                                                 {
+                                                                                     "agent_visible_bytes":  182,
+                                                                                     "commands":  5,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  6.669,
+                                                                                     "estimated_tokens":  46,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "b2bebdc23b913ca13a69b3024c0d118b6f1f6692da12236551546584dce5ebf3",
+                                                                                     "time_to_actionable_result_seconds":  3.742,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  3,
+                                                                                     "validation_subprocesses":  2
+                                                                                 }
+                                                                             ]
+                                                              },
+                                                   "comparison":  {
+                                                                      "valid":  true,
+                                                                      "decision":  null,
+                                                                      "metrics":  {
+                                                                                      "median_agent_visible_bytes":  {
+                                                                                                                         "absolute_change":  -377.0,
+                                                                                                                         "baseline":  559.0,
+                                                                                                                         "candidate":  182.0,
+                                                                                                                         "percent_change":  -67.44
+                                                                                                                     },
+                                                                                      "median_commands":  {
+                                                                                                              "absolute_change":  1.0,
+                                                                                                              "baseline":  4.0,
+                                                                                                              "candidate":  5.0,
+                                                                                                              "percent_change":  25.0
+                                                                                                          },
+                                                                                      "median_estimated_tokens":  {
+                                                                                                                      "absolute_change":  -94.0,
+                                                                                                                      "baseline":  140.0,
+                                                                                                                      "candidate":  46.0,
+                                                                                                                      "percent_change":  -67.14
+                                                                                                                  },
+                                                                                      "median_seconds":  {
+                                                                                                             "absolute_change":  0.554,
+                                                                                                             "baseline":  5.074,
+                                                                                                             "candidate":  5.628,
+                                                                                                             "percent_change":  10.92
+                                                                                                         },
+                                                                                      "median_time_to_actionable_result_seconds":  {
+                                                                                                                                       "absolute_change":  0.498,
+                                                                                                                                       "baseline":  2.439,
+                                                                                                                                       "candidate":  2.937,
+                                                                                                                                       "percent_change":  20.42
+                                                                                                                                   }
+                                                                                  }
+                                                                  }
+                                               },
+                   "agent-multiturn-workflow":  {
+                                                    "baseline":  {
+                                                                     "statistics":  {
+                                                                                        "duration_stdev_seconds":  0.995,
+                                                                                        "median_agent_visible_bytes":  17739.0,
+                                                                                        "median_commands":  4.0,
+                                                                                        "median_estimated_tokens":  4435.0,
+                                                                                        "median_seconds":  3.503,
+                                                                                        "median_time_to_actionable_result_seconds":  0.375
+                                                                                    },
+                                                                     "trials":  [
+                                                                                    {
+                                                                                        "agent_visible_bytes":  17739,
+                                                                                        "commands":  4,
+                                                                                        "correct":  true,
+                                                                                        "duration_seconds":  2.987,
+                                                                                        "estimated_tokens":  4435,
+                                                                                        "exit_codes":  {
+                                                                                                           "reset":  0,
+                                                                                                           "validation":  0,
+                                                                                                           "variant":  0
+                                                                                                       },
+                                                                                        "outcome_signature":  "9ae79c6d049c25d096227f8fcd6aa709537293fdad29a88a494b8e510d9477c1",
+                                                                                        "time_to_actionable_result_seconds":  0.301,
+                                                                                        "timed_out":  false,
+                                                                                        "trial":  1,
+                                                                                        "validation_subprocesses":  1
+                                                                                    },
+                                                                                    {
+                                                                                        "agent_visible_bytes":  17739,
+                                                                                        "commands":  4,
+                                                                                        "correct":  true,
+                                                                                        "duration_seconds":  3.503,
+                                                                                        "estimated_tokens":  4435,
+                                                                                        "exit_codes":  {
+                                                                                                           "reset":  0,
+                                                                                                           "validation":  0,
+                                                                                                           "variant":  0
+                                                                                                       },
+                                                                                        "outcome_signature":  "9ae79c6d049c25d096227f8fcd6aa709537293fdad29a88a494b8e510d9477c1",
+                                                                                        "time_to_actionable_result_seconds":  0.375,
+                                                                                        "timed_out":  false,
+                                                                                        "trial":  2,
+                                                                                        "validation_subprocesses":  1
+                                                                                    },
+                                                                                    {
+                                                                                        "agent_visible_bytes":  17739,
+                                                                                        "commands":  4,
+                                                                                        "correct":  true,
+                                                                                        "duration_seconds":  4.91,
+                                                                                        "estimated_tokens":  4435,
+                                                                                        "exit_codes":  {
+                                                                                                           "reset":  0,
+                                                                                                           "validation":  0,
+                                                                                                           "variant":  0
+                                                                                                       },
+                                                                                        "outcome_signature":  "9ae79c6d049c25d096227f8fcd6aa709537293fdad29a88a494b8e510d9477c1",
+                                                                                        "time_to_actionable_result_seconds":  0.657,
+                                                                                        "timed_out":  false,
+                                                                                        "trial":  3,
+                                                                                        "validation_subprocesses":  1
+                                                                                    }
+                                                                                ]
+                                                                 },
+                                                    "ai_dev":  {
+                                                                   "statistics":  {
+                                                                                      "duration_stdev_seconds":  0.19,
+                                                                                      "median_agent_visible_bytes":  7585.0,
+                                                                                      "median_commands":  5.0,
+                                                                                      "median_estimated_tokens":  1897.0,
+                                                                                      "median_seconds":  4.204,
+                                                                                      "median_time_to_actionable_result_seconds":  0.475
+                                                                                  },
+                                                                   "trials":  [
+                                                                                  {
+                                                                                      "agent_visible_bytes":  7585,
+                                                                                      "commands":  5,
+                                                                                      "correct":  true,
+                                                                                      "duration_seconds":  4.204,
+                                                                                      "estimated_tokens":  1897,
+                                                                                      "exit_codes":  {
+                                                                                                         "reset":  0,
+                                                                                                         "validation":  0,
+                                                                                                         "variant":  0
+                                                                                                     },
+                                                                                      "outcome_signature":  "9ae79c6d049c25d096227f8fcd6aa709537293fdad29a88a494b8e510d9477c1",
+                                                                                      "time_to_actionable_result_seconds":  0.508,
+                                                                                      "timed_out":  false,
+                                                                                      "trial":  1,
+                                                                                      "validation_subprocesses":  1
+                                                                                  },
+                                                                                  {
+                                                                                      "agent_visible_bytes":  7585,
+                                                                                      "commands":  5,
+                                                                                      "correct":  true,
+                                                                                      "duration_seconds":  4.167,
+                                                                                      "estimated_tokens":  1897,
+                                                                                      "exit_codes":  {
+                                                                                                         "reset":  0,
+                                                                                                         "validation":  0,
+                                                                                                         "variant":  0
+                                                                                                     },
+                                                                                      "outcome_signature":  "9ae79c6d049c25d096227f8fcd6aa709537293fdad29a88a494b8e510d9477c1",
+                                                                                      "time_to_actionable_result_seconds":  0.438,
+                                                                                      "timed_out":  false,
+                                                                                      "trial":  2,
+                                                                                      "validation_subprocesses":  1
+                                                                                  },
+                                                                                  {
+                                                                                      "agent_visible_bytes":  7585,
+                                                                                      "commands":  5,
+                                                                                      "correct":  true,
+                                                                                      "duration_seconds":  4.513,
+                                                                                      "estimated_tokens":  1897,
+                                                                                      "exit_codes":  {
+                                                                                                         "reset":  0,
+                                                                                                         "validation":  0,
+                                                                                                         "variant":  0
+                                                                                                     },
+                                                                                      "outcome_signature":  "9ae79c6d049c25d096227f8fcd6aa709537293fdad29a88a494b8e510d9477c1",
+                                                                                      "time_to_actionable_result_seconds":  0.475,
+                                                                                      "timed_out":  false,
+                                                                                      "trial":  3,
+                                                                                      "validation_subprocesses":  1
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                    "comparison":  {
+                                                                       "valid":  true,
+                                                                       "decision":  null,
+                                                                       "metrics":  {
+                                                                                       "median_agent_visible_bytes":  {
+                                                                                                                          "absolute_change":  -10154.0,
+                                                                                                                          "baseline":  17739.0,
+                                                                                                                          "candidate":  7585.0,
+                                                                                                                          "percent_change":  -57.24
+                                                                                                                      },
+                                                                                       "median_commands":  {
+                                                                                                               "absolute_change":  1.0,
+                                                                                                               "baseline":  4.0,
+                                                                                                               "candidate":  5.0,
+                                                                                                               "percent_change":  25.0
+                                                                                                           },
+                                                                                       "median_estimated_tokens":  {
+                                                                                                                       "absolute_change":  -2538.0,
+                                                                                                                       "baseline":  4435.0,
+                                                                                                                       "candidate":  1897.0,
+                                                                                                                       "percent_change":  -57.23
+                                                                                                                   },
+                                                                                       "median_seconds":  {
+                                                                                                              "absolute_change":  0.701,
+                                                                                                              "baseline":  3.503,
+                                                                                                              "candidate":  4.204,
+                                                                                                              "percent_change":  20.01
+                                                                                                          },
+                                                                                       "median_time_to_actionable_result_seconds":  {
+                                                                                                                                        "absolute_change":  0.1,
+                                                                                                                                        "baseline":  0.375,
+                                                                                                                                        "candidate":  0.475,
+                                                                                                                                        "percent_change":  26.67
+                                                                                                                                    }
+                                                                                   }
+                                                                   }
+                                                },
+                   "agent-monorepo-workflow":  {
+                                                   "baseline":  {
+                                                                    "statistics":  {
+                                                                                       "duration_stdev_seconds":  0.406,
+                                                                                       "median_agent_visible_bytes":  8982.0,
+                                                                                       "median_commands":  4.0,
+                                                                                       "median_estimated_tokens":  2246.0,
+                                                                                       "median_seconds":  5.023,
+                                                                                       "median_time_to_actionable_result_seconds":  2.629
+                                                                                   },
+                                                                    "trials":  [
+                                                                                   {
+                                                                                       "agent_visible_bytes":  8982,
+                                                                                       "commands":  4,
+                                                                                       "correct":  true,
+                                                                                       "duration_seconds":  5.023,
+                                                                                       "estimated_tokens":  2246,
+                                                                                       "exit_codes":  {
+                                                                                                          "reset":  0,
+                                                                                                          "validation":  0,
+                                                                                                          "variant":  0
+                                                                                                      },
+                                                                                       "outcome_signature":  "6966b71c4e01b8e39a51f108ec05117fd535b1ea735b74999fa5d78356066f40",
+                                                                                       "time_to_actionable_result_seconds":  2.818,
+                                                                                       "timed_out":  false,
+                                                                                       "trial":  1,
+                                                                                       "validation_subprocesses":  2
+                                                                                   },
+                                                                                   {
+                                                                                       "agent_visible_bytes":  8982,
+                                                                                       "commands":  4,
+                                                                                       "correct":  true,
+                                                                                       "duration_seconds":  5.576,
+                                                                                       "estimated_tokens":  2246,
+                                                                                       "exit_codes":  {
+                                                                                                          "reset":  0,
+                                                                                                          "validation":  0,
+                                                                                                          "variant":  0
+                                                                                                      },
+                                                                                       "outcome_signature":  "6966b71c4e01b8e39a51f108ec05117fd535b1ea735b74999fa5d78356066f40",
+                                                                                       "time_to_actionable_result_seconds":  2.629,
+                                                                                       "timed_out":  false,
+                                                                                       "trial":  2,
+                                                                                       "validation_subprocesses":  2
+                                                                                   },
+                                                                                   {
+                                                                                       "agent_visible_bytes":  8982,
+                                                                                       "commands":  4,
+                                                                                       "correct":  true,
+                                                                                       "duration_seconds":  4.785,
+                                                                                       "estimated_tokens":  2246,
+                                                                                       "exit_codes":  {
+                                                                                                          "reset":  0,
+                                                                                                          "validation":  0,
+                                                                                                          "variant":  0
+                                                                                                      },
+                                                                                       "outcome_signature":  "6966b71c4e01b8e39a51f108ec05117fd535b1ea735b74999fa5d78356066f40",
+                                                                                       "time_to_actionable_result_seconds":  2.545,
+                                                                                       "timed_out":  false,
+                                                                                       "trial":  3,
+                                                                                       "validation_subprocesses":  2
+                                                                                   }
+                                                                               ]
+                                                                },
+                                                   "ai_dev":  {
+                                                                  "statistics":  {
+                                                                                     "duration_stdev_seconds":  0.477,
+                                                                                     "median_agent_visible_bytes":  571.0,
+                                                                                     "median_commands":  5.0,
+                                                                                     "median_estimated_tokens":  143.0,
+                                                                                     "median_seconds":  4.695,
+                                                                                     "median_time_to_actionable_result_seconds":  2.367
+                                                                                 },
+                                                                  "trials":  [
+                                                                                 {
+                                                                                     "agent_visible_bytes":  571,
+                                                                                     "commands":  5,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  5.096,
+                                                                                     "estimated_tokens":  143,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "6966b71c4e01b8e39a51f108ec05117fd535b1ea735b74999fa5d78356066f40",
+                                                                                     "time_to_actionable_result_seconds":  2.422,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  1,
+                                                                                     "validation_subprocesses":  2
+                                                                                 },
+                                                                                 {
+                                                                                     "agent_visible_bytes":  571,
+                                                                                     "commands":  5,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  4.146,
+                                                                                     "estimated_tokens":  143,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "6966b71c4e01b8e39a51f108ec05117fd535b1ea735b74999fa5d78356066f40",
+                                                                                     "time_to_actionable_result_seconds":  2.295,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  2,
+                                                                                     "validation_subprocesses":  2
+                                                                                 },
+                                                                                 {
+                                                                                     "agent_visible_bytes":  571,
+                                                                                     "commands":  5,
+                                                                                     "correct":  true,
+                                                                                     "duration_seconds":  4.695,
+                                                                                     "estimated_tokens":  143,
+                                                                                     "exit_codes":  {
+                                                                                                        "reset":  0,
+                                                                                                        "validation":  0,
+                                                                                                        "variant":  0
+                                                                                                    },
+                                                                                     "outcome_signature":  "6966b71c4e01b8e39a51f108ec05117fd535b1ea735b74999fa5d78356066f40",
+                                                                                     "time_to_actionable_result_seconds":  2.367,
+                                                                                     "timed_out":  false,
+                                                                                     "trial":  3,
+                                                                                     "validation_subprocesses":  2
+                                                                                 }
+                                                                             ]
+                                                              },
+                                                   "comparison":  {
+                                                                      "valid":  true,
+                                                                      "decision":  null,
+                                                                      "metrics":  {
+                                                                                      "median_agent_visible_bytes":  {
+                                                                                                                         "absolute_change":  -8411.0,
+                                                                                                                         "baseline":  8982.0,
+                                                                                                                         "candidate":  571.0,
+                                                                                                                         "percent_change":  -93.64
+                                                                                                                     },
+                                                                                      "median_commands":  {
+                                                                                                              "absolute_change":  1.0,
+                                                                                                              "baseline":  4.0,
+                                                                                                              "candidate":  5.0,
+                                                                                                              "percent_change":  25.0
+                                                                                                          },
+                                                                                      "median_estimated_tokens":  {
+                                                                                                                      "absolute_change":  -2103.0,
+                                                                                                                      "baseline":  2246.0,
+                                                                                                                      "candidate":  143.0,
+                                                                                                                      "percent_change":  -93.63
+                                                                                                                  },
+                                                                                      "median_seconds":  {
+                                                                                                             "absolute_change":  -0.328,
+                                                                                                             "baseline":  5.023,
+                                                                                                             "candidate":  4.695,
+                                                                                                             "percent_change":  -6.53
+                                                                                                         },
+                                                                                      "median_time_to_actionable_result_seconds":  {
+                                                                                                                                       "absolute_change":  -0.262,
+                                                                                                                                       "baseline":  2.629,
+                                                                                                                                       "candidate":  2.367,
+                                                                                                                                       "percent_change":  -9.97
+                                                                                                                                   }
+                                                                                  }
+                                                                  }
+                                               }
+               }
+}

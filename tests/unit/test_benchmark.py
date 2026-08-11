@@ -5,7 +5,15 @@ import sys
 from pathlib import Path
 
 from ai_dev_tools.cli import main
-from ai_dev_tools.runners.benchmark import compare_benchmarks, run_benchmark
+from ai_dev_tools.runners.benchmark import (
+    METRICS_PREFIX,
+    _execution_metrics,
+    _load_spec,
+    _trial_row,
+    compare_benchmarks,
+    run_benchmark,
+)
+from ai_dev_tools.utils.subprocess import CommandResult
 
 
 def _suite(root: Path) -> Path:
@@ -101,3 +109,55 @@ def test_compare_requires_different_variants_and_matching_cache_state(tmp_path: 
 
     assert compared.status == "invalid_configuration"
     assert compared.summary["reason_code"] == "INCOMPARABLE_BENCHMARK_RUNS"
+
+
+def test_trial_uses_private_execution_metrics_without_counting_them_as_visible_output() -> None:
+    reset = CommandResult(["reset"], 0, "", "", 0.1, False)
+    execution = CommandResult(
+        ["agent"],
+        0,
+        "concise result",
+        f'{METRICS_PREFIX}{{"commands": 7, "validation_subprocesses": 2, '
+        '"actionable_seconds": 0.25}\n',
+        0.5,
+        False,
+    )
+    validation = CommandResult(["validate"], 0, "verified\n", "", 0.2, False)
+
+    row = _trial_row(1, reset, execution, validation)
+
+    assert row["commands"] == 7
+    assert row["validation_subprocesses"] == 2
+    assert row["time_to_actionable_result_seconds"] == 0.35
+    assert row["agent_visible_bytes"] == len(b"concise resultverified")
+
+
+def test_invalid_execution_metrics_remain_visible_and_do_not_override_defaults() -> None:
+    execution = CommandResult(
+        ["agent"],
+        0,
+        "result",
+        f"{METRICS_PREFIX}not-json\n{METRICS_PREFIX}[1, 2]\nwarning",
+        0.5,
+        False,
+    )
+
+    metrics, visible = _execution_metrics(execution)
+
+    assert metrics == {}
+    assert f"{METRICS_PREFIX}not-json" in visible
+    assert f"{METRICS_PREFIX}[1, 2]" in visible
+    assert "warning" in visible
+
+def test_versioned_agent_workflow_manifests_share_the_final_fixture() -> None:
+    root = Path(__file__).resolve().parents[2]
+    scenarios = ("repair", "affected", "multiturn", "monorepo")
+
+    for scenario in scenarios:
+        manifest = root / "examples" / "benchmarks" / f"agent-{scenario}-workflow.json"
+        spec = _load_spec(root, manifest)
+
+        assert spec["fixture_version"] == "1"
+        assert spec["working_directory"].name == "agent-workflow"
+        assert set(spec["variants"]) == {"baseline", "ai-dev"}
+        assert spec["validation_command"][-2:] == [scenario, "validate"]

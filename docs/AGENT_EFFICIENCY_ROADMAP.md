@@ -51,8 +51,9 @@ The current implementation now includes:
 
 The sections below remain the long-term target design. JavaScript and TypeScript now have a
 conservative top-level symbol extractor. Java, Rust, and PHP now have conservative structural
-extractors as well; deeper method and ecosystem-specific adapters remain planned. A first
-version of reproducible local A/B workflow benchmarks is implemented in ai-dev benchmark.
+extractors as well; deeper method and ecosystem-specific adapters remain planned. A reproducible local A/B benchmark runner is implemented in `ai-dev benchmark`. Versioned real-agent
+fixtures now cover repair, affected-test selection, multi-turn context reuse, and monorepo
+workspace routing, with independent full validation and sanitized raw trial data.
 
 ## Recommended capabilities
 

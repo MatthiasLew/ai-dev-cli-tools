@@ -43,7 +43,13 @@ Each run records median end-to-end time, time to an actionable result, standard 
 commands, validation subprocesses, masked agent-visible bytes, estimated tokens, timeouts,
 correctness, fixture identity, and a local machine profile. Token estimates use
 masked_utf8_bytes_divided_by_4; they are a stable approximation, not a model tokenizer claim.
-Raw JSON and compact Markdown reports stay under .ai/benchmarks/.
+Raw JSON and compact Markdown reports stay under `.ai/benchmarks/`.
+
+A suite variant may emit one private `AI_DEV_BENCHMARK_METRICS=` JSON line on stderr to
+report its real command count, validation subprocess count, and time to its first actionable
+result. The runner validates and removes that line before counting agent-visible bytes. Missing or
+invalid metrics safely fall back to the generic runner measurements.
+
 ## Included suites
 
 `examples/benchmarks/mcp-recurring-status.json` compares recurring project status collection.
@@ -56,3 +62,38 @@ A five-trial cold run of `symbol-diff-context` on the Windows development fixtur
 estimated tokens from 613 to 142 (-76.84%), and median duration from 1.052 s to 0.953 s
 (-9.41%). These are fixture measurements, not universal performance claims; rerun the suite on
 the target repository and machine before making product decisions.
+## Versioned agent-workflow fixture
+
+The `examples/benchmarks/fixtures/agent-workflow` fixture and its four manifests exercise the
+representative workflows required by the roadmap:
+
+- `agent-repair-workflow.json`: diagnose and repair a tax-calculation defect;
+- `agent-affected-workflow.json`: select affected tests from a larger unrelated test set;
+- `agent-multiturn-workflow.json`: avoid rereading unchanged context on a second turn;
+- `agent-monorepo-workflow.json`: route a changed file to its owning workspace and focused tests.
+
+Every candidate and baseline trial is followed by a separate full-fixture pytest run. Thus a
+focused candidate cannot pass merely by omitting a failing unrelated test.
+
+A three-trial cold run on Windows 11 with CPython 3.14 produced the following medians:
+
+| Suite | Baseline tokens | ai-dev tokens | Token change | Time change | Correct trials |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| repair | 2,221 | 954 | -57.05% | -0.36% | 3/3 + 3/3 |
+| affected tests | 140 | 46 | -67.14% | +10.92% | 3/3 + 3/3 |
+| multi-turn | 4,435 | 1,897 | -57.23% | +20.01% | 3/3 + 3/3 |
+| monorepo | 2,246 | 143 | -93.63% | -6.53% | 3/3 + 3/3 |
+
+The candidate used one additional command in every suite. These measurements therefore support a
+large context reduction, but do not claim a universal latency or command-count improvement. They
+are a small local sample and should be rerun on each target environment. The sanitized raw trial
+rows, comparison metrics, machine profile, fixture version, and estimation method are stored in
+[`docs/benchmarks/agent-workflows-windows-py314-2026-08-11.json`](benchmarks/agent-workflows-windows-py314-2026-08-11.json).
+
+To reproduce a suite, run both variants and compare the generated JSON reports:
+
+~~~bash
+ai-dev benchmark run --suite examples/benchmarks/agent-repair-workflow.json --variant baseline --trials 3 --cache-state cold
+ai-dev benchmark run --suite examples/benchmarks/agent-repair-workflow.json --variant ai-dev --trials 3 --cache-state cold
+ai-dev benchmark compare .ai/benchmarks/runs/<baseline>.json .ai/benchmarks/runs/<candidate>.json
+~~~
