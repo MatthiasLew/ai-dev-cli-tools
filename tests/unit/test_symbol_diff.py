@@ -48,6 +48,26 @@ def test_symbol_diff_reports_modified_python_symbol_signature_and_tests(tmp_path
     assert result["summary"]["symbols_changed"] == 1
 
 
+def test_symbol_diff_distinguishes_same_java_method_name_by_owner(tmp_path: Path) -> None:
+    original = (
+        "class First {\n  public int run() { return 1; }\n}\n\n"
+        "class Second {\n  public int run() { return 1; }\n}\n"
+    )
+    changed = (
+        "class First {\n  public int run() { return 2; }\n}\n\n"
+        "class Second {\n  public int run() { return 3; }\n}\n"
+    )
+    _repository(tmp_path, {"Service.java": original})
+    (tmp_path / "Service.java").write_text(changed, encoding="utf-8")
+
+    result = analyze_symbol_diff(tmp_path, ["Service.java"])
+
+    method_names = {
+        item["name"] for item in result["symbols"] if item["kind"] == "method"
+    }
+    assert method_names == {"First.run", "Second.run"}
+
+
 def test_symbol_diff_reports_deleted_and_untracked_symbols(tmp_path: Path) -> None:
     _repository(tmp_path, {"src/old.py": "def removed():\n    return 1\n"})
     (tmp_path / "src/old.py").unlink()

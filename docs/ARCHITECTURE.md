@@ -34,11 +34,12 @@ The stable `runners.check` facade orchestrates execution and re-exports its publ
 
 `context.models` owns budgets and file contracts. `context.selection` owns candidate ranking inputs, security exclusions, file reading, and bounded language dependency hints. The stable builder facade coordinates these strategies and report rendering.
 
-Current context limitations:
+Current context status:
 
 - Monorepo/workspace detection and per-subproject command routing: implemented.
 - Per-subproject check and bootstrap working directories: implemented.
-- Runtime version validation: partial.
+- Runtime requirement detection and version validation: implemented.
+- Dependency analysis remains intentionally bounded and static.
 
 ## Packaging Smoke
 

@@ -290,7 +290,7 @@ def select_structural_symbols(
         key=lambda item: (_symbol_score(item.name, task_tokens), -item.start_line),
         reverse=True,
     )
-    local_names = {item.name for item in definitions}
+    local_names = {item.name: _unqualified_name(item.name) for item in definitions}
     source_lines = display_source.splitlines(keepends=True)
     plain_lines = source.splitlines(keepends=True)
     selected: list[SymbolSnippet] = []
@@ -303,8 +303,9 @@ def select_structural_symbols(
         body = "".join(plain_lines[item.start_line - 1 : item.end_line])
         referenced = sorted(
             name
-            for name in local_names
-            if name != item.name and re.search(rf"(?<![\w$]){re.escape(name)}(?![\w$])", body)
+            for name, local_name in local_names.items()
+            if name != item.name
+            and re.search(rf"(?<![\w$]){re.escape(local_name)}(?![\w$])", body)
         )
         remaining = _append_section(
             sections,
@@ -366,7 +367,11 @@ def _task_tokens(task: str) -> set[str]:
 
 def _name_tokens(name: str) -> set[str]:
     split = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
-    return {token for token in split.split("_") if token}
+    return set(re.findall(r"[a-z0-9]+", split))
+
+
+def _unqualified_name(name: str) -> str:
+    return re.split(r"\.|::", name)[-1]
 
 
 def _symbol_score(name: str, task_tokens: set[str]) -> int:
@@ -563,6 +568,13 @@ def _additional_language_definitions(
                 "method",
                 {1},
             ),
+            (
+                re.compile(
+                    r"\s*(?:(?:public|protected|private)\s+)?([A-Za-z_$][\w$]*)\s*\("
+                ),
+                "constructor",
+                {1},
+            ),
         )
     elif suffix == ".rs":
         patterns = (
@@ -615,4 +627,40 @@ def _additional_language_definitions(
             if end_line is not None:
                 found.append(SourceSymbol(match.group(1), kind, line_index + 1, end_line))
             break
-    return found
+    return _qualify_additional_symbols(found, suffix)
+
+
+def _qualify_additional_symbols(
+    symbols: list[SourceSymbol], suffix: str
+) -> list[SourceSymbol]:
+    owner_kinds = {"impl", "trait"} if suffix == ".rs" else {"class", "interface", "trait", "enum"}
+    member_kinds = {"function"} if suffix == ".rs" else {"method", "constructor"}
+    separator = "::" if suffix == ".rs" else "."
+    qualified: list[SourceSymbol] = []
+    for symbol in symbols:
+        if symbol.kind not in member_kinds:
+            qualified.append(symbol)
+            continue
+        owners = [
+            candidate
+            for candidate in symbols
+            if candidate.kind in owner_kinds
+            and candidate.start_line < symbol.start_line
+            and candidate.end_line >= symbol.end_line
+        ]
+        owner = min(owners, key=lambda item: item.end_line - item.start_line) if owners else None
+        if symbol.kind == "constructor" and (owner is None or symbol.name != owner.name):
+            continue
+        if owner is None:
+            kind = "function" if suffix == ".php" and symbol.kind == "method" else symbol.kind
+            qualified.append(SourceSymbol(symbol.name, kind, symbol.start_line, symbol.end_line))
+            continue
+        qualified.append(
+            SourceSymbol(
+                f"{owner.name}{separator}{symbol.name}",
+                symbol.kind,
+                symbol.start_line,
+                symbol.end_line,
+            )
+        )
+    return qualified

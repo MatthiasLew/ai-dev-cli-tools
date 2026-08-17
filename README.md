@@ -241,10 +241,10 @@ git diff --check
 
 - Monorepo/workspace detection and per-subproject command routing: implemented.
 - Per-subproject check and bootstrap working directories: implemented.
-- Runtime version validation: partial.
+- Runtime requirement detection and version validation: implemented.
 - `context build` is implemented as a bounded local context pack builder.
 - `bootstrap` is implemented as a conservative local setup planner/executor.
-- Auto-commit, auto-push, and GUI remain out of scope or planned.
+- Auto-commit, auto-push, destructive cleanup, remote source transmission, and GUI are intentionally out of scope.
 
 ## Intentional Limits
 Version 0.5.0a1 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.

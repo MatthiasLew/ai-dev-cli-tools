@@ -8,6 +8,10 @@
 - Add optional exact tiktoken accounting, provider usage normalization, and enforced per-category token budgets for context packs.
 - Add bounded multi-round context refinement driven by failures, changed symbols, dependencies, and expandable evidence.
 - Add opt-in deterministic prose/log deduplication with fail-closed protected-evidence fingerprints.
+- Add owner-qualified Java/PHP methods and Rust impl/trait functions, Java constructor detection,
+  and correct global PHP function classification.
+- Replace the completed historical backlog with an active backlog and mark every roadmap capability
+  as implemented or partial against the supported CLI.
 
 - Document research-backed selective retrieval, prompt-cache layout, observation lifecycle, token accounting, and safe compression priorities.
 - Add local stage timing records, configurable performance budgets, and latest/compare diagnostics.
