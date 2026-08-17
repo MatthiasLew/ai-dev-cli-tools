@@ -78,9 +78,9 @@ Bootstrap writes:
 
 The JSON summary includes project type, package manager, dry-run/explain mode, planned and executed commands, `.venv` and `.env` creation status, smoke check status, missing tools, and the full plan.
 
-## Limits
+## Status and limits
 
 - Monorepo/workspace detection and per-subproject command routing: implemented.
 - Per-subproject check and bootstrap working directories: implemented.
-- Runtime version validation: partial.
+- Runtime requirement detection and version validation: implemented.
 - Integration tests for package managers are conditional on tools available locally.

@@ -68,8 +68,9 @@ the matching implementation. Syntax errors, small files, unsupported languages, 
 without recognized top-level declarations use the existing bounded file-prefix fallback.
 
 Java, Rust, and PHP use the same bounded selection contract with conservative structural
-extractors. Java and PHP include class methods; Rust includes top-level functions, structs, enums,
-traits, and impl blocks. Ambiguous or unbalanced input always falls back to the file prefix.
+extractors. Java includes qualified methods and constructors, PHP distinguishes qualified methods
+from global functions, and Rust includes top-level declarations plus qualified functions inside
+traits and impl blocks. Ambiguous or unbalanced input always falls back to the file prefix.
 
 ## Symbol-level diffs
 
@@ -127,5 +128,5 @@ The builder excludes `.env`, private keys, binary files, cache directories, buil
 
 - Monorepo/workspace detection and per-subproject command routing: implemented.
 - Per-subproject check and bootstrap working directories: implemented.
-- Runtime version validation: partial.
+- Runtime requirement detection and version validation: implemented.
 - Dependency analysis is lightweight and static for Python, JS/TS, Java, Rust, and PHP.

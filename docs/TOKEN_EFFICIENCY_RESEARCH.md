@@ -1,7 +1,7 @@
 # Token-efficiency research for coding agents
 
-This document turns external research and current provider guidance into implementation candidates
-for `ai-dev`. It distinguishes fewer model input tokens from lower billed input through provider
+This document records how external research and provider guidance informed implemented `ai-dev`
+features. It distinguishes fewer model input tokens from lower billed input through provider
 caching: cached tokens can cost less and run faster while still occupying the context window.
 
 ## Evidence-backed mechanisms
@@ -18,16 +18,9 @@ selective retrieval produced up to 70% inference speedup without harming measure
 exact learned policy is model-specific, but the safe product lesson is applicable: retrieval must
 be optional and measured, not automatic.
 
-Recommended interface:
-
-~~~bash
-ai-dev context build --retrieval auto|always|never
-ai-dev context explain-retrieval
-~~~
-
-The report should expose `retrieval_decision`, confidence, signals, omitted candidates, and a
-stable expansion command. Benchmarks must measure false-negative selection and final full-test
-correctness.
+**Status: implemented.** Use `ai-dev context build --retrieval auto|always|never --explain`.
+Reports expose the decision, confidence, reason code, signals, omitted candidates, expansion
+evidence, and a related-test false-negative proxy.
 
 ### 2. Cache-friendly stable prefixes
 
@@ -40,10 +33,10 @@ Therefore agent integrations should emit deterministic sections in this order:
 3. content-addressed repository facts and symbol references;
 4. variable Git state, failures, task, and latest tool observations.
 
-Add a `cache_layout` block to the agent contract with a stable prefix fingerprint and recommended
-breakpoint positions. Never include timestamps, absolute paths, random evidence IDs, or volatile
-ordering in the stable prefix. Record provider-reported cached-token reads/writes when an
-integration supplies them; do not claim savings from a local estimate alone.
+**Status: implemented.** `ai-dev cache layout` emits the `cache_layout` contract with a stable
+prefix fingerprint and recommended breakpoint positions. The stable prefix excludes timestamps,
+absolute paths, random evidence IDs, and volatile ordering. Provider-reported cached-token usage is
+recorded only when supplied by an integration.
 
 Prompt caching reduces billed computation and latency, but cached prefixes still occupy the model
 context window. It complements rather than replaces context reduction.
@@ -61,9 +54,9 @@ The integration contract should describe three states:
 - `referenced`: keep an evidence ID, fingerprint, size, and retrieval command;
 - `expired`: content changed and must be recomputed.
 
-Anthropic's current context guidance explicitly recommends compaction and clearing old tool results
-for long-running agentic workflows. Local evidence references make the same pattern provider-neutral
-and auditable.
+**Status: implemented.** The observation lifecycle retains live failures, warnings, and final
+verification while replacing superseded results with expandable content-addressed references. This
+makes provider guidance on compaction and tool-result clearing provider-neutral and auditable.
 
 ### 4. Hierarchical and iterative retrieval
 
@@ -80,6 +73,9 @@ to refine retrieval after the first failure signature, changed symbol, or reques
 Each iteration must have a strict byte/token budget and stop when no new high-confidence evidence
 appears.
 
+**Status: implemented.** `context build --refine`, `--refinement-rounds`, and
+`--refinement-max-files` provide bounded deterministic refinement.
+
 ### 5. Exact token accounting and class budgets
 
 Keep raw UTF-8 bytes as the provider-neutral baseline, but optionally use the tokenizer selected by
@@ -87,15 +83,15 @@ an integration. Record input, tool-result, cached-input, cache-write, and output
 Apply independent budgets to source, diffs, tests, logs, repository maps, and history so one noisy
 class cannot consume the entire pack.
 
-A useful default policy is to reserve most context for task-matched source and failures, retain a
-small verification allowance, and leave headroom for the model response. Exact defaults should be
-chosen from the versioned A/B benchmark rather than hard-coded from intuition.
+**Status: implemented.** Optional exact local tokenizers, provider usage normalization, and
+per-category budgets cover source, diffs, tests, logs, maps, history, cached input, and output.
+Defaults remain explicit and benchmarkable rather than inferred from provider claims.
 
 ### 6. Optional semantic prompt compression
 
 LLMLingua and LLMLingua-2 show that learned prompt compression can reduce prose-heavy prompts, but
-it adds a model/runtime dependency and can alter exact content. It should therefore be an optional
-adapter, never the default core path.
+it adds a model/runtime dependency and can alter exact content. It is not part of the supported core
+path.
 
 Safe scope:
 
@@ -106,17 +102,20 @@ Safe scope:
 - reject compressed output when it is larger;
 - benchmark task correctness and end-to-end latency, including compression overhead.
 
-This feature should remain deferred until deterministic selection, cache layout, and observation
-clearing are measured, because those mechanisms add no model dependency and preserve exact data.
+The supported implementation is deliberately limited to deterministic prose and repetitive-log
+deduplication. Learned/model-based compression remains deferred because it adds a model dependency
+and cannot guarantee preservation of the exact evidence contract.
 
-## Recommended implementation order
+## Implementation outcome
 
-1. Selective retrieval gate with explainable abstention and a conservative fallback.
-2. Observation lifecycle with evidence-reference replacement for superseded tool results.
-3. Cache-friendly stable-prefix manifest in the agent integration contract.
-4. Exact/provider token accounting and per-content-class budgets.
-5. Hierarchical retrieval refinement driven by failures and symbol references.
-6. Optional semantic compression adapter behind an explicit feature flag.
+1. Selective retrieval with explainable abstention and conservative fallback is implemented.
+2. Observation lifecycle replacement uses expandable content-addressed evidence.
+3. `cache layout` emits a deterministic stable-prefix manifest and breakpoint recommendations.
+4. Exact optional tokenizer/provider accounting and per-category budgets are implemented.
+5. Bounded hierarchical refinement uses failures, changed symbols, dependencies, and evidence IDs.
+6. `--compression conservative` provides deterministic, fail-closed prose/log deduplication.
+   Learned/model-based paraphrasing remains disabled after evaluation because it cannot yet preserve
+   the required exact evidence contract.
 
 ## Sources
 
