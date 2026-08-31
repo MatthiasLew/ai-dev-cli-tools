@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ai_dev_tools.cache.repository import update_repository_index
 
-MANIFEST_SCHEMA_VERSION = "1"
+MANIFEST_SCHEMA_VERSION = "2"
 MANIFEST_RELATIVE_PATH = Path(".ai/cache/context-manifest.json")
 MANIFEST_HISTORY_RELATIVE_PATH = Path(".ai/cache/context-manifests")
 _CONTEXT_ID = re.compile(r"^[0-9a-f]{16}$")
@@ -43,11 +43,13 @@ def select_incremental(
     root: Path,
     candidates: list[Path],
     previous_hashes: dict[str, str] | None = None,
+    *,
+    memory_scope: str | None = None,
 ) -> IncrementalSelection:
     index = update_repository_index(root)
     current_hashes = _index_hashes(index.get("entries"))
     if previous_hashes is None:
-        previous_hashes = _manifest_hashes(root)
+        previous_hashes = _manifest_hashes(root, memory_scope)
     selected: list[Path] = []
     reused: list[str] = []
     for path in candidates:
@@ -71,6 +73,8 @@ def save_incremental_manifest(
     root: Path,
     state: IncrementalSelection,
     emitted_paths: list[str],
+    *,
+    memory_scope: str | None = None,
 ) -> tuple[Path, Path, str]:
     hashes = {
         path: digest
@@ -87,6 +91,7 @@ def save_incremental_manifest(
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "context_id": context_id,
         "generated_at": datetime.now(UTC).isoformat(),
+        "memory_scope": memory_scope,
         "files": hashes,
     }
     resolved = root.resolve()
@@ -98,8 +103,24 @@ def save_incremental_manifest(
     return manifest_path, history_path, context_id
 
 
-def _manifest_hashes(root: Path) -> dict[str, str]:
-    return _read_manifest(root.resolve() / MANIFEST_RELATIVE_PATH) or {}
+def _manifest_hashes(root: Path, memory_scope: str | None) -> dict[str, str]:
+    path = root.resolve() / MANIFEST_RELATIVE_PATH
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(value, dict) or value.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+        return {}
+    if memory_scope is not None and value.get("memory_scope") != memory_scope:
+        return {}
+    files = value.get("files")
+    if not isinstance(files, dict):
+        return {}
+    return {
+        str(key): item
+        for key, item in files.items()
+        if isinstance(key, str) and isinstance(item, str)
+    }
 
 
 def _read_manifest(path: Path, expected_id: str | None = None) -> dict[str, str] | None:

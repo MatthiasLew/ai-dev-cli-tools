@@ -13,10 +13,12 @@ COMMAND_FLAGS = (
     "--max-chars --max-file-chars --max-diff-chars --include --exclude --changed-only "
     "--staged-only --no-git --format --output --incremental --since --retrieval --tokenizer "
     "--token-budget --provider-usage --refine --refinement-rounds --refinement-max-files "
-    "--compression --debounce --poll --initial --max-runs --max-updates --idle-timeout --backend "
+    "--compression --adaptive --debounce --poll --initial --max-runs --max-updates "
+    "--idle-timeout --backend "
     "--title --path --depends-on --agent --input "
     "--lease-seconds --suite --variant --trials --cache-state --symbol --tail --manifest "
-    "--max-time-regression --max-token-regression --min-precision --min-recall "
+    "--max-time-regression --max-token-regression --min-token-reduction --min-precision "
+    "--min-recall "
     "--max-false-negatives --host --port --force"
 )
 

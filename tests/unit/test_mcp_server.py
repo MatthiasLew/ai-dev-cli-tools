@@ -179,6 +179,11 @@ def test_context_tool_is_preview_only_and_bounded_by_default(tmp_path: Path) -> 
     assert result["isError"] is False
     structured = result["structuredContent"]
     assert structured["summary"]["budget"]["max_chars"] == 2000
+    assert structured["summary"]["adaptive_context"]["enabled"] is True
+    assert structured["summary"]["adaptive_context"]["explicit_overrides"] == [
+        "max_chars",
+        "max_file_chars",
+    ]
     assert structured["artifacts"] == []
     assert not (tmp_path / ".ai" / "context" / "context-latest.json").exists()
 

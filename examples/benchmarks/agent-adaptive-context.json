@@ -1,0 +1,32 @@
+{
+    "schema_version": "1.0",
+    "name": "agent-adaptive-context",
+    "fixture_version": "1",
+    "working_directory": "examples/benchmarks/fixtures/agent-workflow",
+    "reset_command": [
+        "python",
+        "../../../../scripts/benchmark_agent_workflow.py",
+        "adaptive",
+        "reset"
+    ],
+    "validation_command": [
+        "python",
+        "../../../../scripts/benchmark_agent_workflow.py",
+        "adaptive",
+        "validate"
+    ],
+    "variants": {
+        "baseline": [
+            "python",
+            "../../../../scripts/benchmark_agent_workflow.py",
+            "adaptive",
+            "baseline"
+        ],
+        "ai-dev": [
+            "python",
+            "../../../../scripts/benchmark_agent_workflow.py",
+            "adaptive",
+            "ai-dev"
+        ]
+    }
+}

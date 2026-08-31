@@ -53,6 +53,7 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
             profile="minimal",
             incremental=not options.explain,
             explain=options.explain,
+            adaptive=True,
         ),
     )
     timings["context"] = _elapsed(started)
@@ -93,6 +94,7 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
                 "selected_files": _selected_paths(context_report),
                 "incremental": context_report.summary.get("incremental", {}),
                 "retrieval": context_report.summary.get("retrieval", {}),
+                "adaptive_context": context_report.summary.get("adaptive_context", {}),
             },
         },
     )
@@ -124,6 +126,7 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
             "selected_files": context_report.summary.get("selected_files", []),
             "incremental": context_report.summary.get("incremental", {}),
             "budget": context_report.summary.get("budget", {}),
+            "adaptive_context": context_report.summary.get("adaptive_context", {}),
         },
         "observations": observations,
         "performance": {

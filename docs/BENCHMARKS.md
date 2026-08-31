@@ -48,8 +48,11 @@ masked_utf8_bytes_divided_by_4; they are a stable approximation, not a model tok
 Raw JSON and compact Markdown reports stay under `.ai/benchmarks/`.
 
 `benchmark gate` fails when correctness differs, candidate time or token regressions exceed their
-bounds, precision/recall fall below their floors, or false negatives exceed the allowance. The
-versioned corpus runs all four representative agent tasks and applies the shared thresholds from
+bounds, required token reduction is not achieved, precision/recall fall below their floors, or false negatives exceed the allowance. Use
+`--min-token-reduction PERCENT` to require a measured improvement rather than merely permitting no
+regression. The
+versioned corpus runs five representative agent tasks, including adaptive-off versus adaptive-on
+context selection, and applies the shared thresholds from
 `examples/benchmarks/agent-corpus.json`; it is suitable as a CI release gate.
 
 A suite variant may emit one private `AI_DEV_BENCHMARK_METRICS=` JSON line on stderr to

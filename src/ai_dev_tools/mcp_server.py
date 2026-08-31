@@ -228,6 +228,7 @@ class LocalMcpServer:
                         "changed_only": {"type": "boolean", "default": False},
                         "staged_only": {"type": "boolean", "default": False},
                         "incremental": {"type": "boolean", "default": True},
+                        "adaptive": {"type": "boolean", "default": True},
                         "tokenizer": {
                             "type": "string",
                             "enum": ["estimate", "cl100k_base", "o200k_base"],
@@ -431,6 +432,7 @@ class LocalMcpServer:
             "changed_only",
             "staged_only",
             "incremental",
+            "adaptive",
             "retrieval",
             "tokenizer",
             "token_budgets",
@@ -458,12 +460,25 @@ class LocalMcpServer:
                 ContextOptions(
                     task=task,
                     profile=profile,
-                    max_chars=_integer(arguments, "max_chars", 20000, 1000, 100000),
-                    max_files=_integer(arguments, "max_files", 20, 1, 100),
-                    max_file_chars=_integer(arguments, "max_file_chars", 4000, 200, 20000),
+                    max_chars=(
+                        _integer(arguments, "max_chars", 20000, 1000, 100000)
+                        if "max_chars" in arguments
+                        else 50_000
+                    ),
+                    max_files=(
+                        _integer(arguments, "max_files", 20, 1, 100)
+                        if "max_files" in arguments
+                        else 30
+                    ),
+                    max_file_chars=(
+                        _integer(arguments, "max_file_chars", 4000, 200, 20000)
+                        if "max_file_chars" in arguments
+                        else 8_000
+                    ),
                     changed_only=_boolean(arguments, "changed_only", False),
                     staged_only=_boolean(arguments, "staged_only", False),
                     incremental=_boolean(arguments, "incremental", True),
+                    adaptive=_boolean(arguments, "adaptive", True),
                     retrieval=cast(
                         Literal["auto", "always", "never"],
                         _choice(arguments, "retrieval", "auto", {"auto", "always", "never"}),

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
 from ai_dev_tools.config import load_settings
+from ai_dev_tools.context.adaptive import adaptive_task_scope, apply_adaptive_budget
 from ai_dev_tools.context.compression import apply_safe_compression
 from ai_dev_tools.context.incremental import (
     IncrementalSelection,
@@ -55,6 +57,7 @@ from ai_dev_tools.utils.subprocess import run_command
 def build_context(project_root: Path, options: ContextOptions) -> Report:
     stage_started = time.monotonic()
     timings: dict[str, float] = {}
+    original_options = options
     options = _apply_context_profile(options)
     settings = load_settings(project_root)
     root = settings.project_root
@@ -114,6 +117,13 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         map_summary=repo_map.summary,
         related_tests=related_tests,
     )
+    options, adaptive_context = apply_adaptive_budget(
+        options,
+        original_options,
+        changed_files=len(changed_files),
+        candidate_files=len(candidates),
+        latest_errors=len(latest_errors),
+    )
     candidate_pool = dict(candidates)
     candidates, retrieval_decision = apply_retrieval_gate(
         root, options, candidates, changed_files, related_tests
@@ -141,7 +151,10 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         ordered_paths = [path for path in ordered_paths if _rel(root, path) in set(changed_files)]
     incremental_state: IncrementalSelection | None = None
     if options.incremental or options.since is not None:
-        incremental_state = select_incremental(root, ordered_paths, base_hashes)
+        memory_scope = adaptive_task_scope(options.task) if options.adaptive else None
+        incremental_state = select_incremental(
+            root, ordered_paths, base_hashes, memory_scope=memory_scope
+        )
         ordered_paths = incremental_state.selected
     ordered_paths = ordered_paths[: max(options.max_files, 0)]
 
@@ -174,6 +187,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
                     incremental_state, base_context_id=options.since
                 ),
                 "retrieval": retrieval_decision.to_dict(),
+                "adaptive_context": adaptive_context,
                 "refinement": refinement,
                 "performance": {"stages_seconds": timings},
             }
@@ -207,6 +221,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
                 incremental_state, len(selected), base_context_id=options.since
             ),
             "retrieval": retrieval_decision.to_dict(),
+            "adaptive_context": adaptive_context,
             "refinement": refinement,
             "selected_files": [item.to_dict() for item in selected],
             "rejected_files": [item.to_dict() for item in rejected],
@@ -218,6 +233,8 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     )
 
     summary["compression"] = apply_safe_compression(summary, options.compression)
+    character_budget = _apply_context_character_budget(summary, options.max_chars)
+    summary["character_budget"] = character_budget
     token_accounting = apply_token_accounting(
         root,
         summary,
@@ -227,7 +244,9 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     )
     summary["token_accounting"] = token_accounting
     accounting_partial = bool(
-        token_accounting["fallback_reason"]
+        character_budget["content_omitted"]
+        or character_budget["target_exceeded"]
+        or token_accounting["fallback_reason"]
         or token_accounting["budget_violations"]
         or any(item.get("truncated") is True for item in token_accounting["categories"].values())
     )
@@ -287,6 +306,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
             root,
             incremental_state,
             [item.path for item in selected],
+            memory_scope=(adaptive_task_scope(options.task) if options.adaptive else None),
         )
         incremental = summary.get("incremental")
         if isinstance(incremental, dict):
@@ -313,7 +333,11 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     if options.format in {"markdown", "both"}:
         md_path.write_text(mask_text(_render_markdown(report, report.summary)), encoding="utf-8")
     if options.format in {"json", "both"}:
-        json_text = mask_text(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        json_text = mask_text(
+            json.dumps(
+                report.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            )
+        )
         json_path.write_text(json_text, encoding="utf-8")
     timings["output_write"] = _elapsed(stage_started)
     summary["performance"] = {"stages_seconds": timings}
@@ -370,7 +394,7 @@ def _base_summary(
             "runtime_requirements": scan_summary.get("runtime_requirements", []),
             "workspaces": scan_summary.get("workspaces", []),
         },
-        "git_state": git_summary,
+        "git_state": _compact_git_state(git_summary),
         "changed_files": _extract_changed_files(git_summary),
         "changed_symbols": git_summary.get("changed_symbols", []) if git_summary else [],
         "symbol_diff_summary": git_summary.get("symbol_diff_summary", {}) if git_summary else {},
@@ -501,6 +525,9 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
         "",
         "## Retrieval Decision",
         _json_block(summary.get("retrieval", {})),
+        "",
+        "## Adaptive Context",
+        _json_block(summary.get("adaptive_context", {})),
         "",
         "## Validation Plan",
         _json_block(summary.get("validation_plan", [])),
@@ -688,6 +715,138 @@ def _budget_summary(options: ContextOptions, used_chars: int, truncated: bool) -
         "used_chars": used_chars,
         "truncated": truncated,
     }
+
+
+def _apply_context_character_budget(
+    summary: dict[str, object], max_chars: int
+) -> dict[str, object]:
+    target = max(1_000, int(max(max_chars, 0) * 0.65))
+    original_chars = len(json.dumps(summary, ensure_ascii=False, default=str))
+    omitted_files: list[str] = []
+    omitted_diffs: list[str] = []
+    current_chars = original_chars
+    for key, omitted in (("selected_files", omitted_files), ("diffs", omitted_diffs)):
+        values = summary.get(key)
+        if not isinstance(values, list):
+            continue
+        for item in reversed(values):
+            if current_chars <= target or not isinstance(item, dict):
+                break
+            content = item.get("content")
+            if not isinstance(content, str) or len(content) <= 256:
+                continue
+            item["original_chars"] = len(content)
+            item["omitted_content_sha256"] = hashlib.sha256(
+                content.encode("utf-8")
+            ).hexdigest()
+            snippets = item.get("snippets")
+            if isinstance(snippets, list) and snippets:
+                item["original_snippet_count"] = len(snippets)
+                item["snippets"] = []
+            item["content"] = ""
+            item["chars"] = 0
+            item["omitted_content"] = True
+            item["budget_reason_code"] = "GLOBAL_CONTEXT_BUDGET"
+            omitted.append(str(item.get("path") or item.get("name") or "unknown"))
+            current_chars = len(json.dumps(summary, ensure_ascii=False, default=str))
+    metadata_compacted = False
+    if current_chars > target:
+        metadata_compacted = _compact_context_metadata(summary)
+        current_chars = len(json.dumps(summary, ensure_ascii=False, default=str))
+    return {
+        "max_chars": max_chars,
+        "summary_target_chars": target,
+        "original_summary_chars": original_chars,
+        "final_summary_chars": current_chars,
+        "chars_avoided": max(original_chars - current_chars, 0),
+        "content_omitted": bool(omitted_files or omitted_diffs),
+        "omitted_files": omitted_files,
+        "omitted_diffs": omitted_diffs,
+        "target_exceeded": current_chars > max(max_chars, 0),
+        "metadata_compacted": metadata_compacted,
+        "expansion_command": "ai-dev explain <evidence-id> --tail 100",
+    }
+
+
+def _compact_git_state(value: dict[str, object] | None) -> dict[str, object] | None:
+    if value is None:
+        return None
+    scalar_keys = (
+        "state",
+        "states",
+        "branch",
+        "upstream",
+        "ahead",
+        "behind",
+        "diverged",
+        "detached_head",
+        "stash_count",
+        "diff_size_bytes",
+        "staged_diff_bytes",
+        "unstaged_diff_bytes",
+        "upstream_diff_bytes",
+        "diff_stat",
+    )
+    compact = {key: value[key] for key in scalar_keys if key in value}
+    for key in (
+        "changed_files",
+        "staged_files",
+        "unstaged_files",
+        "untracked_files",
+        "conflicted_files",
+        "large_changed_files",
+        "renamed_files",
+        "deleted_files",
+    ):
+        items = value.get(key)
+        compact[f"{key}_count"] = len(items) if isinstance(items, list) else 0
+    return compact
+
+
+def _compact_context_metadata(summary: dict[str, object]) -> bool:
+    compacted = False
+    symbols = summary.get("changed_symbols")
+    if isinstance(symbols, list):
+        clean = [item for item in symbols if isinstance(item, dict)]
+        summary["changed_symbols"] = [
+            {
+                key: item[key]
+                for key in (
+                    "path",
+                    "name",
+                    "kind",
+                    "change_type",
+                    "risk",
+                    "start_line",
+                    "end_line",
+                    "signature",
+                    "signature_changed",
+                    "reason_code",
+                )
+                if key in item
+            }
+            for item in clean[:12]
+        ]
+        summary["changed_symbols_omitted"] = max(len(clean) - 12, 0)
+        compacted = True
+    repository_map = summary.get("repository_map")
+    if isinstance(repository_map, dict):
+        omitted_counts: dict[str, int] = {}
+        for key, value in repository_map.items():
+            if isinstance(value, list) and len(value) > 10:
+                omitted_counts[str(key)] = len(value) - 10
+                repository_map[key] = value[:10]
+                compacted = True
+        if omitted_counts:
+            summary["repository_map_omitted"] = omitted_counts
+    retrieval = summary.get("retrieval")
+    if isinstance(retrieval, dict):
+        omitted = retrieval.get("omitted_candidates")
+        if isinstance(omitted, (list, tuple)) and len(omitted) > 20:
+            retrieval["omitted_candidates"] = list(omitted[:20])
+            retrieval["omitted_candidates_truncated"] = True
+            compacted = True
+    return compacted
 
 
 def _dict_list(value: object) -> list[dict[str, object]]:
