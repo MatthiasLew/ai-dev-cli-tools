@@ -154,11 +154,13 @@ def test_background_start_retries_dead_supervisor_once(
             return 1
 
     spawned: list[list[str]] = []
-    monkeypatch.setattr(
-        runner,
-        "_spawn_supervisor",
-        lambda command, cwd: spawned.append(command) or DeadSupervisor(),
-    )
+
+    def spawn_dead_supervisor(command: list[str], cwd: Path) -> DeadSupervisor:
+        del cwd
+        spawned.append(command)
+        return DeadSupervisor()
+
+    monkeypatch.setattr(runner, "_spawn_supervisor", spawn_dead_supervisor)
     states = iter(({}, {"status": "running", "supervisor_pid": 1, "child_pid": 2}))
     monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: next(states))
 
