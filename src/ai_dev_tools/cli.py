@@ -175,6 +175,17 @@ def build_parser() -> argparse.ArgumentParser:
     feedback.add_argument("--task", default="")
     feedback.add_argument("--explain", action="store_true")
     feedback.add_argument("--jobs", type=int, default=4)
+    feedback.add_argument(
+        "--ack-state",
+        default=None,
+        help="acknowledge a prior feedback state fingerprint to allow an unchanged receipt",
+    )
+    feedback.add_argument(
+        "--no-delta",
+        action="store_false",
+        dest="delta",
+        help="return the full feedback payload even when successful session state is unchanged",
+    )
 
     session = sub.add_parser("session")
     session_sub = session.add_subparsers(dest="session_command", required=True)
@@ -555,7 +566,13 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
 
         return run_feedback(
             project_root,
-            FeedbackOptions(task=args.task, explain=args.explain, jobs=args.jobs),
+            FeedbackOptions(
+                task=args.task,
+                explain=args.explain,
+                jobs=args.jobs,
+                delta=args.delta,
+                acknowledged_state=args.ack_state,
+            ),
         )
     if command == "session" and args.session_command == "status":
         from ai_dev_tools.runners.feedback import run_session_status

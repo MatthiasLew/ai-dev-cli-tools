@@ -177,6 +177,11 @@ class LocalMcpServer:
                     {
                         "task": {"type": "string", "maxLength": 2000, "default": ""},
                         "execute_checks": {"type": "boolean", "default": False},
+                        "delta": {"type": "boolean", "default": True},
+                        "acknowledged_state": {
+                            "type": "string",
+                            "maxLength": 64,
+                        },
                         "jobs": {"type": "integer", "minimum": 1, "maximum": 8, "default": 4},
                     }
                 ),
@@ -408,7 +413,10 @@ class LocalMcpServer:
         return _finish_report(run_agent_plan(self.project_root, task=task, mode=mode))
 
     def _feedback(self, arguments: JsonObject) -> JsonObject:
-        _validate_keys(arguments, {"task", "execute_checks", "jobs"})
+        _validate_keys(
+            arguments,
+            {"task", "execute_checks", "delta", "acknowledged_state", "jobs"},
+        )
         task = _string(arguments, "task", "", 2000)
         execute = _boolean(arguments, "execute_checks", False)
         jobs = _integer(arguments, "jobs", 4, 1, 8)
@@ -418,7 +426,15 @@ class LocalMcpServer:
         return _finish_report(
             run_feedback(
                 self.project_root,
-                FeedbackOptions(task=task, explain=not execute, jobs=jobs),
+                FeedbackOptions(
+                    task=task,
+                    explain=not execute,
+                    jobs=jobs,
+                    delta=_boolean(arguments, "delta", True),
+                    acknowledged_state=(
+                        _string(arguments, "acknowledged_state", "", 64) or None
+                    ),
+                ),
             )
         )
 

@@ -51,8 +51,8 @@ Raw JSON and compact Markdown reports stay under `.ai/benchmarks/`.
 bounds, required token reduction is not achieved, precision/recall fall below their floors, or false negatives exceed the allowance. Use
 `--min-token-reduction PERCENT` to require a measured improvement rather than merely permitting no
 regression. The
-versioned corpus runs five representative agent tasks, including adaptive-off versus adaptive-on
-context selection, and applies the shared thresholds from
+versioned corpus runs six representative agent tasks, including adaptive-off versus adaptive-on
+context selection and full versus session-delta feedback, and applies the shared thresholds from
 `examples/benchmarks/agent-corpus.json`; it is suitable as a CI release gate.
 
 A suite variant may emit one private `AI_DEV_BENCHMARK_METRICS=` JSON line on stderr to

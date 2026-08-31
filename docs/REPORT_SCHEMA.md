@@ -73,6 +73,13 @@ observation, `current_retained_reasons`, at most 20 compact `referenced` observa
 Referenced observations have stable `observation:<hash>` evidence IDs and can be retrieved through
 `ai-dev explain` from the local content-addressed evidence archive.
 
+Successful `feedback` reports also include `delta` with `enabled`, `reused`, `reason_code`, current
+and acknowledged state fingerprints, `chars_avoided`, and the expansion command. A client must pass
+the current fingerprint back explicitly before reuse is allowed. When `reused=true`,
+`validation`, `context`, and `observations` are receipts: repeated bodies are optional, while
+status, counts, context ID, evidence ID, and reason codes remain inline. Consumers must continue to
+treat failed, partial, or warning feedback as live evidence rather than an acknowledged delta.
+
 ## Progressive evidence and baselines
 
 Expandable entries receive deterministic `evidence_id` values. `metadata.progressive` reports
