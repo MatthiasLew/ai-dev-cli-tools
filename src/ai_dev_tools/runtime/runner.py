@@ -139,8 +139,19 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             "--",
             *plan.command,
         ]
-        _spawn_supervisor(supervisor_command, settings.project_root)
-        state = _wait_for_state(paths["metadata"], {"running", "exited"}, 10.0)
+        state: dict[str, object] = {}
+        startup_attempts = 0
+        for attempt in range(1, 3):
+            startup_attempts = attempt
+            supervisor = _spawn_supervisor(supervisor_command, settings.project_root)
+            state = _wait_for_state(paths["metadata"], {"running", "exited"}, 10.0)
+            if state.get("status") in {"running", "exited"}:
+                break
+            # Retry only after the supervisor itself has exited before publishing
+            # a handshake. A live supervisor must never be duplicated.
+            if supervisor.poll() is None:
+                break
+            time.sleep(0.1)
         readiness: dict[str, object] = {"status": "not_configured"}
         if state.get("status") != "running":
             report.status = "failed"
@@ -168,6 +179,7 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             "supervisor_pid": state.get("supervisor_pid"),
             "child_pid": state.get("child_pid"),
             "readiness": readiness,
+            "startup_attempts": startup_attempts,
             "startup_log": _tail_log(paths["log"], options.startup_log_lines),
             "stale_metadata_recovered": bool(current) and not _heartbeat_is_fresh(current),
         }
@@ -274,7 +286,7 @@ def _node_manager(root: Path) -> str:
     return "npm"
 
 
-def _spawn_supervisor(command: list[str], cwd: Path) -> None:
+def _spawn_supervisor(command: list[str], cwd: Path) -> subprocess.Popen[bytes]:
     flags = 0
     start_new_session = os.name != "nt"
     if os.name == "nt":
@@ -283,7 +295,7 @@ def _spawn_supervisor(command: list[str], cwd: Path) -> None:
             | getattr(subprocess, "DETACHED_PROCESS", 0)
             | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         )
-    subprocess.Popen(
+    return subprocess.Popen(
         command,
         cwd=cwd,
         stdin=subprocess.DEVNULL,
