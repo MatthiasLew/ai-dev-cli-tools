@@ -79,6 +79,29 @@ def test_qualified_members_distinguish_owners(
     assert expected_names <= {item.name for item in symbols}
 
 
+def test_java_nested_types_and_overloads_receive_stable_qualified_identities() -> None:
+    source = (
+        "class Outer {\n"
+        "  class Inner {\n"
+        "    Inner() {}\n"
+        "    Inner(int value) {}\n"
+        "    void run() {}\n"
+        "    void run(int value) {}\n"
+        "  }\n"
+        "}\n"
+    )
+
+    symbols = extract_source_symbols(source, ".java")
+
+    assert symbols is not None
+    names = {item.name for item in symbols}
+    assert "Outer.Inner" in names
+    assert "Outer.Inner.Inner()" in names
+    assert "Outer.Inner.Inner(int value)" in names
+    assert "Outer.Inner.run()" in names
+    assert "Outer.Inner.run(int value)" in names
+
+
 def test_structural_selection_prefers_task_symbol_and_reports_references() -> None:
     source = (
         "public class Service {\n"

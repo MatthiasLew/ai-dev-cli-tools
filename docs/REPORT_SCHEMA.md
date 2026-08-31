@@ -4,12 +4,16 @@ The machine-readable JSON Schema is stored in `docs/report-schema.json` and is c
 
 Current schema version: `1.1`.
 
+Within the tool's 1.x release line, required fields, status meanings, and existing reason codes are
+backward compatible. New summary fields are optional additions. Removing or changing the meaning
+of an existing field requires a report-schema version increment and a documented migration.
+
 Required fields:
 
 ```json
 {
   "schema_version": "1.1",
-  "tool_version": "0.5.0a1",
+  "tool_version": "1.0.0",
   "command": "check",
   "status": "success",
   "exit_code": 0,
@@ -84,7 +88,10 @@ Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing field
 
 `check` command entries include compact log-derived fields so agents do not need to read full logs by default. Parser results include `tool`, `parser`, `parser_confidence`, counts, first failure, project frames, repeated-message grouping, and full log paths.
 
-`check --mode changed` includes `changed_analysis` with `strategy`, `confidence`, `changed_files`, `selected_tests`, `selected_commands`, and `fallback_reason`.
+`check --mode changed` includes `changed_analysis` with `strategy`, `confidence`, `changed_files`, `selected_tests`, `selected_commands`, `fallback_reason`, and bounded `reason_paths` that explain why files and commands were selected.
+
+The check execution plan records each task's dependencies and resource class, together with the effective CPU, memory, I/O, and exclusive concurrency limits. A cancelled obsolete watch result is identified explicitly and is never retried or cached; watch summaries expose cancellation and queued-rerun counters.
+
 ## Safe compression
 
 Context reports expose `compression` with mode, considered/compressed/skipped files, original/final
@@ -107,7 +114,7 @@ maps, history, cached input, and output.
 
 ## Context Build Summary
 
-`context build` reports include `technologies`, `git_state`, `changed_files`, `changed_symbols`, `symbol_diff_summary`, `related_tests`, `validation_plan`, `selected_files`, `rejected_files`, `diffs`, `latest_errors`, `secret_findings`, `recent_commits`, `retrieval`, and `budget` under `summary`. The `retrieval` block records the requested mode, retrieve/abstain decision, confidence, reason code, signals, focused roots, bounded omitted paths, conservative fallback, expansion command, and expected/selected/missed related tests as a false-negative proxy. Each changed symbol includes its path, name, kind, change type, current line range, added/deleted line counts, bounded signature, signature-change flag, risk, related tests, confidence, and reason code.
+`context build` reports include `technologies`, `git_state`, `changed_files`, `changed_symbols`, `symbol_diff_summary`, `related_tests`, `validation_plan`, `selected_files`, `rejected_files`, `diffs`, `latest_errors`, `secret_findings`, `recent_commits`, `retrieval`, and `budget` under `summary`. Incremental reports include `incremental.context_id`, `base_context_id`, latest and historical manifest paths, and changed/reused counts. Reports created with `--compare` include `baseline_comparison` with readiness, new/resolved failures, status regressions, and a stable reason code. The `retrieval` block records the requested mode, retrieve/abstain decision, confidence, reason code, signals, focused roots, bounded omitted paths, conservative fallback, expansion command, and expected/selected/missed related tests as a false-negative proxy. Each changed symbol includes its path, name, kind, change type, current line range, added/deleted line counts, bounded signature, signature-change flag, risk, related tests, confidence, and reason code.
 
 Consumers should treat snippet and diff content as optional because budget limits may omit or truncate them. Minimal and review profiles may set `selection_strategy: symbol-diff` and `omitted_content: true`; `symbol_diff_fallbacks` identifies files for which conservative parsing was not possible. Secret values are masked before being written to Markdown or JSON artifacts.
 

@@ -1,32 +1,16 @@
 # TODO
 
-This file contains only active implementation work. Completed historical items were removed after
-the 0.5.0 alpha foundation was implemented and verified. Product status and rationale are recorded
-in `docs/AGENT_EFFICIENCY_ROADMAP.md`; released behavior is recorded in `CHANGELOG.md`.
+This file contains only active implementation work. The 1.0 backlog was implemented and moved to
+`CHANGELOG.md`; product status and rationale are recorded in
+`docs/AGENT_EFFICIENCY_ROADMAP.md`.
 
 An item is complete only when implementation, tests, user documentation, report contracts, and
 cross-platform behavior are covered where applicable.
 
-## P1 — Complete partial agent workflows
+## Active work
 
-- [ ] Add named historical context selection so incremental builds can compare against an explicit
-  prior context ID rather than only the latest manifest.
-- [ ] Integrate named baseline comparison directly into check and context workflows while preserving
-  the existing `baseline create/list/compare` commands and schema compatibility.
-- [ ] Add symbol-targeted evidence expansion without allowing references outside the project root.
-- [ ] Add deterministic `implement` and `docs` context profiles with documented budgets, ranking,
-  include/exclude precedence, and contract tests.
-
-## P2 — Improve selection and execution precision
-
-- [ ] Extend Java, Rust, and PHP structural adapters only where conservative parsing and fallback can
-  be maintained; cover overloads, nested declarations, constructors, and qualified identities.
-- [ ] Add generated-code relationships, richer configuration ownership, and shortest reason paths to
-  the bounded dependency/impact graph.
-- [ ] Extend the parallel scheduler with an explicit dependency graph and conservative local resource
-  limits while retaining deterministic report order and `--jobs 1` behavior.
-- [ ] Add safe cancellation of obsolete in-flight watch validation, preserving complete logs and
-  never terminating processes outside the active watch run.
+There are no known incomplete P1 or P2 implementation items for the 1.0 contract. New work must be
+added here with tests, documentation, report-contract impact, and cross-platform acceptance criteria.
 
 ## Deferred or explicitly out of scope
 

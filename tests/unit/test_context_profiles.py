@@ -41,6 +41,39 @@ def test_review_profile_enables_changed_only(tmp_path: Path) -> None:
 
 
 def test_context_profiles_are_stable_and_unknown_profile_fails(tmp_path: Path) -> None:
-    assert profile_names() == ("minimal", "debug", "review", "full")
+    assert profile_names() == ("minimal", "debug", "review", "implement", "docs", "full")
     with pytest.raises(ValueError, match="Unknown context profile"):
         build_context(tmp_path, ContextOptions(profile="unknown", no_git=True))
+
+
+@pytest.mark.parametrize(
+    ("profile", "max_chars", "max_files", "max_file_chars", "max_diff_chars"),
+    [
+        ("implement", 70_000, 40, 12_000, 18_000),
+        ("docs", 45_000, 35, 10_000, 12_000),
+    ],
+)
+def test_implement_and_docs_profiles_have_stable_contracts(
+    tmp_path: Path,
+    profile: str,
+    max_chars: int,
+    max_files: int,
+    max_file_chars: int,
+    max_diff_chars: int,
+) -> None:
+    (tmp_path / "README.md").write_text("demo", encoding="utf-8")
+
+    report = build_context(
+        tmp_path,
+        ContextOptions(profile=profile, no_git=True, explain=True, include=("README.md",)),
+    )
+
+    options = report.summary["options"]
+    assert options == {
+        **options,
+        "profile": profile,
+        "max_chars": max_chars,
+        "max_files": max_files,
+        "max_file_chars": max_file_chars,
+        "max_diff_chars": max_diff_chars,
+    }

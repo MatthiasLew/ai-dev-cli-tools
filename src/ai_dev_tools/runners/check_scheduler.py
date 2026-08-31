@@ -30,21 +30,37 @@ def schedule_checks(
     results: list[CommandResult] = []
     cancelled: list[CheckTask] = []
     first_failure_at: float | None = None
+    successful: set[str] = set()
+    failed: set[str] = set()
     groups = [tasks] if policy == "complete" else _feedback_groups(tasks)
     for group_index, group in enumerate(groups):
-        group_results = _execute_group(group, jobs, execute)
-        completed_tasks.extend(group)
-        results.extend(group_results)
-        if first_failure_at is None and any(
-            result.exit_code != 0 or result.flaky for result in group_results
-        ):
-            first_failure_at = monotonic() - started
-        blocking = any(
-            task.required and result.exit_code != 0
-            for task, result in zip(group, group_results, strict=True)
-        )
+        remaining = list(group)
+        blocking = False
+        while remaining:
+            dependency_blocked = [task for task in remaining if set(task.depends_on) & failed]
+            if dependency_blocked:
+                cancelled.extend(dependency_blocked)
+                remaining = [task for task in remaining if task not in dependency_blocked]
+                continue
+            ready = [task for task in remaining if set(task.depends_on) <= successful]
+            if not ready:
+                cancelled.extend(remaining)
+                break
+            wave_results = _execute_group(ready, jobs, execute)
+            completed_tasks.extend(ready)
+            results.extend(wave_results)
+            remaining = [task for task in remaining if task not in ready]
+            for task, result in zip(ready, wave_results, strict=True):
+                if result.exit_code == 0 and not result.flaky:
+                    successful.add(task.name)
+                else:
+                    failed.add(task.name)
+                    if first_failure_at is None:
+                        first_failure_at = monotonic() - started
+                    if task.required:
+                        blocking = True
         if policy == "feedback-first" and blocking:
-            cancelled = [task for remaining in groups[group_index + 1 :] for task in remaining]
+            cancelled.extend(task for later in groups[group_index + 1 :] for task in later)
             break
     wall = monotonic() - started
     return ScheduleResult(
@@ -67,11 +83,18 @@ def schedule_graph(tasks: list[CheckTask], policy: str) -> dict[str, object]:
                 "cost": wave[0].cost if wave else "none",
                 "checks": [task.name for task in wave],
                 "workspaces": sorted({task.workspace for task in wave}),
+                "dependencies": {task.name: list(task.depends_on) for task in wave},
+                "resources": {task.name: _resource_class(task) for task in wave},
             }
             for index, wave in enumerate(waves)
         ],
         "fail_fast": policy == "feedback-first",
         "deterministic_order": True,
+        "resource_limits": {
+            "total": "--jobs",
+            "memory": "max(1, jobs // 2)",
+            "exclusive": 1,
+        },
     }
 
 
@@ -89,8 +112,50 @@ def _execute_group(
     jobs: int,
     execute: Callable[[CheckTask], CommandResult],
 ) -> list[CommandResult]:
-    workers = max(1, min(jobs, len(tasks)))
-    if workers == 1:
-        return [execute(task) for task in tasks]
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        return list(executor.map(execute, tasks))
+    if not tasks:
+        return []
+    limit = max(1, jobs)
+    completed: dict[int, CommandResult] = {}
+    for batch in _resource_batches(tasks, limit):
+        workers = min(limit, len(batch))
+        if workers == 1:
+            batch_results = [execute(batch[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                batch_results = list(executor.map(execute, batch))
+        completed.update(
+            (id(task), result) for task, result in zip(batch, batch_results, strict=True)
+        )
+    return [completed[id(task)] for task in tasks]
+
+
+def _resource_batches(tasks: list[CheckTask], jobs: int) -> list[list[CheckTask]]:
+    batches: list[list[CheckTask]] = []
+    current: list[CheckTask] = []
+    used = 0
+    for task in tasks:
+        resource = _resource_class(task)
+        units = jobs if resource == "exclusive" else 2 if resource == "memory" else 1
+        if current and (used + units > jobs or resource == "exclusive"):
+            batches.append(current)
+            current = []
+            used = 0
+        current.append(task)
+        used += units
+        if resource == "exclusive":
+            batches.append(current)
+            current = []
+            used = 0
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _resource_class(task: CheckTask) -> str:
+    if task.resource != "auto":
+        return task.resource
+    if task.category == "build":
+        return "exclusive"
+    if task.category in {"typecheck", "unit_tests", "integration_tests"}:
+        return "memory"
+    return "cpu"

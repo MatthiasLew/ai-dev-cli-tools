@@ -30,6 +30,22 @@ PROFILES: dict[str, ContextProfile] = {
         changed_only=True,
         description="Changed files and review evidence",
     ),
+    "implement": ContextProfile(
+        "implement",
+        70_000,
+        40,
+        12_000,
+        18_000,
+        description="Implementation code, dependencies, tests, and validation evidence",
+    ),
+    "docs": ContextProfile(
+        "docs",
+        45_000,
+        35,
+        10_000,
+        12_000,
+        description="Documentation, public interfaces, examples, and release evidence",
+    ),
     "full": ContextProfile(
         "full", 150_000, 100, 20_000, 50_000, description="Broad repository context"
     ),

@@ -147,7 +147,7 @@ def test_repository_index_builds_and_reuses_impact_graph(tmp_path: Path) -> None
 
 
 def test_impact_graph_extracts_python_js_rust_and_reuses_edges(tmp_path: Path) -> None:
-    from ai_dev_tools.cache.graph import build_impact_graph, related_tests
+    from ai_dev_tools.cache.graph import build_impact_graph, related_tests, shortest_reason_paths
 
     files = {
         "src/app.py": "import util\n",
@@ -171,6 +171,26 @@ def test_impact_graph_extracts_python_js_rust_and_reuses_edges(tmp_path: Path) -
     assert ("rust/main.rs", "rust/helper.rs", "import") in edges
     assert related_tests(graph, ["src/app.py"]) == ["tests/test_app.py"]
     assert related_tests("invalid", ["src/app.py"]) == []
+    paths = shortest_reason_paths(
+        graph,
+        ["src/app.py"],
+        selected_files=["util.py"],
+        changed_symbols=[{"path": "src/app.py", "name": "run"}],
+        selected_tests=["tests/test_app.py"],
+        selected_commands=[["pytest", "tests/test_app.py"]],
+        selection_reason_code="CHANGED_DIRECT_TEST_MATCH",
+    )
+    by_target = {item["target"]: item for item in paths}
+    util_steps = cast(list[dict[str, object]], by_target["util.py"]["steps"])
+    command_steps = cast(
+        list[dict[str, object]], by_target["pytest tests/test_app.py"]["steps"]
+    )
+    assert [step["value"] for step in util_steps] == [
+        "src/app.py",
+        "util.py",
+    ]
+    assert by_target["src/app.py#run"]["target_kind"] == "symbol"
+    assert command_steps[-1]["kind"] == "check"
 
     reused = build_impact_graph(
         tmp_path,
@@ -181,3 +201,35 @@ def test_impact_graph_extracts_python_js_rust_and_reuses_edges(tmp_path: Path) -
     assert ("src/app.py", "util.py", "import") in {
         (edge["from"], edge["to"], edge["kind"]) for edge in reused
     }
+
+
+def test_impact_graph_tracks_configuration_generated_code_and_reverse_dependents(
+    tmp_path: Path,
+) -> None:
+    from ai_dev_tools.cache.graph import build_impact_graph, shortest_reason_paths
+
+    files = {
+        "pyproject.toml": "[project]\nname='demo'\n",
+        "schema.proto": "message Item {}\n",
+        "src/generated.py": "# generated from ../schema.proto\nVALUE = 1\n",
+        "src/consumer.py": "from src.generated import VALUE\n",
+        "tests/test_consumer.py": "from src.consumer import VALUE\n",
+    }
+    for relative, content in files.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    graph = build_impact_graph(tmp_path, set(files))
+    edges = {(edge["from"], edge["to"], edge["kind"]) for edge in graph}
+    paths = shortest_reason_paths(
+        graph,
+        ["schema.proto"],
+        selected_files=["src/generated.py", "src/consumer.py"],
+    )
+    by_target = {item["target"]: item for item in paths}
+
+    assert ("pyproject.toml", "src/consumer.py", "configuration") in edges
+    assert ("schema.proto", "src/generated.py", "generated") in edges
+    assert by_target["src/generated.py"]["reason_code"] == "GENERATED_RELATIONSHIP"
+    assert by_target["src/consumer.py"]["reason_code"] == "DEPENDENT_FILE"

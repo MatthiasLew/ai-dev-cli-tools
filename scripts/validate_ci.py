@@ -22,7 +22,6 @@ REQUIRED_TESTPYPI_RELEASE_TOKENS = [
     "needs: verify-testpypi",
     "gh release create",
     "--draft",
-    "--prerelease",
     "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
 ]
 REQUIRED_PYPI_PUBLISH_TOKENS = [
@@ -70,6 +69,9 @@ def main() -> int:
     for step in REQUIRED_STEPS:
         if step not in ci:
             errors.append(f"missing CI step: {step}")
+    install_step = 'python -m pip install -c requirements-dev.lock -e ".[dev]"'
+    if install_step not in ci or install_step not in docs:
+        errors.append("CI and Docs must install the pinned development-tool baseline")
     for step in ["python -m ai_dev_tools.cli --help", "python -m ai_dev_tools.cli check --help"]:
         if step not in docs:
             errors.append(f"missing Docs step: {step}")
@@ -81,6 +83,8 @@ def main() -> int:
             errors.append(f"missing PyPI publish workflow token: {token}")
     if "name: pypi" in release:
         errors.append("tag workflow must not publish directly to production PyPI")
+    if "--prerelease" in release:
+        errors.append("stable release workflow must not create a prerelease")
     for forbidden in ("password:", "PYPI_API_TOKEN", "TEST_PYPI_API_TOKEN"):
         if forbidden in release or forbidden in publish:
             errors.append(f"forbidden release credential configuration: {forbidden}")

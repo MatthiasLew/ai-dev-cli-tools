@@ -62,7 +62,17 @@ local development command.
 
 ## Latest cross-platform evidence
 
-- GitHub Actions CI run 31385971077 passed on 2026-08-10 for Linux, Windows, and
-  macOS across Python 3.11-3.13, including managed signal/process tests and real
-  Python, Node, Rust, Maven, Gradle, and Composer fixture toolchains.
-- Docs run 31385971106 passed for the same commit (`02ac4e6`).
+- GitHub Actions CI run 33323925088 passed on 2026-08-30 for Linux, Windows, and macOS across
+  Python 3.11-3.13, including real Python, Node, Rust, Maven, Gradle, and Composer fixture
+  toolchains, for commit `a86da2c`.
+- Docs run 33323925074 passed for the same commit.
+
+## Local 1.0.0 candidate evidence
+
+- On 2026-08-31, the clean pinned environment passed 327 tests with 7 toolchain-dependent skips
+  and exactly 90% branch coverage.
+- Ruff, strict mypy across 131 source/test/script files, CI workflow validation, release metadata
+  validation, wheel installation smoke, and `git diff --check` passed.
+- The wheel and sdist were rebuilt as `1.0.0`; archive validation rejects `.ai`, environments,
+  caches, coverage state, build output, and other generated/private paths.
+- Cross-platform CI for the final release commit remains required before tagging `v1.0.0`.

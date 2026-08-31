@@ -70,6 +70,13 @@ interpret reliably.
 - A subprocess with a non-zero exit code should not be represented as a
   successful check result.
 
+## Resolution
+
+The unreleased implementation now excludes `env` and `venv` trees from workspace discovery,
+replaces characters unsupported by the active text-console encoding, and passes subprocess exit
+codes into result parsing so a non-zero result cannot be serialized as successful. Regression tests
+cover all three cases.
+
 ## Artifacts
 
 The failing run created local evidence under the inspected repository:

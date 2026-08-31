@@ -9,8 +9,10 @@ from ai_dev_tools.config import load_settings
 from ai_dev_tools.context.compression import apply_safe_compression
 from ai_dev_tools.context.incremental import (
     IncrementalSelection,
+    load_incremental_manifest,
     save_incremental_manifest,
     select_incremental,
+    valid_context_id,
 )
 from ai_dev_tools.context.models import (
     DEFAULT_MAX_CHARS,
@@ -39,6 +41,7 @@ from ai_dev_tools.detectors.project import scan_project
 from ai_dev_tools.detectors.repository_map import map_repository
 from ai_dev_tools.git.inspect import inspect_git
 from ai_dev_tools.models.report import Artifact, Issue, Report
+from ai_dev_tools.runners.baseline import apply_baseline_comparison
 from ai_dev_tools.runners.check import (
     ChangedSelection,
     CheckTask,
@@ -56,6 +59,27 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     settings = load_settings(project_root)
     root = settings.project_root
     report = Report(command="context build", project_root=root)
+    base_hashes: dict[str, str] | None = None
+    if options.since is not None:
+        if not valid_context_id(options.since):
+            report.status = "failed"
+            report.exit_code = 2
+            report.summary = {
+                "message": "Context ID must contain exactly 16 lowercase hexadecimal characters.",
+                "reason_code": "INVALID_CONTEXT_ID",
+                "context_id": options.since,
+            }
+            return report.finish()
+        base_hashes = load_incremental_manifest(root, options.since)
+        if base_hashes is None:
+            report.status = "failed"
+            report.exit_code = 1
+            report.summary = {
+                "message": f"Historical context manifest was not found: {options.since}",
+                "reason_code": "CONTEXT_MANIFEST_NOT_FOUND",
+                "context_id": options.since,
+            }
+            return report.finish()
     timings["configuration"] = _elapsed(stage_started)
 
     stage_started = time.monotonic()
@@ -116,8 +140,8 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     if options.changed_only or options.staged_only:
         ordered_paths = [path for path in ordered_paths if _rel(root, path) in set(changed_files)]
     incremental_state: IncrementalSelection | None = None
-    if options.incremental:
-        incremental_state = select_incremental(root, ordered_paths)
+    if options.incremental or options.since is not None:
+        incremental_state = select_incremental(root, ordered_paths, base_hashes)
         ordered_paths = incremental_state.selected
     ordered_paths = ordered_paths[: max(options.max_files, 0)]
 
@@ -146,7 +170,9 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
                 "rejected_files": [item.to_dict() for item in rejected],
                 "secret_findings": [finding.masked_dict() for finding in secret_findings],
                 "budget": _budget_summary(options, 0, False),
-                "incremental": _incremental_summary(incremental_state),
+                "incremental": _incremental_summary(
+                    incremental_state, base_context_id=options.since
+                ),
                 "retrieval": retrieval_decision.to_dict(),
                 "refinement": refinement,
                 "performance": {"stages_seconds": timings},
@@ -177,7 +203,9 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     )
     summary.update(
         {
-            "incremental": _incremental_summary(incremental_state, len(selected)),
+            "incremental": _incremental_summary(
+                incremental_state, len(selected), base_context_id=options.since
+            ),
             "retrieval": retrieval_decision.to_dict(),
             "refinement": refinement,
             "selected_files": [item.to_dict() for item in selected],
@@ -220,6 +248,12 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
             )
         )
 
+    report.status = "partial" if accounting_partial else "success"
+    report.summary = summary
+    if options.compare is not None:
+        apply_baseline_comparison(report, root, options.compare)
+    comparison = summary.get("baseline_comparison")
+    baseline_failed = isinstance(comparison, dict) and comparison.get("ready") is False
     markdown = _render_markdown(report, summary)
     markdown, markdown_truncated = _truncate_text(markdown, options.max_chars)
     json_payload = _context_payload(report, summary, markdown_truncated, len(markdown))
@@ -231,7 +265,8 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     )
     if markdown_truncated or json_truncated:
         summary["truncated"] = True
-        report.status = "partial"
+        if not baseline_failed:
+            report.status = "partial"
         report.issues.append(
             Issue(
                 severity="warning",
@@ -241,13 +276,14 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         )
     else:
         summary["truncated"] = any(item.truncated for item in selected) or accounting_partial
-        report.status = "partial" if summary["truncated"] else "success"
+        if not baseline_failed:
+            report.status = "partial" if summary["truncated"] else "success"
     timings["report_generation"] = _elapsed(stage_started)
     summary["performance"] = {"stages_seconds": timings}
     stage_started = time.monotonic()
-    manifest_artifact: Artifact | None = None
+    manifest_artifacts: list[Artifact] = []
     if incremental_state is not None:
-        manifest_path, context_id = save_incremental_manifest(
+        manifest_path, history_path, context_id = save_incremental_manifest(
             root,
             incremental_state,
             [item.path for item in selected],
@@ -256,9 +292,11 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         if isinstance(incremental, dict):
             incremental["context_id"] = context_id
             incremental["manifest"] = str(manifest_path)
-        manifest_artifact = Artifact(
-            str(manifest_path), "context-manifest", "Incremental context state"
-        )
+            incremental["historical_manifest"] = str(history_path)
+        manifest_artifacts = [
+            Artifact(str(manifest_path), "context-manifest", "Latest incremental context state"),
+            Artifact(str(history_path), "context-manifest", "Historical incremental context state"),
+        ]
 
     report.summary = summary
     report.finish()
@@ -271,8 +309,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         report.artifacts.append(Artifact(str(md_path), "markdown", "Bounded AI context package"))
     if options.format in {"json", "both"}:
         report.artifacts.append(Artifact(str(json_path), "json", "Bounded AI context package"))
-    if manifest_artifact is not None:
-        report.artifacts.append(manifest_artifact)
+    report.artifacts.extend(manifest_artifacts)
     if options.format in {"markdown", "both"}:
         md_path.write_text(mask_text(_render_markdown(report, report.summary)), encoding="utf-8")
     if options.format in {"json", "both"}:
@@ -468,6 +505,9 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
         "## Validation Plan",
         _json_block(summary.get("validation_plan", [])),
         "",
+        "## Baseline Comparison",
+        _json_block(summary.get("baseline_comparison", {})),
+        "",
         "## Latest Errors",
         _json_block(summary.get("latest_errors", [])),
         "",
@@ -559,13 +599,17 @@ def _extract_changed_files(git_summary: dict[str, object] | None) -> list[str]:
 
 
 def _incremental_summary(
-    state: IncrementalSelection | None, emitted: int | None = None
+    state: IncrementalSelection | None,
+    emitted: int | None = None,
+    *,
+    base_context_id: str | None = None,
 ) -> dict[str, object]:
     if state is None:
         return {"enabled": False}
     pending = len(state.selected)
     return {
         "enabled": True,
+        "base_context_id": base_context_id,
         "changed_candidates": pending,
         "emitted": emitted,
         "deferred": max(pending - emitted, 0) if emitted is not None else None,

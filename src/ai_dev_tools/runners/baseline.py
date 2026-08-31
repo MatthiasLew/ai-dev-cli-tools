@@ -63,6 +63,44 @@ def run_baseline(project_root: Path, action: str, name: str | None = None) -> Re
     raise ValueError(f"Unsupported baseline action: {action}")
 
 
+def apply_baseline_comparison(report: Report, project_root: Path, name: str) -> None:
+    root = project_root.resolve()
+    path = root / ".ai" / "cache" / "baselines" / f"{name}.json"
+    if not _SAFE_NAME.fullmatch(name):
+        comparison: dict[str, object] = {
+            "name": name,
+            "ready": False,
+            "reason_code": "INVALID_BASELINE_NAME",
+        }
+    else:
+        baseline = _load_baseline(path)
+        if baseline is None:
+            comparison = {
+                "name": name,
+                "ready": False,
+                "reason_code": "BASELINE_NOT_FOUND",
+            }
+        else:
+            current = _snapshot(root, name)
+            reports = current.get("reports")
+            if isinstance(reports, dict):
+                reports[report.command] = _report_record(report.to_dict(), "<current>")
+            comparison = _compare_for_command(baseline, current, report.command)
+            comparison["name"] = name
+            comparison["baseline_created_at"] = baseline.get("created_at")
+            comparison["ready"] = not (
+                comparison["new_failures"] or comparison["status_regressions"]
+            )
+            comparison["reason_code"] = (
+                "BASELINE_MATCH" if comparison["ready"] else "BASELINE_REGRESSION"
+            )
+            report.artifacts.append(Artifact(str(path), "baseline", "Compared local baseline"))
+    report.summary["baseline_comparison"] = comparison
+    if not comparison["ready"]:
+        report.status = "failed"
+        report.exit_code = 1
+
+
 def _snapshot(root: Path, name: str) -> dict[str, Any]:
     reports: dict[str, dict[str, object]] = {}
     paths = [
@@ -77,18 +115,35 @@ def _snapshot(root: Path, name: str) -> dict[str, Any]:
         command = payload.get("command")
         if not isinstance(command, str):
             continue
-        reports[command] = {
-            "status": payload.get("status"),
-            "failures": sorted(_failure_signatures(payload)),
-            "issue_codes": sorted(_issue_codes(payload)),
-            "source": str(path.relative_to(root)),
-        }
+        reports[command] = _report_record(payload, str(path.relative_to(root)))
     return {
         "schema_version": BASELINE_SCHEMA_VERSION,
         "name": name,
         "created_at": datetime.now(UTC).isoformat(),
         "reports": reports,
     }
+
+
+def _report_record(payload: dict[str, object], source: str) -> dict[str, object]:
+    return {
+        "status": payload.get("status"),
+        "failures": sorted(_failure_signatures(payload)),
+        "issue_codes": sorted(_issue_codes(payload)),
+        "source": source,
+    }
+
+
+def _compare_for_command(
+    baseline: dict[str, Any], current: dict[str, Any], command: str
+) -> dict[str, object]:
+    old_report = _report_map(baseline).get(command)
+    new_report = _report_map(current).get(command)
+    old_reports = {command: old_report} if old_report is not None else {}
+    new_reports = {command: new_report} if new_report is not None else {}
+    return _compare(
+        {**baseline, "reports": old_reports},
+        {**current, "reports": new_reports},
+    )
 
 
 def _compare(baseline: dict[str, Any], current: dict[str, Any]) -> dict[str, object]:

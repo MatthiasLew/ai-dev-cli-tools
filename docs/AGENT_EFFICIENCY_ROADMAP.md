@@ -20,21 +20,21 @@ and longer-term direction without presenting proposed interfaces as available co
 
 | # | Capability | Status | Current behavior and remaining gap |
 |---|---|---|---|
-| 1 | Incremental context packs | Partial | `context build --incremental` compares with the latest schema-versioned manifest and reports changed/reused candidates. Selecting an older named context with `--since` is not implemented. |
-| 2 | Symbol-aware source selection | Partial | Python, JavaScript/TypeScript, Java, Rust, and PHP have bounded symbol selection and symbol-level diffs. Java/PHP methods and Java constructors have owner-qualified identities; Rust `impl`/trait functions are qualified. Deeper ecosystem-specific parsing remains planned. |
+| 1 | Incremental context packs | Implemented | `context build --incremental` compares with the latest schema-versioned manifest, while `--since <context-id>` selects a retained historical manifest. Reports identify changed/reused candidates and the explicit base context. |
+| 2 | Symbol-aware source selection | Implemented | Python, JavaScript/TypeScript, Java, Rust, and PHP have bounded symbol selection and symbol-level diffs. Nested owners, Java overloads and constructors, PHP members, and Rust `impl`/trait functions receive stable qualified identities with conservative fallback. |
 | 3 | Content-addressed validation cache | Implemented | Validation uses repository, command, workspace, runtime, platform, and configuration fingerprints. Cache reuse is default; `check --no-cache` bypasses it, while `cache status/prune/clear/layout` provides maintenance and diagnostics. |
 | 4 | Failure signatures and deduplication | Implemented | Validation reports expose stable signatures, grouped repeated messages, representative failures, and expandable evidence. |
-| 5 | Baseline-aware reports | Partial | `baseline create/list/compare` stores and compares named local snapshots. Direct `check --compare` and `context build --compare` integration is not implemented. |
-| 6 | Progressive report expansion | Partial | Issues, checks, files, snippets, diffs, workspaces, and artifacts receive stable evidence IDs expandable with `explain <reference> --tail`. Symbol-targeted `explain --symbol` is not implemented. |
-| 7 | Task-aware context profiles | Partial | `minimal`, `debug`, `review`, and `full` profiles are implemented and explainable. Dedicated `implement` and `docs` profiles are not implemented. |
+| 5 | Baseline-aware reports | Implemented | `baseline create/list/compare` stores and compares named local snapshots. `check --compare <name>` and `context build --compare <name>` apply the same regression contract directly to current reports. |
+| 6 | Progressive report expansion | Implemented | Issues, checks, files, snippets, diffs, workspaces, and artifacts receive stable evidence IDs expandable with `explain <reference> --tail`; `explain --symbol PATH#SYMBOL` safely expands bounded project-local definitions and related tests. |
+| 7 | Task-aware context profiles | Implemented | `minimal`, `debug`, `review`, `implement`, `docs`, and `full` profiles provide stable, explainable and contract-tested budgets. Explicit budget flags retain precedence. |
 | 8 | Workspace-aware routing | Implemented | Workspace models route changed files, checks, bootstrap commands, runtime requirements, and ownership evidence across supported monorepos. |
-| 9 | Dependency and impact graph | Partial | The local repository graph reuses import and related-test edges for selection and focused reruns. Generated-code relationships, complete configuration ownership, and shortest reason paths for every selection remain incomplete. |
+| 9 | Dependency and impact graph | Implemented | The local graph reuses imports, reverse dependents, related tests, configuration ownership, and declared generated-source relationships. Changed selections expose bounded shortest reason paths through files, symbols, tests, and checks. |
 | 10 | Failure-focused reruns | Implemented | Reports provide bounded focused rerun hints while preserving comprehensive final verification commands. |
 | 11 | Compact agent protocol | Implemented | Schema 1.1 JSON reports, stable reason codes, evidence references, bounded output, and the local MCP server provide the supported machine contract. |
 | 12 | Local session state | Implemented | Versioned local session and observation state retains task, validation, context, and unresolved failure evidence without storing a conversation transcript. |
-| 13 | Dependency-aware parallel scheduler | Partial | `check --jobs`, deterministic ordering, feedback-first waves, and cancellation of later expensive work are implemented. A general resource-aware dependency graph for arbitrary checks is not implemented. |
+| 13 | Dependency-aware parallel scheduler | Implemented | `check --jobs` respects explicit check dependencies, CPU/memory/exclusive resource classes, feedback-first gates, and deterministic report order. Failed dependencies conservatively cancel their dependents. |
 | 14 | Persistent repository index | Implemented | `index status/update/rebuild` maintains a schema-versioned, content-addressed index under `.ai/cache/`. |
-| 15 | Watch mode | Partial | Foreground polling, debounce, generated-root exclusion, queued changes, changed validation, and bounded runs are implemented. In-flight obsolete subprocess cancellation is not implemented. |
+| 15 | Watch mode | Implemented | Foreground polling, debounce, generated-root exclusion, queued changes, bounded runs, and cancellation of subprocesses owned by obsolete validations are implemented. Cancellation never targets an unrelated PID. |
 | 16 | Priority and fail-fast scheduling | Implemented | `feedback-first` and `complete` policies provide deterministic priority waves and required-failure gating. |
 | 17 | Warm environment state | Implemented | `bootstrap --if-needed` and `environment explain` reuse only revalidated executable, dependency, configuration, runtime, and plan fingerprints. |
 | 18 | Checkpoint and resume | Implemented | `check --resume` reuses exact successful step fingerprints and rejects stale repository, command, runtime, or configuration state. |
@@ -58,14 +58,9 @@ The current foundation also includes:
 
 ## Active direction
 
-The active backlog is intentionally limited to the partial capabilities above. Priority is given to
-features that improve correctness or remove ambiguity from the machine contract:
-
-1. named historical context selection;
-2. direct baseline comparison in check and context workflows;
-3. symbol-targeted evidence expansion and missing task profiles;
-4. richer dependency reason paths and ecosystem-specific symbol adapters;
-5. resource-aware scheduling and safe cancellation of obsolete watch runs.
+The 1.0 capability set is complete. Further development should prioritize measured correctness,
+backward-compatible schema evolution, parser fixtures for newly supported tool versions, and
+cross-platform performance evidence rather than adding overlapping commands.
 
 ## Success metrics
 

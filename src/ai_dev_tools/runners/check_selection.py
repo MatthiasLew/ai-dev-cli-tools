@@ -3,10 +3,12 @@ from __future__ import annotations
 import fnmatch
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 from ai_dev_tools.cache.graph import related_tests as graph_related_tests
-from ai_dev_tools.cache.repository import read_repository_index
+from ai_dev_tools.cache.graph import shortest_reason_paths
+from ai_dev_tools.cache.repository import read_repository_index, update_repository_index
 from ai_dev_tools.config import Settings
 from ai_dev_tools.runners.check_models import ChangedSelection, ChangedStrategy, CheckTask
 from ai_dev_tools.utils.subprocess import CommandResult, run_command
@@ -69,6 +71,19 @@ def select_changed_checks(
         [],
         "Changed files were detected, but no reliable test dependency map is available yet.",
     )
+
+
+def add_reason_paths(root: Path, selection: ChangedSelection) -> ChangedSelection:
+    index = update_repository_index(root)
+    paths = shortest_reason_paths(
+        index.get("graph"),
+        selection.changed_files,
+        selected_files=selection.selected_tests,
+        selected_tests=selection.selected_tests,
+        selected_commands=selection.selected_commands,
+        selection_reason_code=f"CHANGED_{selection.strategy.upper()}",
+    )
+    return replace(selection, reason_paths=paths)
 
 
 def collect_changed_files(

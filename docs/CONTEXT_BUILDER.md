@@ -9,16 +9,26 @@ By default the command writes:
 - `.ai/context/context-latest.md`
 - `.ai/context/context-latest.json`
 
-Use `--incremental` to emit only candidate files whose content fingerprint changed since the previous incremental pack. The schema-versioned manifest is stored at `.ai/cache/context-manifest.json`; unchanged candidates are reported as reused and are not repeated.
+Use `--incremental` to emit only candidate files whose content fingerprint changed since the
+previous incremental pack. The latest schema-versioned manifest is stored at
+`.ai/cache/context-manifest.json`, while up to 50 content-addressed historical manifests are
+retained under `.ai/cache/context-manifests/`. Pass `--since <context-id>` to select one of those
+historical manifests explicitly. Unknown or unsafe IDs fail without resolving outside the project.
+Unchanged candidates are reported as reused and are not repeated.
+
+Pass `--compare <baseline>` to apply an existing named baseline to the current context report.
+Missing baselines and regressions produce a failed report with a stable reason code.
 
 Use `--format markdown`, `--format json`, or `--format both` to control artifacts. Use `--output <directory>` to write to a different directory.
 
 ## Profiles
 
-Use `--profile minimal|debug|review|full` for stable task-oriented defaults. `minimal` creates a
-small handoff, `debug` expands errors and nearby code, `review` focuses on changed files, and
-`full` provides broad repository coverage. Explicit non-default budget flags override profile
-budgets. The selected profile and resolved limits are recorded in the JSON report.
+Use `--profile minimal|debug|review|implement|docs|full` for stable task-oriented defaults.
+`minimal` creates a small handoff, `debug` expands errors and nearby code, `review` focuses on
+changed files, `implement` budgets implementation code, dependencies, tests and validation,
+`docs` budgets documentation, public interfaces, examples and release evidence, and `full`
+provides broad repository coverage. Explicit non-default budget flags override profile budgets.
+The selected profile and resolved limits are recorded in the JSON report.
 ## Budget Controls
 
 Defaults:

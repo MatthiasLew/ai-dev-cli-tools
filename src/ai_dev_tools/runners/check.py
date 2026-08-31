@@ -8,6 +8,7 @@ import time
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from threading import Event
 
 from ai_dev_tools.cache.repository import update_repository_index
 from ai_dev_tools.cache.validation import (
@@ -22,6 +23,7 @@ from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.parsers.logs import parse_tool_output
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.runners import check_selection as _selection
+from ai_dev_tools.runners.baseline import apply_baseline_comparison
 from ai_dev_tools.runners.check_checkpoint import load_resume_keys, write_checkpoint
 from ai_dev_tools.runners.check_models import (
     ChangedSelection as ChangedSelection,
@@ -65,6 +67,8 @@ def run_check(
     policy: str = "complete",
     resume: bool = False,
     retry_flaky: int = 0,
+    compare: str | None = None,
+    cancel_event: Event | None = None,
 ) -> Report:
     stage_started = time.monotonic()
     settings = load_settings(project_root)
@@ -99,6 +103,8 @@ def run_check(
             "performance": {"stages_seconds": timings},
         }
         _add_runtime_summary(report, settings.project_root)
+        if compare is not None:
+            apply_baseline_comparison(report, settings.project_root, compare)
         report.finish()
         _write_check_reports(report, f"{mode}-explain")
         return report
@@ -113,6 +119,8 @@ def run_check(
         if changed_selection is not None:
             report.summary["changed_analysis"] = changed_selection.to_dict()
         _add_runtime_summary(report, settings.project_root)
+        if compare is not None:
+            apply_baseline_comparison(report, settings.project_root, compare)
         report.finish()
         _write_check_reports(report, mode)
         return report
@@ -130,13 +138,25 @@ def run_check(
         selected_tasks,
         worker_count,
         policy,
-        lambda task: _run_logged(
-            task,
-            settings.project_root,
-            settings.logs_directory,
-            entries,
-            cache_enabled,
-            retry_flaky,
+        lambda task: (
+            _run_logged(
+                task,
+                settings.project_root,
+                settings.logs_directory,
+                entries,
+                cache_enabled,
+                retry_flaky,
+                cancel_event,
+            )
+            if cancel_event is not None
+            else _run_logged(
+                task,
+                settings.project_root,
+                settings.logs_directory,
+                entries,
+                cache_enabled,
+                retry_flaky,
+            )
         ),
     )
     tasks = scheduled.tasks
@@ -206,6 +226,8 @@ def run_check(
     }
 
     _add_runtime_summary(report, settings.project_root)
+    if compare is not None:
+        apply_baseline_comparison(report, settings.project_root, compare)
     report.finish()
     _write_check_reports(report, mode)
     return report
@@ -373,6 +395,7 @@ def _run_logged(
     index_entries: object,
     use_cache: bool,
     retry_flaky: int = 0,
+    cancel_event: Event | None = None,
 ) -> CommandResult:
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = logs_dir / f"check-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.log"
@@ -380,16 +403,24 @@ def _run_logged(
     cache_key = validation_cache_key(index_entries, task.command, task.workspace)
     result = load_validation_result(root, cache_key, task.command) if use_cache else None
     if result is None:
-        result = run_command(task.command, working_directory)
+        result = (
+            run_command(task.command, working_directory, cancel_event=cancel_event)
+            if cancel_event is not None
+            else run_command(task.command, working_directory)
+        )
         result.stdout = mask_text(result.stdout)
         result.stderr = mask_text(result.stderr)
         first_output = result.combined_output
         first_exit_code = result.exit_code
         total_duration = result.duration_seconds
         attempts = 1
-        if retry_flaky and eligible_for_retry(task, result):
+        if retry_flaky and not result.cancelled and eligible_for_retry(task, result):
             for _ in range(retry_flaky):
-                retry = run_command(task.command, working_directory)
+                retry = (
+                    run_command(task.command, working_directory, cancel_event=cancel_event)
+                    if cancel_event is not None
+                    else run_command(task.command, working_directory)
+                )
                 retry.stdout = mask_text(retry.stdout)
                 retry.stderr = mask_text(retry.stderr)
                 attempts += 1
@@ -403,7 +434,7 @@ def _run_logged(
         if attempts > 1:
             result.initial_exit_code = first_exit_code
             result.initial_output = first_output
-        if use_cache and not result.flaky:
+        if use_cache and not result.flaky and not result.cancelled:
             store_validation_result(root, cache_key, result)
         if task.category in {"unit_tests", "integration_tests"}:
             record_result(root, task, cache_key, result)
@@ -467,9 +498,14 @@ def _int_value(value: object) -> int:
 
 def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]:
     tool_label = " ".join(task.command)
-    parsed = parse_tool_output(tool_label, result.combined_output)
+    parsed = parse_tool_output(tool_label, result.combined_output, result.exit_code)
+    initial_exit_code = (
+        result.initial_exit_code if result.initial_exit_code is not None else result.exit_code
+    )
     initial_parsed = (
-        parse_tool_output(tool_label, result.initial_output) if result.initial_output else parsed
+        parse_tool_output(tool_label, result.initial_output, initial_exit_code)
+        if result.initial_output
+        else parsed
     )
     failure_signature = (
         _failure_signature(task, initial_parsed) if result.exit_code != 0 or result.flaky else None
@@ -482,6 +518,7 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
         "exit_code": result.exit_code,
         "duration_seconds": result.duration_seconds,
         "timed_out": result.timed_out,
+        "cancelled": result.cancelled,
         "cached": result.cached,
         "attempts": result.attempts,
         "flaky": result.flaky,

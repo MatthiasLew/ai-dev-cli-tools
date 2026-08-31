@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 
 from ai_dev_tools.config import load_settings
 from ai_dev_tools.models.report import Issue, Report
@@ -40,6 +42,7 @@ def run_watch(project_root: Path, options: WatchOptions) -> Report:
     validations = 0
     coalesced_changes = 0
     queued_during_validation = 0
+    cancelled_obsolete = 0
     latest: Report | None = None
     interrupted = False
 
@@ -60,14 +63,33 @@ def run_watch(project_root: Path, options: WatchOptions) -> Report:
                 continue
 
             before_validation = observed
-            latest = run_check(
-                settings.project_root,
-                mode=options.mode,
-                jobs=options.jobs,
-                policy="feedback-first",
-            )
+            cancel_event = Event()
+            obsolete = False
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    run_check,
+                    settings.project_root,
+                    mode=options.mode,
+                    jobs=options.jobs,
+                    policy="feedback-first",
+                    cancel_event=cancel_event,
+                )
+                while not future.done():
+                    time.sleep(options.poll_ms / 1000)
+                    during_validation = _snapshot(settings.project_root, ignored)
+                    if during_validation != observed:
+                        observed = during_validation
+                        queued_during_validation += 1
+                        cancel_event.set()
+                        obsolete = True
+                candidate = future.result()
             validations += 1
             pending_since = None
+            if obsolete:
+                cancelled_obsolete += 1
+                pending_since = time.monotonic()
+                continue
+            latest = candidate
             after_validation = _snapshot(settings.project_root, ignored)
             if after_validation != before_validation:
                 queued_during_validation += 1
@@ -91,6 +113,7 @@ def run_watch(project_root: Path, options: WatchOptions) -> Report:
         "validations": validations,
         "coalesced_changes": coalesced_changes,
         "queued_during_validation": queued_during_validation,
+        "cancelled_obsolete": cancelled_obsolete,
         "debounce_ms": options.debounce_ms,
         "poll_ms": options.poll_ms,
         "latest_status": latest.status if latest else None,

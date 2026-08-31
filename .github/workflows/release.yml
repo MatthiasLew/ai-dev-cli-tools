@@ -99,7 +99,6 @@ jobs:
           gh release create "$GITHUB_REF_NAME"
           dist/*
           --draft
-          --prerelease
           --verify-tag
           --generate-notes
           --title "ai-dev $GITHUB_REF_NAME"

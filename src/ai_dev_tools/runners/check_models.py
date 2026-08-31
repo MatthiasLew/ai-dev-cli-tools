@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 CheckCategory = Literal["format", "lint", "typecheck", "unit_tests", "integration_tests", "build"]
 CheckCost = Literal["fast", "medium", "slow"]
 CheckSource = Literal["detected", "configured"]
+CheckResource = Literal["auto", "cpu", "memory", "io", "exclusive"]
 ChangedStrategy = Literal[
     "changed_test_direct",
     "direct_test_match",
@@ -28,6 +29,8 @@ class CheckTask:
     source: CheckSource
     required: bool = True
     workspace: str = ""
+    depends_on: tuple[str, ...] = ()
+    resource: CheckResource = "auto"
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -41,6 +44,7 @@ class ChangedSelection:
     selected_tests: list[str]
     selected_commands: list[list[str]]
     fallback_reason: str | None = None
+    reason_paths: list[dict[str, object]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {

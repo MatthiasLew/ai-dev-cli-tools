@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import io
+import tarfile
+import zipfile
 from pathlib import Path
 
 from scripts.validate_release import read_project_version, validate_release
@@ -24,8 +27,13 @@ def test_validate_release_accepts_matching_source_and_artifacts(tmp_path: Path) 
     write_release_project(tmp_path)
     dist = tmp_path / "dist"
     dist.mkdir()
-    (dist / "ai_dev_cli_tools-1.2.3a1-py3-none-any.whl").touch()
-    (dist / "ai_dev_cli_tools-1.2.3a1.tar.gz").touch()
+    with zipfile.ZipFile(dist / "ai_dev_cli_tools-1.2.3a1-py3-none-any.whl", "w") as archive:
+        archive.writestr("ai_dev_tools/__init__.py", "")
+    with tarfile.open(dist / "ai_dev_cli_tools-1.2.3a1.tar.gz", "w:gz") as archive:
+        content = b"readme"
+        info = tarfile.TarInfo("ai_dev_cli_tools-1.2.3a1/README.md")
+        info.size = len(content)
+        archive.addfile(info, io.BytesIO(content))
 
     assert read_project_version(tmp_path) == "1.2.3a1"
     assert validate_release(tmp_path, "v1.2.3a1", dist) == []
@@ -54,3 +62,30 @@ def test_validate_release_reports_tag_version_changelog_and_artifact_errors(tmp_
 def test_published_entrypoint_path_matches_platform(tmp_path: Path) -> None:
     path = entrypoint_path(tmp_path)
     assert path.name in {"ai-dev", "ai-dev.exe"}
+
+
+def test_stable_release_workflow_does_not_create_prerelease() -> None:
+    workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+
+    assert "--draft" in workflow
+    assert "--prerelease" not in workflow
+
+
+def test_release_validation_rejects_generated_state_inside_archive(tmp_path: Path) -> None:
+    write_release_project(tmp_path)
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    with zipfile.ZipFile(dist / "ai_dev_cli_tools-1.2.3a1-py3-none-any.whl", "w") as archive:
+        archive.writestr("ai_dev_tools/__init__.py", "")
+    with tarfile.open(dist / "ai_dev_cli_tools-1.2.3a1.tar.gz", "w:gz") as archive:
+        content = b"secret local state"
+        info = tarfile.TarInfo("ai_dev_cli_tools-1.2.3a1/.ai/reports/local.json")
+        info.size = len(content)
+        archive.addfile(info, io.BytesIO(content))
+
+    errors = validate_release(tmp_path, "v1.2.3a1", dist)
+
+    assert errors == [
+        "distribution contains generated or private paths: "
+        "['ai_dev_cli_tools-1.2.3a1/.ai/reports/local.json']"
+    ]

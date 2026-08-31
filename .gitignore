@@ -6,6 +6,7 @@
 .ai/logs/
 .ai/performance/
 .ai/reports/
+.ai/release-venv/
 .coverage
 .mypy_cache/
 .pytest_cache/

@@ -31,6 +31,8 @@ class ContextOptions:
     format: ContextFormat = "both"
     explain: bool = False
     incremental: bool = False
+    since: str | None = None
+    compare: str | None = None
     profile: str = "default"
     retrieval: RetrievalMode = "auto"
     tokenizer: str = "estimate"

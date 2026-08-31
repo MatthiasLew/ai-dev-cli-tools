@@ -1,6 +1,6 @@
 # Monorepo Support
 
-Version 0.5.0a1 includes workspace detection, ownership, and isolated per-subproject routing for
+Version 1.0.0 includes workspace detection, ownership, and isolated per-subproject routing for
 checks and bootstrap commands.
 
 ## Status
