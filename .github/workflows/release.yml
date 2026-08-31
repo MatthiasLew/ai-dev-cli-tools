@@ -92,13 +92,12 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
-      - name: Create draft GitHub release for manual PyPI promotion
+      - name: Create RC prerelease or stable promotion draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME"
-          dist/*
-          --draft
-          --verify-tag
-          --generate-notes
-          --title "ai-dev $GITHUB_REF_NAME"
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then
+            gh release create "$GITHUB_REF_NAME" dist/* --prerelease --verify-tag --generate-notes --title "ai-dev $GITHUB_REF_NAME"
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --generate-notes --title "ai-dev $GITHUB_REF_NAME"
+          fi

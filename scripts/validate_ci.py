@@ -22,6 +22,7 @@ REQUIRED_TESTPYPI_RELEASE_TOKENS = [
     "needs: verify-testpypi",
     "gh release create",
     "--draft",
+    "--prerelease",
     "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
 ]
 REQUIRED_PYPI_PUBLISH_TOKENS = [
@@ -35,6 +36,7 @@ REQUIRED_PYPI_PUBLISH_TOKENS = [
     "name: pypi",
     "id-token: write",
     "--installer pipx",
+    "github.event.release.prerelease == false",
     "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33",
 ]
 REQUIRED_STEPS = [
@@ -51,6 +53,7 @@ REQUIRED_STEPS = [
     "ai-dev git inspect --json",
     "ai-dev capabilities --json",
     "ai-dev context build --explain --json",
+    "ai-dev benchmark corpus",
     'ai-dev plan --task "Review this commit" --json',
     "ai-dev sarif --input .ai/reports/agent-plan.json --output .ai/reports/ai-dev.sarif",
 ]
@@ -103,8 +106,8 @@ def main() -> int:
             errors.append(f"missing PyPI publish workflow token: {token}")
     if "name: pypi" in release:
         errors.append("tag workflow must not publish directly to production PyPI")
-    if "--prerelease" in release:
-        errors.append("stable release workflow must not create a prerelease")
+    if 'if [[ "$GITHUB_REF_NAME" == *-rc.* ]]' not in release:
+        errors.append("release workflow must distinguish RC prereleases from stable drafts")
     for forbidden in ("password:", "PYPI_API_TOKEN", "TEST_PYPI_API_TOKEN"):
         if forbidden in release or forbidden in publish:
             errors.append(f"forbidden release credential configuration: {forbidden}")

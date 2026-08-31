@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-dev-cli-tools"
-version = "1.1.0.dev0"
+version = "1.1.0rc1"
 description = "Cross-platform CLI helpers that give AI coding agents concise, deterministic development reports."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,7 +21,9 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = []
+dependencies = [
+  "watchdog>=4,<7",
+]
 
 [project.urls]
 Homepage = "https://github.com/MatthiasLew/ai-dev-cli-tools"
@@ -32,6 +34,9 @@ Changelog = "https://github.com/MatthiasLew/ai-dev-cli-tools/blob/main/CHANGELOG
 [project.optional-dependencies]
 tokenizers = [
   "tiktoken>=0.7",
+]
+semantic = [
+  "tree-sitter-language-pack>=0.9",
 ]
 
 dev = [
@@ -51,6 +56,7 @@ packages = ["src/ai_dev_tools"]
 [tool.hatch.build.targets.sdist]
 exclude = [
   "/.ai",
+  "/.tmp-*",
   "/.coverage",
   "/.mypy_cache",
   "/.pytest_cache",
@@ -59,11 +65,13 @@ exclude = [
   "/build",
   "/dist",
   "**/__pycache__",
+  "**/.ai",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = [".tmp-*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
@@ -72,6 +80,10 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 python_version = "3.11"
 strict = true
 warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "tree_sitter_language_pack.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,7 +4,10 @@ from pathlib import Path
 from ai_dev_tools.semantic import run_semantic, semantic_capabilities
 
 
-def test_structural_semantic_index_is_bounded_and_local(tmp_path: Path) -> None:
+def test_structural_semantic_index_is_bounded_and_local(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools import semantic
+
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: False)
     source = tmp_path / "src" / "service.py"
     source.parent.mkdir()
     source.write_text("class Service:\n    pass\n\ndef run():\n    return 1\n", encoding="utf-8")
@@ -67,3 +70,19 @@ def test_semantic_provider_must_return_a_list(monkeypatch, tmp_path: Path) -> No
     monkeypatch.setattr(semantic, "_backend_entry_points", lambda: {"invalid": EntryPoint()})
     report = run_semantic(tmp_path, "index", "invalid")
     assert report.status == "invalid_configuration"
+
+
+def test_auto_tree_sitter_failure_uses_structural_fallback(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools import semantic
+
+    (tmp_path / "app.py").write_text("def run(): pass\n", encoding="utf-8")
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: True)
+    monkeypatch.setattr(
+        semantic,
+        "tree_sitter_index",
+        lambda root, paths: (_ for _ in ()).throw(RuntimeError("grammar unavailable")),
+    )
+    report = run_semantic(tmp_path, "index", "auto")
+    assert report.status == "partial"
+    assert report.summary["backend"] == "structural"
+    assert report.issues[0].code == "TREE_SITTER_FALLBACK"

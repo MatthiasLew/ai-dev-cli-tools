@@ -65,7 +65,9 @@ ai-dev check --mode changed --retry-flaky 1
 ai-dev check --mode changed --retry-infra 1
 ai-dev plan --task "implement rate limiting" --mode changed
 ai-dev index update
-ai-dev index daemon --poll 500 --idle-timeout 300
+ai-dev index daemon start
+ai-dev index daemon status
+ai-dev index daemon stop
 ai-dev semantic status
 ai-dev semantic index --backend auto
 ai-dev policy assess -- python -m pytest
@@ -75,6 +77,9 @@ ai-dev cache layout
 ai-dev baseline create main
 ai-dev baseline compare main
 ai-dev benchmark run --suite examples/benchmarks/output-budget-smoke.json --variant baseline
+ai-dev benchmark corpus --manifest examples/benchmarks/agent-corpus.json --trials 3
+ai-dev integrations install all
+ai-dev dashboard serve --port 8765
 ai-dev explain issue:<id> --tail 100
 ai-dev explain --symbol "src/app.py#Application.run" --tail 100
 ai-dev feedback --task "fix authentication timeout"
@@ -249,7 +254,7 @@ git diff --check
 | index status/update/rebuild | implemented |
 | index daemon | implemented |
 | plan / MCP plan_work | implemented |
-| semantic status/index | implemented with optional provider plugins |
+| semantic status/index | implemented with built-in Tree-sitter, LSP, and provider plugins |
 | policy assess / execution enforcement | implemented |
 | sarif | implemented |
 | cache status/prune/clear/layout | implemented |
@@ -258,7 +263,9 @@ git diff --check
 | diagnostics | implemented |
 | mcp serve | implemented |
 | watch | implemented |
-| benchmark run/compare | implemented |
+| benchmark run/compare/gate/corpus | implemented |
+| integrations install | implemented for Codex, Claude Code, Cursor, and generic MCP |
+| dashboard status/serve | implemented, loopback-only |
 | performance latest/compare | implemented |
 | capabilities | implemented |
 | git status | implemented |

@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   validate-release:
+    if: github.event.release.prerelease == false
     name: Validate manually promoted release artifacts
     runs-on: ubuntu-latest
     steps:
@@ -44,6 +45,7 @@ jobs:
           retention-days: 7
 
   publish-pypi:
+    if: github.event.release.prerelease == false
     name: Publish manually approved release to PyPI
     needs: validate-release
     runs-on: ubuntu-latest
@@ -64,6 +66,7 @@ jobs:
           packages-dir: dist/
 
   verify-pypi:
+    if: github.event.release.prerelease == false
     name: Verify PyPI pipx installation
     needs: publish-pypi
     runs-on: ubuntu-latest
