@@ -16,6 +16,7 @@ from urllib import request as urllib_request
 from ai_dev_tools.config import Settings, load_settings
 from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.reporters.writer import write_json, write_markdown
+from ai_dev_tools.security.execution import ExecutionPolicy, assess_command
 from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import run_command, split_command
 
@@ -46,6 +47,21 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
     settings = load_settings(project_root)
     report = Report(command="run", project_root=settings.project_root)
     plan = resolve_run_plan(settings)
+    configured = settings.execution
+    assessment = (
+        assess_command(
+            plan.command,
+            settings.project_root / plan.cwd,
+            ExecutionPolicy(
+                mode=configured.mode,
+                allow_prefixes=tuple(configured.allow_prefixes),
+                deny_prefixes=tuple(configured.deny_prefixes),
+                maximum_impact=configured.maximum_impact,
+            ),
+        )
+        if plan is not None
+        else None
+    )
     paths = _runtime_paths(settings.project_root)
     current = _read_json(paths["metadata"])
     if current.get("status") in {"running", "stopping"} and _heartbeat_is_fresh(current):
@@ -62,6 +78,21 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
                 code="NO_RUN_COMMAND",
             )
         )
+    elif assessment is not None and not assessment.allowed:
+        report.status = "blocked"
+        report.exit_code = 126
+        report.issues.append(
+            Issue(
+                "error",
+                "Run command blocked by execution policy.",
+                code=assessment.reason_code,
+            )
+        )
+        report.summary = {
+            "plan": plan.to_dict(),
+            "execution_policy": assessment.to_dict(),
+            "modifications": "NONE",
+        }
     elif options.explain or options.dry_run:
         report.summary = {
             "plan": plan.to_dict(),
@@ -69,6 +100,7 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             "dry_run": options.dry_run,
             "modifications": "NONE",
             "readiness": _readiness_config(options),
+            "execution_policy": assessment.to_dict() if assessment is not None else {},
         }
     elif options.foreground:
         result = run_command(

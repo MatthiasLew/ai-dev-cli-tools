@@ -134,6 +134,27 @@ class LocalMcpServer:
         common_output = _common_output_schema()
         return [
             ToolDefinition(
+                name="plan_work",
+                title="Plan bounded development work",
+                description=(
+                    "Create a deterministic, preview-only implementation plan with scope, "
+                    "risk, dependencies, validation, and stable evidence references."
+                ),
+                input_schema=_object_schema(
+                    {
+                        "task": {"type": "string", "maxLength": 2000, "default": ""},
+                        "mode": {
+                            "type": "string",
+                            "enum": ["fast", "changed", "full"],
+                            "default": "changed",
+                        },
+                    }
+                ),
+                output_schema=common_output,
+                annotations=_annotations(read_only=False),
+                handler=self._plan_work,
+            ),
+            ToolDefinition(
                 name="project_status",
                 title="Get project status",
                 description=(
@@ -175,7 +196,15 @@ class LocalMcpServer:
                         "task": {"type": "string", "maxLength": 2000, "default": ""},
                         "profile": {
                             "type": "string",
-                            "enum": ["default", "minimal", "debug", "review", "full"],
+                            "enum": [
+                                "default",
+                                "minimal",
+                                "debug",
+                                "review",
+                                "implement",
+                                "docs",
+                                "full",
+                            ],
                             "default": "minimal",
                         },
                         "max_chars": {
@@ -266,6 +295,12 @@ class LocalMcpServer:
                             "minimum": 0,
                             "maximum": 3,
                             "default": 0,
+                        },
+                        "retry_infra": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 3,
+                            "default": 1,
                         },
                     }
                 ),
@@ -362,6 +397,15 @@ class LocalMcpServer:
             "artifacts": [],
         }
 
+    def _plan_work(self, arguments: JsonObject) -> JsonObject:
+        _validate_keys(arguments, {"task", "mode"})
+        task = _string(arguments, "task", "", 2000)
+        mode = _choice(arguments, "mode", "changed", {"fast", "changed", "full"})
+        _require_project(self.project_root)
+        from ai_dev_tools.runners.plan import run_agent_plan
+
+        return _finish_report(run_agent_plan(self.project_root, task=task, mode=mode))
+
     def _feedback(self, arguments: JsonObject) -> JsonObject:
         _validate_keys(arguments, {"task", "execute_checks", "jobs"})
         task = _string(arguments, "task", "", 2000)
@@ -402,7 +446,7 @@ class LocalMcpServer:
             arguments,
             "profile",
             "minimal",
-            {"default", "minimal", "debug", "review", "full"},
+            {"default", "minimal", "debug", "review", "implement", "docs", "full"},
         )
         write_artifacts = _boolean(arguments, "write_artifacts", False)
         _require_project(self.project_root)
@@ -442,11 +486,14 @@ class LocalMcpServer:
         )
 
     def _checks(self, arguments: JsonObject) -> JsonObject:
-        _validate_keys(arguments, {"mode", "execute", "jobs", "retry_flaky"})
+        _validate_keys(
+            arguments, {"mode", "execute", "jobs", "retry_flaky", "retry_infra"}
+        )
         mode = _choice(arguments, "mode", "changed", {"fast", "changed", "full"})
         execute = _boolean(arguments, "execute", False)
         jobs = _integer(arguments, "jobs", 4, 1, 8)
         retry_flaky = _integer(arguments, "retry_flaky", 0, 0, 3)
+        retry_infra = _integer(arguments, "retry_infra", 1, 0, 3)
         _require_project(self.project_root)
         from ai_dev_tools.runners.check import run_check
 
@@ -460,6 +507,7 @@ class LocalMcpServer:
                 policy="feedback-first" if execute else "complete",
                 resume=execute,
                 retry_flaky=retry_flaky,
+                retry_infra=retry_infra,
             )
         )
 

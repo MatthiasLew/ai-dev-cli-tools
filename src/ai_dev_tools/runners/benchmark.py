@@ -132,9 +132,14 @@ def compare_benchmarks(project_root: Path, baseline: Path, candidate: Path) -> R
         "median_agent_visible_bytes",
         "median_estimated_tokens",
         "median_commands",
+        "median_iterations",
+        "median_files_read",
+        "median_selection_precision",
+        "median_selection_recall",
     )
     metrics = {
-        key: _comparison(float(left_stats[key]), float(right_stats[key])) for key in metric_names
+        key: _comparison(_stat_value(left_stats, key), _stat_value(right_stats, key))
+        for key in metric_names
     }
     report.status = "success" if valid else "failed"
     report.summary = {
@@ -211,6 +216,19 @@ def _trial_row(
     actionable = metrics.get("actionable_seconds", execution.duration_seconds)
     commands = metrics.get("commands", 3)
     validation_subprocesses = metrics.get("validation_subprocesses", 1)
+    selected_items = int(metrics.get("selected_items", 0))
+    relevant_items = int(metrics.get("relevant_items", 0))
+    true_positive_items = int(metrics.get("true_positive_items", 0))
+    precision_reported = "selected_items" in metrics and "true_positive_items" in metrics
+    recall_reported = "relevant_items" in metrics and "true_positive_items" in metrics
+    false_negative_items = int(
+        metrics.get(
+            "false_negative_items",
+            max(0, relevant_items - min(true_positive_items, relevant_items))
+            if recall_reported
+            else 0,
+        )
+    )
     return {
         "trial": number,
         "correct": reset.exit_code == execution.exit_code == validation.exit_code == 0,
@@ -223,6 +241,26 @@ def _trial_row(
         "validation_subprocesses": int(validation_subprocesses),
         "agent_visible_bytes": len(visible),
         "estimated_tokens": math.ceil(len(visible) / 4),
+        "reported_input_tokens": int(metrics.get("input_tokens", 0)),
+        "reported_output_tokens": int(metrics.get("output_tokens", 0)),
+        "iterations": int(metrics.get("iterations", 1)),
+        "files_read": int(metrics.get("files_read", 0)),
+        "selection_precision": (
+            round(min(true_positive_items, selected_items) / selected_items, 4)
+            if precision_reported and selected_items
+            else 1.0
+            if precision_reported
+            else 0.0
+        ),
+        "selection_recall": (
+            round(min(true_positive_items, relevant_items) / relevant_items, 4)
+            if recall_reported and relevant_items
+            else 1.0
+            if recall_reported
+            else 0.0
+        ),
+        "selection_metrics_reported": precision_reported and recall_reported,
+        "false_negative_items": false_negative_items,
         "exit_codes": {
             "reset": reset.exit_code,
             "variant": execution.exit_code,
@@ -249,7 +287,18 @@ def _execution_metrics(execution: CommandResult) -> tuple[dict[str, float | int]
             visible_stderr.append(line)
             continue
         parsed: dict[str, float | int] = {}
-        for key in ("commands", "validation_subprocesses"):
+        for key in (
+            "commands",
+            "validation_subprocesses",
+            "iterations",
+            "files_read",
+            "selected_items",
+            "relevant_items",
+            "true_positive_items",
+            "false_negative_items",
+            "input_tokens",
+            "output_tokens",
+        ):
             value = payload.get(key)
             if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
                 parsed[key] = value
@@ -286,7 +335,26 @@ def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
         "median_agent_visible_bytes": round(statistics.median(values("agent_visible_bytes")), 3),
         "median_estimated_tokens": round(statistics.median(values("estimated_tokens")), 3),
         "median_commands": round(statistics.median(values("commands")), 3),
+        "median_iterations": round(statistics.median(values("iterations")), 3),
+        "median_files_read": round(statistics.median(values("files_read")), 3),
+        "median_selection_precision": round(
+            statistics.median(values("selection_precision")), 4
+        ),
+        "median_selection_recall": round(statistics.median(values("selection_recall")), 4),
+        "total_false_negative_items": round(sum(values("false_negative_items")), 3),
+        "selection_metric_trials": round(sum(values("selection_metrics_reported")), 3),
+        "median_reported_input_tokens": round(
+            statistics.median(values("reported_input_tokens")), 3
+        ),
+        "median_reported_output_tokens": round(
+            statistics.median(values("reported_output_tokens")), 3
+        ),
     }
+
+
+def _stat_value(stats: dict[str, Any], key: str) -> float:
+    value = stats.get(key, 0.0)
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
 
 
 def _comparison(baseline: float, candidate: float) -> dict[str, float | None]:
@@ -302,6 +370,9 @@ def _comparison(baseline: float, candidate: float) -> dict[str, float | None]:
 def _recommendation(metrics: dict[str, dict[str, float | None]], valid: bool) -> str:
     if not valid:
         return "reject_incorrect_candidate"
+    recall_change = metrics["median_selection_recall"]["percent_change"]
+    if isinstance(recall_change, float) and recall_change < 0:
+        return "reject_selection_recall_regression"
     time_change = metrics["median_seconds"]["percent_change"]
     token_change = metrics["median_estimated_tokens"]["percent_change"]
     if (

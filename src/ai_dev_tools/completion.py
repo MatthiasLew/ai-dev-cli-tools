@@ -2,18 +2,19 @@ from __future__ import annotations
 
 TOP_LEVEL_COMMANDS = (
     "doctor scan bootstrap environment run stop map check test logs context cache index "
-    "baseline benchmark explain feedback watch session agents diagnostics git mcp "
-    "capabilities finish completion"
+    "baseline benchmark explain feedback watch session agents diagnostics git mcp semantic policy "
+    "capabilities plan sarif finish completion"
 )
 GLOBAL_FLAGS = "--project --json --quiet --help --version"
 COMMAND_FLAGS = (
-    "--mode --jobs --no-cache --resume --retry-flaky --policy --compare --dry-run "
+    "--mode --jobs --no-cache --resume --retry-flaky --retry-infra --policy --compare --dry-run "
     "--explain --create-env --if-needed --foreground --timeout --ready-http --ready-tcp "
     "--startup-timeout --startup-log-lines --max-files --max-depth --tool --task --profile "
     "--max-chars --max-file-chars --max-diff-chars --include --exclude --changed-only "
     "--staged-only --no-git --format --output --incremental --since --retrieval --tokenizer "
     "--token-budget --provider-usage --refine --refinement-rounds --refinement-max-files "
-    "--compression --debounce --poll --initial --max-runs --title --path --depends-on --agent "
+    "--compression --debounce --poll --initial --max-runs --max-updates --idle-timeout --backend "
+    "--title --path --depends-on --agent --input "
     "--lease-seconds --suite --variant --trials --cache-state --symbol --tail"
 )
 

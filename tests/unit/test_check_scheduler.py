@@ -127,7 +127,7 @@ def test_feedback_first_report_lists_cancelled_checks(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(
         check,
         "_run_logged",
-        lambda task, root, logs, entries, cache, retry=0: _result(
+        lambda task, root, logs, entries, cache, retry=0, retry_infra=1: _result(
             task, 1 if task.name == "lint" else 0
         ),
     )

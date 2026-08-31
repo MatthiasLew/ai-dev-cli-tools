@@ -6,17 +6,23 @@
 
 - Detectors inspect environment and project structure without changing files.
 - Runners execute existing project commands with `subprocess.run(shell=False)`, timeouts, UTF-8 output, and full log capture.
-- Parsers reduce raw command output into first failure, project frame, repeated warning groups, and issue lists.
-- Reporters write stable Markdown and JSON reports.
+- Parsers reduce raw command output into first failure, project frame, repeated warning groups,
+  issue lists, and retry-safe failure classes.
+- Reporters write stable Markdown, JSON, and project-scoped SARIF reports.
 - Git helpers inspect repository state without destructive operations.
-- Security helpers scan changed files for masked secret findings.
+- Security helpers scan changed files for masked secret findings and assess command impact against
+  configurable execution policy.
 - Context builders compose detector, git, runner-plan, parser, and security outputs into bounded AI context packages.
 - The MCP adapter exposes bounded local reports as strict STDIO JSON-RPC tools without duplicating detector or runner logic.
+- The semantic adapter maintains a bounded structural symbol index and loads explicitly selected
+  trusted providers through `ai_dev_tools.semantic_backends`.
 - Packaging smoke tests build a wheel, install it into a clean virtual environment, and verify the installed `ai-dev` entrypoint.
 
 ## Data Flow
 
-CLI or MCP tool -> detector/runner/context builder -> full log or bounded source selection -> parser/security masking -> `Report` model -> Markdown/JSON artifacts or concise MCP `structuredContent`.
+CLI or MCP tool -> plan/detector/runner/context builder -> full log or bounded source selection ->
+parser/security classification and masking -> `Report` model -> Markdown/JSON/SARIF artifacts or
+concise MCP `structuredContent`.
 
 ## Extending
 
@@ -30,6 +36,10 @@ The scheduler additionally models explicit task dependencies and conservative lo
 classes. CPU tasks consume one slot, memory-heavy tasks consume two, and exclusive build tasks run
 alone. Results are always restored to deterministic plan order. Watch cancellation propagates an
 in-memory token only to subprocesses created by the active validation.
+
+Before execution, checks are assessed against the configured command policy. Failed commands are
+classified as code, environment, infrastructure, timeout, cancellation, policy, or unknown.
+Only transient infrastructure failures receive the separately bounded automatic retry.
 
 The stable `runners.check` facade orchestrates execution and re-exports its public models and selection functions. `check_models` owns report contracts, while `check_selection` owns changed-file and affected-test strategy.
 

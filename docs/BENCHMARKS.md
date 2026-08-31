@@ -47,8 +47,14 @@ Raw JSON and compact Markdown reports stay under `.ai/benchmarks/`.
 
 A suite variant may emit one private `AI_DEV_BENCHMARK_METRICS=` JSON line on stderr to
 report its real command count, validation subprocess count, and time to its first actionable
-result. The runner validates and removes that line before counting agent-visible bytes. Missing or
-invalid metrics safely fall back to the generic runner measurements.
+result. It may additionally report `iterations`, `files_read`, `selected_items`,
+`relevant_items`, `true_positive_items`, `false_negative_items`, `input_tokens`, and
+`output_tokens`. The runner derives selection precision and recall, preserves false-negative
+counts, and compares their medians. A candidate with a recall regression is rejected even when it
+is faster or smaller. The runner validates and removes the private line before counting
+agent-visible bytes. Missing or invalid metrics safely fall back to generic measurements and are
+never presented as exact model-token counts. `selection_metric_trials` is zero when precision and
+recall were not reported; their zero medians must not be interpreted as measured selection quality.
 
 ## Included suites
 

@@ -20,6 +20,7 @@ from ai_dev_tools.config import Settings, load_settings
 from ai_dev_tools.detectors.runtime import detect_runtime_requirements
 from ai_dev_tools.detectors.workspaces import detect_workspaces
 from ai_dev_tools.models.report import Artifact, Issue, Report
+from ai_dev_tools.parsers.failures import classify_failure
 from ai_dev_tools.parsers.logs import parse_tool_output
 from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.runners import check_selection as _selection
@@ -38,6 +39,7 @@ from ai_dev_tools.runners.check_models import (
 from ai_dev_tools.runners.check_scheduler import schedule_checks, schedule_graph
 from ai_dev_tools.runners.flaky import eligible_for_retry, record_result
 from ai_dev_tools.runners.focused import focused_rerun
+from ai_dev_tools.security.execution import ExecutionPolicy, assess_command
 from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command, split_command
 
@@ -67,6 +69,7 @@ def run_check(
     policy: str = "complete",
     resume: bool = False,
     retry_flaky: int = 0,
+    retry_infra: int = 1,
     compare: str | None = None,
     cancel_event: Event | None = None,
 ) -> Report:
@@ -85,6 +88,14 @@ def run_check(
         report.summary = {
             "reason_code": "INVALID_FLAKY_RETRY_LIMIT",
             "retry_flaky": retry_flaky,
+            "maximum": 3,
+        }
+        return report.finish()
+    if not 0 <= retry_infra <= 3:
+        report.status = "invalid_configuration"
+        report.summary = {
+            "reason_code": "INVALID_INFRASTRUCTURE_RETRY_LIMIT",
+            "retry_infra": retry_infra,
             "maximum": 3,
         }
         return report.finish()
@@ -146,6 +157,7 @@ def run_check(
                 entries,
                 cache_enabled,
                 retry_flaky,
+                retry_infra,
                 cancel_event,
             )
             if cancel_event is not None
@@ -156,6 +168,7 @@ def run_check(
                 entries,
                 cache_enabled,
                 retry_flaky,
+                retry_infra,
             )
         ),
     )
@@ -164,7 +177,10 @@ def run_check(
 
     failed = [result for result in results if result.exit_code != 0]
     flaky_results = [result for result in results if result.flaky]
-    report.status = "failed" if failed else "warning" if flaky_results else "success"
+    recovered_results = [result for result in results if result.infrastructure_recovered]
+    report.status = (
+        "failed" if failed else "warning" if flaky_results or recovered_results else "success"
+    )
     for task, result in zip(tasks, results, strict=True):
         if result.flaky:
             report.issues.append(
@@ -172,6 +188,14 @@ def run_check(
                     "warning",
                     f"{task.name} failed initially and passed after {result.attempts - 1} retry.",
                     code="FLAKY_PASS",
+                )
+            )
+        if result.infrastructure_recovered:
+            report.issues.append(
+                Issue(
+                    "warning",
+                    f"{task.name} recovered after a transient infrastructure retry.",
+                    code="INFRASTRUCTURE_RETRY_RECOVERED",
                 )
             )
     report.summary = _summary_for_results(mode, plan, tasks, results, changed_selection)
@@ -220,7 +244,12 @@ def run_check(
         "aggregate_subprocess_seconds": scheduled.aggregate_seconds,
         "time_to_first_failure_seconds": scheduled.time_to_first_failure_seconds,
         "retry_flaky": retry_flaky,
+        "retry_infra": retry_infra,
         "retry_attempts": sum(max(0, result.attempts - 1) for result in results),
+        "infrastructure_retry_attempts": sum(
+            result.infrastructure_attempts for result in results
+        ),
+        "infrastructure_recoveries": len(recovered_results),
         "flaky_passes": len(flaky_results),
         "index": index_summary,
     }
@@ -395,6 +424,7 @@ def _run_logged(
     index_entries: object,
     use_cache: bool,
     retry_flaky: int = 0,
+    retry_infra: int = 1,
     cancel_event: Event | None = None,
 ) -> CommandResult:
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -403,17 +433,62 @@ def _run_logged(
     cache_key = validation_cache_key(index_entries, task.command, task.workspace)
     result = load_validation_result(root, cache_key, task.command) if use_cache else None
     if result is None:
-        result = (
-            run_command(task.command, working_directory, cancel_event=cancel_event)
-            if cancel_event is not None
-            else run_command(task.command, working_directory)
+        execution = load_settings(root).execution
+        assessment = assess_command(
+            task.command,
+            root,
+            ExecutionPolicy(
+                mode=execution.mode,
+                allow_prefixes=tuple(execution.allow_prefixes),
+                deny_prefixes=tuple(execution.deny_prefixes),
+                maximum_impact=execution.maximum_impact,
+            ),
         )
+        if not assessment.allowed:
+            result = CommandResult(
+                task.command,
+                126,
+                "",
+                assessment.reason_code,
+                0.0,
+                failure_class="policy",
+            )
+        else:
+            result = (
+                run_command(task.command, working_directory, cancel_event=cancel_event)
+                if cancel_event is not None
+                else run_command(task.command, working_directory)
+            )
         result.stdout = mask_text(result.stdout)
         result.stderr = mask_text(result.stderr)
         first_output = result.combined_output
         first_exit_code = result.exit_code
         total_duration = result.duration_seconds
         attempts = 1
+        classification = classify_failure(result)
+        result.failure_class = classification.category
+        result.retryable = classification.retryable
+        if retry_infra and classification.retryable and not result.cancelled:
+            for _ in range(retry_infra):
+                retry = (
+                    run_command(task.command, working_directory, cancel_event=cancel_event)
+                    if cancel_event is not None
+                    else run_command(task.command, working_directory)
+                )
+                retry.stdout = mask_text(retry.stdout)
+                retry.stderr = mask_text(retry.stderr)
+                attempts += 1
+                total_duration += retry.duration_seconds
+                result = retry
+                result.infrastructure_attempts = attempts - 1
+                classification = classify_failure(result)
+                result.failure_class = classification.category
+                result.retryable = classification.retryable
+                if retry.exit_code == 0:
+                    result.infrastructure_recovered = True
+                    break
+                if not classification.retryable:
+                    break
         if retry_flaky and not result.cancelled and eligible_for_retry(task, result):
             for _ in range(retry_flaky):
                 retry = (
@@ -426,6 +501,9 @@ def _run_logged(
                 attempts += 1
                 total_duration += retry.duration_seconds
                 result = retry
+                classification = classify_failure(result)
+                result.failure_class = classification.category
+                result.retryable = classification.retryable
                 if retry.exit_code == 0:
                     result.flaky = True
                     break
@@ -519,6 +597,10 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
         "duration_seconds": result.duration_seconds,
         "timed_out": result.timed_out,
         "cancelled": result.cancelled,
+        "failure_class": result.failure_class,
+        "retryable": result.retryable,
+        "infrastructure_recovered": result.infrastructure_recovered,
+        "infrastructure_attempts": result.infrastructure_attempts,
         "cached": result.cached,
         "attempts": result.attempts,
         "flaky": result.flaky,

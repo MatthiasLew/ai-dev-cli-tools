@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ai_dev_tools.cache.repository import (
@@ -33,6 +34,9 @@ def run_index(project_root: Path, action: str) -> Report:
         "generated_at": index.get("generated_at"),
         **_summary(index.get("summary")),
     }
+    daemon_state = _daemon_state(root / ".ai" / "cache" / "index-daemon.json")
+    if daemon_state:
+        report.summary["daemon"] = daemon_state
     report.artifacts.append(Artifact(str(index_path), "repository-index", "Repository file index"))
     return report
 
@@ -41,4 +45,15 @@ def _summary(value: object) -> dict[str, object]:
     if not isinstance(value, dict):
         return {}
     allowed = {"files", "hashed", "reused", "removed"}
+    return {str(key): item for key, item in value.items() if key in allowed}
+
+
+def _daemon_state(path: Path) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(value, dict):
+        return {}
+    allowed = {"schema_version", "pid", "status", "updates", "poll_ms", "local_only"}
     return {str(key): item for key, item in value.items() if key in allowed}

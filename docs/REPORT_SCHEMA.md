@@ -13,7 +13,7 @@ Required fields:
 ```json
 {
   "schema_version": "1.1",
-  "tool_version": "1.0.0",
+  "tool_version": "1.1.0.dev0",
   "command": "check",
   "status": "success",
   "exit_code": 0,
@@ -91,6 +91,18 @@ Schema 1.1 adds `exit_code` and `metadata`. Consumers should treat missing field
 `check --mode changed` includes `changed_analysis` with `strategy`, `confidence`, `changed_files`, `selected_tests`, `selected_commands`, `fallback_reason`, and bounded `reason_paths` that explain why files and commands were selected.
 
 The check execution plan records each task's dependencies and resource class, together with the effective CPU, memory, I/O, and exclusive concurrency limits. A cancelled obsolete watch result is identified explicitly and is never retried or cached; watch summaries expose cancellation and queued-rerun counters.
+
+Executed check entries may include `failure_class`, `retryable`,
+`infrastructure_attempts`, and `infrastructure_recovered`. Infrastructure retry preserves the
+initial exit code and output. Policy-blocked commands use exit code 126 and a stable policy reason
+code; they are never represented as code or infrastructure failures.
+
+## Agent plan summary
+
+`plan` and MCP `plan_work` expose `agent_plan_version`, `decision`, bounded `scope`, ordered
+`next_actions`, validation commands and policy assessments, stable `evidence`, and explicit
+preview-only constraints. Scope reports total and truncated file/symbol counts so an agent can
+broaden retrieval without assuming omitted items are irrelevant.
 
 ## Safe compression
 
