@@ -1,6 +1,9 @@
 # Changelog
 
-## 1.1.0rc1 - 2026-08-31
+## 1.1.0 - 2026-08-31
+
+Stable promotion of `1.1.0rc1` after cross-platform CI, benchmark regression gates, and a clean
+TestPyPI installation smoke test.
 
 - Add `plan` and MCP `plan_work` for bounded, preview-only implementation plans with scope,
   dependencies, validation, risk, policy assessments, and stable evidence references.
