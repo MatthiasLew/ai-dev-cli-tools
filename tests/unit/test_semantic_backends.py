@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+import threading
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -94,7 +96,7 @@ def test_lsp_index_routes_supported_files_to_available_server(monkeypatch, tmp_p
         def __init__(self, command: list[str], root: Path) -> None:
             assert command[0] == "pyright-langserver"
 
-        def __enter__(self):  # type: ignore[no-untyped-def]
+        def __enter__(self) -> Session:
             return self
 
         def __exit__(self, *args: object) -> None:
@@ -107,7 +109,7 @@ def test_lsp_index_routes_supported_files_to_available_server(monkeypatch, tmp_p
 
     from ai_dev_tools import semantic_backends
 
-    monkeypatch.setattr(semantic_backends.shutil, "which", lambda name: f"/bin/{name}")
+    monkeypatch.setattr(shutil, "which", lambda name: f"/bin/{name}")
     monkeypatch.setattr(semantic_backends, "LspSession", Session)
     rows = lsp_index(tmp_path, [source, tmp_path / "README.md"])
     assert rows == [{"path": "app.py", "name": "run", "language": "python"}]
@@ -129,12 +131,10 @@ class FakeProcess:
 
 
 def test_lsp_session_json_rpc_lifecycle(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    from ai_dev_tools import semantic_backends
-
     process = FakeProcess()
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)
     monkeypatch.setattr(
-        semantic_backends.threading,
+        threading,
         "Thread",
         lambda **kwargs: SimpleNamespace(start=lambda: None),
     )

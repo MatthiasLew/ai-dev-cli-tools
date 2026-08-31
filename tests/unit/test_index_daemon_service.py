@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
 
+from pytest import MonkeyPatch
+
 from ai_dev_tools import index_daemon_service as service
 
 
-def test_daemon_status_is_local_and_hides_auth_token(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_daemon_status_is_local_and_hides_auth_token(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     path = tmp_path / service.STATE_PATH
     service._write_state(
         path,
@@ -52,7 +57,8 @@ def test_native_daemon_processes_event_and_stops_over_ipc(tmp_path: Path) -> Non
         if state.get("updates") == 2:
             break
         time.sleep(0.02)
-    assert int(state["events"]) >= 1
+    assert isinstance(state["events"], int)
+    assert state["events"] >= 1
     assert state["updates"] == 2
     assert service._request({**state, "token": "wrong"}, "status")["status"] == "unauthorized"
     assert service._request(state, "stop")["status"] == "stopping"
@@ -62,8 +68,8 @@ def test_native_daemon_processes_event_and_stops_over_ipc(tmp_path: Path) -> Non
 
 
 def test_daemon_control_handles_inactive_duplicate_and_invalid_actions(
-    tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     assert service.control_index_daemon(tmp_path, "status").status == "partial"
     assert service.control_index_daemon(tmp_path, "stop").status == "partial"
     assert service.control_index_daemon(tmp_path, "invalid").status == "invalid_configuration"
@@ -77,7 +83,9 @@ def test_daemon_control_handles_inactive_duplicate_and_invalid_actions(
     assert stopped.status == "success"
 
 
-def test_daemon_control_start_success_and_fast_failure(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_daemon_control_start_success_and_fast_failure(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     def spawn(command: list[str], root: Path) -> None:
         service._write_state(
             root / service.STATE_PATH,
@@ -92,27 +100,29 @@ def test_daemon_control_start_success_and_fast_failure(tmp_path: Path, monkeypat
     (tmp_path / service.STATE_PATH).unlink()
     monkeypatch.setattr(service, "_spawn", lambda command, root: None)
     ticks = iter((0.0, 11.0))
-    monkeypatch.setattr(service.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
     failed = service.control_index_daemon(tmp_path, "start")
     assert failed.status == "failed"
 
 
 def test_daemon_helpers_reject_broken_state_and_spawn_without_shell(
-    tmp_path: Path, monkeypatch
-) -> None:  # type: ignore[no-untyped-def]
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
     broken = tmp_path / "broken.json"
     broken.write_text("not-json", encoding="utf-8")
     assert service._read_state(broken) == {}
     assert service._request({"port": "bad", "token": 1}, "status") == {}
 
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(service.subprocess, "Popen", lambda *args, **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: calls.append(kwargs))
     service._spawn(["python", "worker.py"], tmp_path)
     assert calls[0]["cwd"] == tmp_path
-    assert calls[0]["stdin"] == service.subprocess.DEVNULL
+    assert calls[0]["stdin"] == subprocess.DEVNULL
 
 
-def test_internal_daemon_entrypoint_routes_to_service(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_internal_daemon_entrypoint_routes_to_service(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setattr(service, "serve", lambda root, token: 9)
     monkeypatch.setattr(
         sys,
