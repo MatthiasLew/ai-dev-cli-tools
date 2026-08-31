@@ -65,6 +65,7 @@ def test_initialize_advertises_tools_and_bounded_instructions(tmp_path: Path) ->
         "coordinate_agents",
         "explain_evidence",
         "feedback",
+        "plan_work",
         "project_status",
         "run_checks",
     ]
@@ -143,6 +144,22 @@ def test_check_tool_is_preview_only_by_default(tmp_path: Path) -> None:
     assert structured["summary"]["explain_only"] is True
     selected = structured["summary"]["selected_checks"]
     assert any("command-that-must-not-run" in item["command"] for item in selected)
+
+
+def test_plan_work_returns_preview_only_agent_plan(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='mcp-plan'\nversion='0.0.0'\n",
+        encoding="utf-8",
+    )
+    server = LocalMcpServer(tmp_path)
+
+    result = _call(server, "plan_work", {"task": "add a bounded feature"})
+
+    assert result["isError"] is False
+    structured = result["structuredContent"]
+    assert structured["summary"]["constraints"]["preview_only"] is True
+    assert structured["summary"]["constraints"]["commands_executed"] is False
+    assert (tmp_path / ".ai" / "reports" / "agent-plan.json").exists()
 
 
 def test_context_tool_is_preview_only_and_bounded_by_default(tmp_path: Path) -> None:

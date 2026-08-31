@@ -33,7 +33,7 @@ and longer-term direction without presenting proposed interfaces as available co
 | 11 | Compact agent protocol | Implemented | Schema 1.1 JSON reports, stable reason codes, evidence references, bounded output, and the local MCP server provide the supported machine contract. |
 | 12 | Local session state | Implemented | Versioned local session and observation state retains task, validation, context, and unresolved failure evidence without storing a conversation transcript. |
 | 13 | Dependency-aware parallel scheduler | Implemented | `check --jobs` respects explicit check dependencies, CPU/memory/exclusive resource classes, feedback-first gates, and deterministic report order. Failed dependencies conservatively cancel their dependents. |
-| 14 | Persistent repository index | Implemented | `index status/update/rebuild` maintains a schema-versioned, content-addressed index under `.ai/cache/`. |
+| 14 | Persistent repository index | Implemented | `index status/update/rebuild` maintains a schema-versioned, content-addressed index under `.ai/cache/`; foreground `index daemon` keeps it warm with bounded polling and lifecycle state. |
 | 15 | Watch mode | Implemented | Foreground polling, debounce, generated-root exclusion, queued changes, bounded runs, and cancellation of subprocesses owned by obsolete validations are implemented. Cancellation never targets an unrelated PID. |
 | 16 | Priority and fail-fast scheduling | Implemented | `feedback-first` and `complete` policies provide deterministic priority waves and required-failure gating. |
 | 17 | Warm environment state | Implemented | `bootstrap --if-needed` and `environment explain` reuse only revalidated executable, dependency, configuration, runtime, and plan fingerprints. |
@@ -41,7 +41,11 @@ and longer-term direction without presenting proposed interfaces as available co
 | 19 | Flaky-test awareness | Implemented | Opt-in bounded retries preserve first failures, exclude deterministic/environment failures, avoid caching flaky passes, and maintain bounded local history. |
 | 20 | Unified feedback command | Implemented | `feedback` composes Git changes, changed validation, incremental context, focused reruns, timings, observations, and session state. |
 | 21 | Performance budgets | Implemented | Schema-versioned local timing records, total/per-stage budgets, bounded retention, and `performance latest/compare` diagnostics are available. |
-| 22 | Reproducible workflow benchmarks | Implemented | Versioned local suites support repeated cold/warm trials, correctness gates, machine-readable results, and compact comparisons for repair, affected-test, multi-turn, and monorepo scenarios. |
+| 22 | Reproducible workflow benchmarks | Implemented | Versioned local suites support repeated cold/warm trials, correctness gates, precision/recall and false-negative metrics, token/iteration/file telemetry, machine-readable results, and compact comparisons. |
+| 23 | Agent execution plans | Implemented | `plan` and MCP `plan_work` emit preview-only scope, risk, dependencies, command-policy assessments, validation schedules, and stable evidence references. |
+| 24 | Optional semantic providers | Implemented | A bounded local structural index is built in; explicitly selected entry-point providers can add Tree-sitter or LSP-backed semantics, while auto mode fails closed to structural parsing. |
+| 25 | Execution policy | Implemented | Audit/enforce modes, allow/deny prefixes, impact ceilings, preview assessment, and enforcement cover checks, bootstrap, and managed application startup. |
+| 26 | CI-native agent evidence | Implemented | Reports convert deterministically to SARIF and the pinned GitHub Actions workflow publishes a compact plan summary plus code-scanning evidence. |
 
 ## Implemented supporting capabilities
 

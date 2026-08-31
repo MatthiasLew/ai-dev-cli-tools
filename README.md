@@ -62,7 +62,14 @@ ai-dev check --mode full --jobs 4
 ai-dev check --mode changed --policy feedback-first --resume
 ai-dev check --mode changed --compare main
 ai-dev check --mode changed --retry-flaky 1
+ai-dev check --mode changed --retry-infra 1
+ai-dev plan --task "implement rate limiting" --mode changed
 ai-dev index update
+ai-dev index daemon --poll 500 --idle-timeout 300
+ai-dev semantic status
+ai-dev semantic index --backend auto
+ai-dev policy assess -- python -m pytest
+ai-dev sarif --input .ai/reports/agent-plan.json
 ai-dev cache status
 ai-dev cache layout
 ai-dev baseline create main
@@ -92,7 +99,7 @@ All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version`
 
 ## Local MCP server
 
-`ai-dev mcp serve` exposes project status, compact feedback, bounded context, validation,
+`ai-dev mcp serve` exposes project status, implementation planning, compact feedback, bounded context, validation,
 and progressive evidence as local structured tools for Codex-compatible MCP clients. The STDIO
 server is dependency-free, has no network listener, fixes all calls to one project root, and
 defaults validation to preview-only.
@@ -103,6 +110,9 @@ codex mcp add ai-dev -- ai-dev --project "/absolute/path/to/project" mcp serve
 
 See `docs/MCP_SERVER.md` for tool schemas, approvals, project-scoped configuration, and
 security boundaries.
+
+For the recommended agent loop—plan, retrieve, implement, validate, and expand only failed
+evidence—see `docs/AGENT_WORKFLOW.md`.
 
 For agents sharing a repository, `ai-dev agents add|claim|heartbeat|release|complete|status`
 maintains an atomic local task board with expiring leases and declared-path conflict detection.
@@ -199,6 +209,12 @@ paths = ["node_modules", ".venv", "dist", "build"]
 [reports]
 directory = ".ai/reports"
 logs_directory = ".ai/logs"
+
+[execution]
+mode = "enforce"
+maximum_impact = "high"
+allow_prefixes = ["python -m pytest", "python -m ruff", "python -m mypy"]
+deny_prefixes = ["git reset", "git clean"]
 ```
 
 Configuration takes precedence over auto detection. Invalid or unknown configuration is reported through `config_warnings` instead of crashing normal scans.
@@ -231,6 +247,11 @@ git diff --check
 | test affected | implemented |
 | test flaky / check --retry-flaky | implemented |
 | index status/update/rebuild | implemented |
+| index daemon | implemented |
+| plan / MCP plan_work | implemented |
+| semantic status/index | implemented with optional provider plugins |
+| policy assess / execution enforcement | implemented |
+| sarif | implemented |
 | cache status/prune/clear/layout | implemented |
 | logs summarize | implemented |
 | context build | implemented |

@@ -26,6 +26,7 @@ from ai_dev_tools.runners.environment_state import (
     capture_environment_state,
     inspect_environment_state,
 )
+from ai_dev_tools.security.execution import ExecutionPolicy, assess_command
 from ai_dev_tools.security.secrets import mask_text
 from ai_dev_tools.utils.subprocess import CommandResult, run_command
 
@@ -116,10 +117,18 @@ def run_bootstrap(project_root: Path, options: BootstrapOptions) -> Report:
             if step.action == "copy_env" and result.exit_code == 0:
                 created_env = True
             if result.exit_code != 0:
-                report.status = "failed"
+                report.status = "blocked" if result.failure_class == "policy" else "failed"
                 report.exit_code = result.exit_code
                 report.issues.append(
-                    Issue("error", f"Bootstrap command failed: {step.name}", code="COMMAND_FAILED")
+                    Issue(
+                        "error",
+                        f"Bootstrap command failed: {step.name}",
+                        code=(
+                            "COMMAND_BLOCKED_BY_POLICY"
+                            if result.failure_class == "policy"
+                            else "COMMAND_FAILED"
+                        ),
+                    )
                 )
                 break
         if report.status == "success" and settings.bootstrap.run_smoke_check:
@@ -201,7 +210,30 @@ def _execute_step(step: BootstrapStep, settings: Settings, log_path: Path) -> Co
             shutil.copyfile(source, target)
             result = CommandResult(step.command, 0, "Created .env from .env.example", "", 0.0)
     else:
-        result = run_command(step.command, working_directory, settings.bootstrap.timeout_seconds)
+        configured = settings.execution
+        assessment = assess_command(
+            step.command,
+            working_directory,
+            ExecutionPolicy(
+                mode=configured.mode,
+                allow_prefixes=tuple(configured.allow_prefixes),
+                deny_prefixes=tuple(configured.deny_prefixes),
+                maximum_impact=configured.maximum_impact,
+            ),
+        )
+        if not assessment.allowed:
+            result = CommandResult(
+                step.command,
+                126,
+                "",
+                f"Blocked by execution policy: {assessment.reason_code}",
+                0.0,
+                failure_class="policy",
+            )
+        else:
+            result = run_command(
+                step.command, working_directory, settings.bootstrap.timeout_seconds
+            )
     result.stdout = mask_text(result.stdout)
     result.stderr = mask_text(result.stderr)
     _append_log(log_path, step, result)
@@ -223,6 +255,7 @@ def _step_result(step: BootstrapStep, result: CommandResult) -> dict[str, object
         "exit_code": result.exit_code,
         "duration_seconds": result.duration_seconds,
         "timed_out": result.timed_out,
+        "failure_class": result.failure_class,
     }
 
 

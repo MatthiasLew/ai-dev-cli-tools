@@ -51,6 +51,20 @@ REQUIRED_STEPS = [
     "ai-dev git inspect --json",
     "ai-dev capabilities --json",
     "ai-dev context build --explain --json",
+    'ai-dev plan --task "Review this commit" --json',
+    "ai-dev sarif --input .ai/reports/agent-plan.json --output .ai/reports/ai-dev.sarif",
+]
+
+REQUIRED_AGENT_REPORT_TOKENS = [
+    "security-events: write",
+    "persist-credentials: false",
+    "github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938",
+    "github.event.pull_request.head.repo.full_name == github.repository",
+]
+
+REQUIRED_PINNED_TOOLCHAIN_ACTIONS = [
+    "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c",
+    "shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240",
 ]
 
 
@@ -69,6 +83,12 @@ def main() -> int:
     for step in REQUIRED_STEPS:
         if step not in ci:
             errors.append(f"missing CI step: {step}")
+    for token in REQUIRED_AGENT_REPORT_TOKENS:
+        if token not in ci:
+            errors.append(f"missing agent-report workflow token: {token}")
+    for action in REQUIRED_PINNED_TOOLCHAIN_ACTIONS:
+        if action not in ci:
+            errors.append(f"missing pinned toolchain action: {action}")
     install_step = 'python -m pip install -c requirements-dev.lock -e ".[dev]"'
     if install_step not in ci or install_step not in docs:
         errors.append("CI and Docs must install the pinned development-tool baseline")

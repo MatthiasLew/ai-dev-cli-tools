@@ -62,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--no-cache", action="store_true")
     check.add_argument("--resume", action="store_true")
     check.add_argument("--retry-flaky", type=int, default=0, metavar="COUNT")
+    check.add_argument("--retry-infra", type=int, default=1, metavar="COUNT")
     check.add_argument("--policy", choices=["complete", "feedback-first"], default="complete")
     check.add_argument("--compare", metavar="BASELINE")
     check.add_argument(
@@ -77,6 +78,25 @@ def build_parser() -> argparse.ArgumentParser:
     index_sub = index.add_subparsers(dest="index_command", required=True)
     for action in ["status", "update", "rebuild"]:
         index_sub.add_parser(action)
+    index_daemon = index_sub.add_parser("daemon")
+    index_daemon.add_argument("--poll", type=int, default=500, metavar="MILLISECONDS")
+    index_daemon.add_argument("--max-updates", type=int, default=0)
+    index_daemon.add_argument("--idle-timeout", type=int, default=0, metavar="SECONDS")
+
+    semantic = sub.add_parser("semantic")
+    semantic_sub = semantic.add_subparsers(dest="semantic_command", required=True)
+    semantic_sub.add_parser("status")
+    semantic_index = semantic_sub.add_parser("index")
+    semantic_index.add_argument("--backend", default="auto")
+
+    policy_parser = sub.add_parser("policy")
+    policy_sub = policy_parser.add_subparsers(dest="policy_command", required=True)
+    policy_assess = policy_sub.add_parser("assess")
+    policy_assess.add_argument("policy_command_args", nargs=argparse.REMAINDER)
+
+    sarif = sub.add_parser("sarif")
+    sarif.add_argument("--input", required=True, type=Path)
+    sarif.add_argument("--output", type=Path)
 
     test = sub.add_parser("test")
     test_sub = test.add_subparsers(dest="test_command", required=True)
@@ -203,6 +223,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
+    plan = sub.add_parser("plan")
+    plan.add_argument("--task", default="")
+    plan.add_argument("--mode", choices=["fast", "changed", "full"], default="changed")
     sub.add_parser("finish")
     return parser
 
@@ -339,6 +362,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         args.no_cache = False
         args.resume = False
         args.retry_flaky = 0
+        args.retry_infra = 1
         args.policy = "complete"
         args.compare = None
     if command == "logs" and args.logs_command == "summarize":
@@ -420,6 +444,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             policy=args.policy,
             resume=args.resume,
             retry_flaky=args.retry_flaky,
+            retry_infra=args.retry_infra,
             compare=args.compare,
         )
     if command == "cache":
@@ -427,9 +452,37 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
 
         return run_cache(project_root, args.cache_command)
     if command == "index":
+        if args.index_command == "daemon":
+            from ai_dev_tools.runners.index_daemon import run_index_daemon
+
+            return run_index_daemon(
+                project_root,
+                poll_ms=args.poll,
+                max_updates=args.max_updates,
+                idle_timeout_seconds=args.idle_timeout,
+            )
         from ai_dev_tools.runners.index import run_index
 
         return run_index(project_root, args.index_command)
+    if command == "semantic":
+        from ai_dev_tools.semantic import run_semantic
+
+        return run_semantic(
+            project_root,
+            args.semantic_command,
+            backend=getattr(args, "backend", "auto"),
+        )
+    if command == "policy" and args.policy_command == "assess":
+        from ai_dev_tools.runners.policy import run_policy_assess
+
+        policy_command = list(args.policy_command_args)
+        if policy_command[:1] == ["--"]:
+            policy_command = policy_command[1:]
+        return run_policy_assess(project_root, policy_command)
+    if command == "sarif":
+        from ai_dev_tools.reporters.sarif import run_sarif_export
+
+        return run_sarif_export(project_root, args.input, args.output)
     if command == "watch":
         from ai_dev_tools.runners.watch import WatchOptions, run_watch
 
@@ -509,6 +562,10 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         return run_diagnostics(project_root)
     if command == "capabilities":
         return _capabilities_report(project_root)
+    if command == "plan":
+        from ai_dev_tools.runners.plan import run_agent_plan
+
+        return run_agent_plan(project_root, task=args.task, mode=args.mode)
     if command == "git":
         from ai_dev_tools.git.inspect import inspect_git
 
@@ -536,6 +593,11 @@ def _capabilities_report(project_root: Path) -> Report:
         "index status",
         "index update",
         "index rebuild",
+        "index daemon",
+        "semantic status",
+        "semantic index",
+        "policy assess",
+        "sarif",
         "logs summarize",
         "context build",
         "bootstrap",
@@ -564,6 +626,7 @@ def _capabilities_report(project_root: Path) -> Report:
         "explain",
         "diagnostics",
         "capabilities",
+        "plan",
     ]
     planned: list[str] = []
     report.summary = {

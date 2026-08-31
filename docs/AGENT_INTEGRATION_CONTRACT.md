@@ -15,14 +15,15 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 
 ## Recommended loop
 
-1. Run `ai-dev cache layout --json` once per content state and place its stable sections before task-specific content at the recommended breakpoint.
-2. Prefer `ai-dev feedback --task "<task>" --json` for the normal compact loop.
-3. Inspect `decision`, `changes`, `validation`, `context`, `observations`, and `performance`.
-4. Use `ai-dev session status --json` after an interrupted handoff.
-5. Read `metadata.progressive.references` and call `ai-dev explain <evidence-id> --json` only for needed evidence.
-6. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
-7. Treat FLAKY_PASS and checks_flaky as unresolved warning evidence; never report them as a clean first-pass success.
-8. Before handoff, run `ai-dev finish --json`.
+1. Call `plan_work` or run `ai-dev plan --task "<task>" --json` before broad edits.
+2. Run `ai-dev cache layout --json` once per content state and place stable sections before task-specific content at the recommended breakpoint.
+3. Prefer `ai-dev feedback --task "<task>" --json` for the normal compact loop.
+4. Inspect `decision`, `scope`, `changes`, `validation`, `context`, `observations`, and `performance`.
+5. Use `ai-dev session status --json` after an interrupted handoff.
+6. Read `metadata.progressive.references` and expand only the evidence needed.
+7. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
+8. Treat flaky passes, low confidence, and recall regressions as unresolved evidence.
+9. Before handoff, run `ai-dev finish --json` and a complete validation pass.
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
 metrics.
@@ -32,12 +33,13 @@ metrics.
 Use the local MCP server when the agent supports structured tools. Tool results contain concise
 text and machine-readable `structuredContent`; consumers should prefer the structured data.
 
-- Call `project_status` before planning broad repository work.
+- Call `project_status`, then `plan_work`, before broad repository work.
 - Use `feedback`, `build_context`, and `run_checks` in their preview-only defaults.
 - Set execution or artifact-writing flags only when the task requires them.
 - Expand one stable ID with `explain_evidence` instead of requesting full logs.
 - Treat tool names and required fields as compatibility contracts.
 - Ignore new optional fields and new tools.
 - Respect MCP annotations and the configured client approval policy.
+- Keep infrastructure retry separate from flaky-test retry; neither may retry code failures.
 
 See `MCP_SERVER.md` for setup and complete safety boundaries.

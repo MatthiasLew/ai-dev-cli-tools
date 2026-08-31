@@ -1,5 +1,6 @@
 import socket
 import sys
+import time
 from contextlib import nullcontext
 from pathlib import Path
 from urllib import request as urllib_request
@@ -123,7 +124,11 @@ def test_background_start_failure_is_reported(monkeypatch, tmp_path: Path) -> No
         "resolve_run_plan",
         lambda settings: RunPlan(["demo"], "test"),
     )
-    monkeypatch.setattr(runner, "_spawn_supervisor", lambda command, cwd: None)
+    class LiveSupervisor:
+        def poll(self) -> None:
+            return None
+
+    monkeypatch.setattr(runner, "_spawn_supervisor", lambda command, cwd: LiveSupervisor())
     monkeypatch.setattr(
         runner,
         "_wait_for_state",
@@ -134,6 +139,98 @@ def test_background_start_failure_is_reported(monkeypatch, tmp_path: Path) -> No
 
     assert report.status == "failed"
     assert report.issues[0].code == "START_FAILED"
+
+
+def test_background_start_retries_dead_supervisor_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        runner,
+        "resolve_run_plan",
+        lambda settings: RunPlan(["demo"], "test"),
+    )
+
+    class DeadSupervisor:
+        def poll(self) -> int:
+            return 1
+
+    spawned: list[list[str]] = []
+
+    def spawn_dead_supervisor(command: list[str], cwd: Path) -> DeadSupervisor:
+        del cwd
+        spawned.append(command)
+        return DeadSupervisor()
+
+    monkeypatch.setattr(runner, "_spawn_supervisor", spawn_dead_supervisor)
+    states = iter(({}, {"status": "running", "supervisor_pid": 1, "child_pid": 2}))
+    monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: next(states))
+
+    report = run_application(tmp_path, RunOptions())
+
+    assert report.status == "success"
+    assert report.summary["startup_attempts"] == 2
+    assert len(spawned) == 2
+
+
+def test_background_start_never_duplicates_live_supervisor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        runner,
+        "resolve_run_plan",
+        lambda settings: RunPlan(["demo"], "test"),
+    )
+
+    class LiveSupervisor:
+        def poll(self) -> None:
+            return None
+
+    spawned: list[list[str]] = []
+
+    def spawn_live_supervisor(command: list[str], cwd: Path) -> LiveSupervisor:
+        del cwd
+        spawned.append(command)
+        return LiveSupervisor()
+
+    monkeypatch.setattr(runner, "_spawn_supervisor", spawn_live_supervisor)
+    monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: {})
+
+    report = run_application(tmp_path, RunOptions())
+
+    assert report.status == "failed"
+    assert report.summary["startup_attempts"] == 1
+    assert len(spawned) == 1
+
+
+def test_background_start_stops_after_two_dead_supervisors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        runner,
+        "resolve_run_plan",
+        lambda settings: RunPlan(["demo"], "test"),
+    )
+
+    class DeadSupervisor:
+        def poll(self) -> int:
+            return 1
+
+    spawned: list[list[str]] = []
+
+    def spawn_dead_supervisor(command: list[str], cwd: Path) -> DeadSupervisor:
+        del cwd
+        spawned.append(command)
+        return DeadSupervisor()
+
+    monkeypatch.setattr(runner, "_spawn_supervisor", spawn_dead_supervisor)
+    monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: {})
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+
+    report = run_application(tmp_path, RunOptions())
+
+    assert report.status == "failed"
+    assert report.summary["startup_attempts"] == 2
+    assert len(spawned) == 2
 
 
 def test_stop_handles_absent_exited_and_invalid_state(tmp_path: Path) -> None:

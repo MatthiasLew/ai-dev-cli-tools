@@ -96,6 +96,8 @@ def test_benchmark_cli_is_wired(tmp_path: Path, capsys) -> None:  # type: ignore
     assert exit_code == 0
     assert payload["summary"]["suite"] == "tiny-agent-workflow"
     assert payload["summary"]["token_estimation"] == "masked_utf8_bytes_divided_by_4"
+    assert payload["summary"]["statistics"]["median_iterations"] >= 1
+    assert "median_selection_recall" in payload["summary"]["statistics"]
 
 
 def test_compare_requires_different_variants_and_matching_cache_state(tmp_path: Path) -> None:

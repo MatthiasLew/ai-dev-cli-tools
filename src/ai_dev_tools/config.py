@@ -34,6 +34,14 @@ class BootstrapSettings:
 
 
 @dataclass(slots=True)
+class ExecutionSettings:
+    mode: str = "audit"
+    allow_prefixes: list[str] = field(default_factory=list)
+    deny_prefixes: list[str] = field(default_factory=list)
+    maximum_impact: str = "high"
+
+
+@dataclass(slots=True)
 class Settings:
     project_root: Path
     reports_directory: Path
@@ -46,6 +54,7 @@ class Settings:
     bootstrap: BootstrapSettings = field(default_factory=BootstrapSettings)
     performance_budgets: dict[str, float] = field(default_factory=dict)
     performance_retention: int = 50
+    execution: ExecutionSettings = field(default_factory=ExecutionSettings)
 
 
 def load_settings(project_root: Path) -> Settings:
@@ -82,6 +91,7 @@ def load_settings(project_root: Path) -> Settings:
         bootstrap=bootstrap,
         performance_budgets=_performance_budgets(data),
         performance_retention=_int_value(performance, "retention", 50),
+        execution=_execution_settings(data),
     )
 
 
@@ -116,6 +126,7 @@ def _config_warnings(data: dict[str, Any]) -> list[str]:
         "changed_tests",
         "bootstrap",
         "performance",
+        "execution",
     }
     warnings = [f"Unknown top-level config key: {key}" for key in sorted(data) if key not in known]
     for section in known & data.keys():
@@ -129,6 +140,41 @@ def _config_warnings(data: dict[str, Any]) -> list[str]:
     warnings.extend(_path_list_warning(data, "ignore", "paths"))
     warnings.extend(_bootstrap_warnings(data))
     warnings.extend(_performance_warnings(data))
+    warnings.extend(_execution_warnings(data))
+    return warnings
+
+
+def _execution_settings(data: dict[str, Any]) -> ExecutionSettings:
+    raw = _section(data, "execution")
+    mode = _string_value(raw, "mode", "audit")
+    maximum = _string_value(raw, "maximum_impact", "high")
+    return ExecutionSettings(
+        mode=mode if mode in {"audit", "enforce"} else "audit",
+        allow_prefixes=_string_list(raw, "allow_prefixes"),
+        deny_prefixes=_string_list(raw, "deny_prefixes"),
+        maximum_impact=(
+            maximum if maximum in {"low", "medium", "high", "critical"} else "high"
+        ),
+    )
+
+
+def _execution_warnings(data: dict[str, Any]) -> list[str]:
+    raw = data.get("execution", {})
+    if not isinstance(raw, dict):
+        return []
+    warnings = [
+        f"Unknown config key: [execution].{key}"
+        for key in sorted(raw)
+        if key not in {"mode", "allow_prefixes", "deny_prefixes", "maximum_impact"}
+    ]
+    if raw.get("mode", "audit") not in {"audit", "enforce"}:
+        warnings.append("Config value [execution].mode must be audit or enforce")
+    if raw.get("maximum_impact", "high") not in {"low", "medium", "high", "critical"}:
+        warnings.append(
+            "Config value [execution].maximum_impact must be low, medium, high, or critical"
+        )
+    warnings.extend(_path_list_warning(data, "execution", "allow_prefixes"))
+    warnings.extend(_path_list_warning(data, "execution", "deny_prefixes"))
     return warnings
 
 

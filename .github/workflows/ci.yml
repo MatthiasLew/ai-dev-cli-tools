@@ -13,8 +13,8 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
@@ -33,7 +33,7 @@ jobs:
       - run: ai-dev capabilities --json
       - run: ai-dev context build --explain --json
       - run: ai-dev git inspect --json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: ai-dev-reports-${{ matrix.os }}-${{ matrix.python-version }}
@@ -44,23 +44,23 @@ jobs:
   toolchain-e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: temurin
           java-version: "17"
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: shivammathur/setup-php@v2
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable 2026-08-31
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: "8.3"
           tools: composer
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           gradle-version: "8.10"
       - run: python -m pip install -c requirements-dev.lock -e ".[dev]"
@@ -69,3 +69,29 @@ jobs:
           RUN_TOOLCHAIN_E2E: "1"
           E2E_TOOLCHAINS: python,node,rust,maven,gradle,php
         run: python -m pytest tests/integration/test_toolchain_e2e.py -q
+
+  agent-report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -c requirements-dev.lock -e ".[dev]"
+      - name: Build bounded agent plan
+        run: ai-dev plan --task "Review this commit" --json
+      - name: Export SARIF
+        run: ai-dev sarif --input .ai/reports/agent-plan.json --output .ai/reports/ai-dev.sarif
+      - name: Add agent plan to job summary
+        run: cat .ai/reports/agent-plan.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload SARIF to GitHub code scanning
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          sarif_file: .ai/reports/ai-dev.sarif

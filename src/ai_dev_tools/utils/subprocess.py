@@ -24,6 +24,10 @@ class CommandResult:
     initial_exit_code: int | None = None
     initial_output: str = ""
     cancelled: bool = False
+    failure_class: str = "success"
+    retryable: bool = False
+    infrastructure_recovered: bool = False
+    infrastructure_attempts: int = 0
 
     @property
     def combined_output(self) -> str:
