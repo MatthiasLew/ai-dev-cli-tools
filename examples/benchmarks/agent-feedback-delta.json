@@ -1,0 +1,32 @@
+{
+    "schema_version": "1.0",
+    "name": "agent-feedback-delta",
+    "fixture_version": "1",
+    "working_directory": "examples/benchmarks/fixtures/agent-workflow",
+    "reset_command": [
+        "python",
+        "../../../../scripts/benchmark_agent_workflow.py",
+        "feedback-delta",
+        "reset"
+    ],
+    "validation_command": [
+        "python",
+        "../../../../scripts/benchmark_agent_workflow.py",
+        "feedback-delta",
+        "validate"
+    ],
+    "variants": {
+        "baseline": [
+            "python",
+            "../../../../scripts/benchmark_agent_workflow.py",
+            "feedback-delta",
+            "baseline"
+        ],
+        "ai-dev": [
+            "python",
+            "../../../../scripts/benchmark_agent_workflow.py",
+            "feedback-delta",
+            "ai-dev"
+        ]
+    }
+}

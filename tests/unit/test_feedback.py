@@ -7,7 +7,12 @@ import pytest
 from ai_dev_tools.models.report import Artifact, Report
 from ai_dev_tools.runners import feedback
 from ai_dev_tools.runners.check_models import CheckTask
-from ai_dev_tools.runners.feedback import FeedbackOptions, run_feedback, run_session_status
+from ai_dev_tools.runners.feedback import (
+    FeedbackOptions,
+    _changed_content_fingerprint,
+    run_feedback,
+    run_session_status,
+)
 from ai_dev_tools.runners.focused import focused_rerun
 
 
@@ -70,6 +75,20 @@ def test_feedback_combines_changes_validation_context_and_session(
     assert any(artifact.kind == "session" for artifact in report.artifacts)
     assert any(artifact.kind == "observations" for artifact in report.artifacts)
 
+    state = report.summary["delta"]["state_fingerprint"]
+    repeated = run_feedback(
+        tmp_path,
+        FeedbackOptions(task="fix auth", acknowledged_state=str(state)),
+    )
+    assert repeated.summary["delta"]["reused"] is True
+    assert repeated.summary["validation"]["unchanged"] is True
+    assert repeated.summary["context"]["unchanged"] is True
+    assert repeated.summary["delta"]["chars_avoided"] > 0
+
+    unacknowledged = run_feedback(tmp_path, FeedbackOptions(task="fix auth"))
+    assert unacknowledged.summary["delta"]["reused"] is False
+    assert unacknowledged.summary["delta"]["reason_code"] == "ACKNOWLEDGEMENT_REQUIRED"
+
     session = run_session_status(tmp_path)
     assert session.status == "success"
     assert session.summary["task"] == "fix auth"
@@ -81,6 +100,18 @@ def test_session_status_is_partial_before_feedback(tmp_path: Path) -> None:
 
     assert report.status == "partial"
     assert report.summary["reason_code"] == "SESSION_MISSING"
+
+
+def test_changed_content_fingerprint_tracks_bytes_and_missing_files(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "app.py"
+    source.parent.mkdir()
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+
+    first = _changed_content_fingerprint(tmp_path, ["src/app.py", "deleted.py"])
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    second = _changed_content_fingerprint(tmp_path, ["deleted.py", "src/app.py"])
+
+    assert first != second
 
 
 def test_focused_rerun_covers_supported_runner_families() -> None:

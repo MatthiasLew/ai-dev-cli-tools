@@ -4,6 +4,8 @@
 
 - Add deterministic adaptive context budgets and task-scoped incremental memory for agent turns.
 - Require a configurable minimum token reduction in A/B release corpus gates.
+- Add client-acknowledged feedback deltas that replace repeated successful validation and context
+  with fingerprinted receipts while retaining failures and warnings live.
 
 ## 1.1.0 - 2026-08-31
 

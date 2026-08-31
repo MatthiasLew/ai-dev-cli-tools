@@ -18,7 +18,10 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 1. Call `plan_work` or run `ai-dev plan --task "<task>" --json` before broad edits.
 2. Run `ai-dev cache layout --json` once per content state and place stable sections before task-specific content at the recommended breakpoint.
 3. Prefer `ai-dev feedback --task "<task>" --json` for the normal compact loop.
-4. Inspect `decision`, `scope`, `changes`, `validation`, `context`, `observations`, and `performance`.
+4. Inspect `decision`, `changes`, `validation`, `context`, `observations`, `delta`, and `performance`.
+   Pass the prior `delta.state_fingerprint` as `--ack-state` (or MCP `acknowledged_state`) only
+   after consuming that response. When `delta.reused=true`, expand only the evidence required for
+   the next decision. Use `--no-delta` when a consumer explicitly requires the repeated payload.
 5. Use `ai-dev session status --json` after an interrupted handoff.
 6. Read `metadata.progressive.references` and expand only the evidence needed.
 7. Use failure signatures to deduplicate retries and optionally compare a named local baseline.

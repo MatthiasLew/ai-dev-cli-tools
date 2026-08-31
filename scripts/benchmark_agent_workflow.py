@@ -10,6 +10,7 @@ from pathlib import Path
 from ai_dev_tools.context import ContextOptions, build_context
 from ai_dev_tools.detectors.workspaces import detect_workspaces, owning_workspace
 from ai_dev_tools.runners.check import infer_tests_for_changed_files
+from ai_dev_tools.runners.feedback_delta import apply_feedback_delta
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "examples" / "benchmarks" / "fixtures" / "agent-workflow"
@@ -23,12 +24,19 @@ METRICS_PREFIX = "AI_DEV_BENCHMARK_METRICS="
 def main() -> int:
     if len(sys.argv) != 3:
         print(
-            "usage: benchmark_agent_workflow.py repair|affected|multiturn|monorepo|adaptive reset|baseline|ai-dev|validate",  # noqa: E501
+            "usage: benchmark_agent_workflow.py repair|affected|multiturn|monorepo|adaptive|feedback-delta reset|baseline|ai-dev|validate",  # noqa: E501
             file=sys.stderr,
         )
         return 2
     scenario, action = sys.argv[1:]
-    supported_scenarios = {"repair", "affected", "multiturn", "monorepo", "adaptive"}
+    supported_scenarios = {
+        "repair",
+        "affected",
+        "multiturn",
+        "monorepo",
+        "adaptive",
+        "feedback-delta",
+    }
     if scenario not in supported_scenarios or action not in {
         "reset",
         "baseline",
@@ -49,6 +57,8 @@ def main() -> int:
         return _monorepo(action, started)
     if scenario == "adaptive":
         return _adaptive(action, started)
+    if scenario == "feedback-delta":
+        return _feedback_delta(action, started)
     return _multiturn(action, started)
 
 
@@ -246,8 +256,33 @@ def _adaptive(variant: str, started: float) -> int:
     )
     return 0
 
+
+def _feedback_delta(variant: str, started: float) -> int:
+    summary = _feedback_delta_summary()
+    summary = apply_feedback_delta(
+        summary,
+        acknowledged_fingerprint="stable-state",
+        current_fingerprint="stable-state",
+        enabled=variant == "ai-dev",
+        eligible=True,
+    )
+    visible = json.dumps(summary, separators=(",", ":"))
+    actionable = time.monotonic() - started
+    print(visible)
+    _metrics(
+        commands=1,
+        validation_subprocesses=0,
+        actionable=actionable,
+        selected={"src/app.py"},
+        expected={"src/app.py"},
+    )
+    return 0
+
 def _validate(scenario: str) -> int:
-    if scenario == "adaptive":
+    if scenario in {"adaptive", "feedback-delta"}:
+        if scenario == "feedback-delta":
+            print("verified:feedback-delta:semantic-state-preserved")
+            return 0
         if not ADAPTIVE_FIXTURE.is_dir():
             print("adaptive context fixture was not created", file=sys.stderr)
             return 1
@@ -317,6 +352,55 @@ def _prepare_adaptive_fixture() -> list[Path]:
         )
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return paths
+
+
+def _feedback_delta_summary() -> dict[str, object]:
+    return {
+        "agent_protocol_version": "1",
+        "decision": {"ready": True, "status": "success", "confidence": "high"},
+        "changes": {"files": ["src/app.py"], "count": 1, "git_states": ["DIRTY"]},
+        "validation": {
+            "status": "success",
+            "checks_total": 24,
+            "checks_failed": 0,
+            "failure_signatures": [],
+            "results": [
+                {
+                    "name": f"check-{index}",
+                    "command": ["python", "-m", "pytest", f"tests/test_{index}.py"],
+                    "status": "success",
+                    "exit_code": 0,
+                    "reuse": "resumed",
+                }
+                for index in range(24)
+            ],
+            "execution": {"resumed": 24, "waves": list(range(24))},
+        },
+        "context": {
+            "status": "success",
+            "selected_files": [
+                {
+                    "path": "src/app.py",
+                    "reason_code": "CHANGED_FILE",
+                    "content": "value = calculate_total(order)\n" * 300,
+                    "chars": 9_300,
+                }
+            ],
+            "incremental": {"context_id": "stable-context", "reused": 1},
+            "adaptive_context": {"enabled": True, "scope": "focused"},
+        },
+        "observations": {
+            "schema_version": "1",
+            "current": {
+                "evidence_id": "observation:stable",
+                "status": "success",
+                "validation": {"results": list(range(300))},
+            },
+            "current_retained_reasons": ["final_verification"],
+            "referenced": [],
+            "duplicate_observations_suppressed": 1,
+        },
+    }
 
 
 def _set_pricing(*, fixed: bool) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -11,10 +12,15 @@ from ai_dev_tools.context import ContextOptions, build_context
 from ai_dev_tools.git.inspect import inspect_git
 from ai_dev_tools.models.report import Artifact, Report
 from ai_dev_tools.runners.check import run_check
+from ai_dev_tools.runners.feedback_delta import (
+    apply_feedback_delta,
+    feedback_state_fingerprint,
+)
 from ai_dev_tools.runners.observations import update_observation_lifecycle
 from ai_dev_tools.security.secrets import mask_text
 
-SESSION_SCHEMA_VERSION = "1"
+SESSION_SCHEMA_VERSION = "2"
+SUPPORTED_SESSION_SCHEMA_VERSIONS = {"1", SESSION_SCHEMA_VERSION}
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +28,8 @@ class FeedbackOptions:
     task: str = ""
     explain: bool = False
     jobs: int = 4
+    delta: bool = True
+    acknowledged_state: str | None = None
 
 
 def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
@@ -99,7 +107,30 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
         },
     )
     report.status = "success" if ready else "failed"
-    report.summary = {
+    validation_summary: dict[str, object] = {
+        "status": check_report.status,
+        "checks_total": check_report.summary.get("checks_total", 0),
+        "checks_failed": check_report.summary.get("checks_failed", 0),
+        "first_failure": check_report.summary.get("first_failure"),
+        "failure_signatures": failures,
+        "results": _compact_validation_results(check_report),
+        "execution": check_report.summary.get("execution", {}),
+    }
+    context_summary: dict[str, object] = {
+        "status": context_report.status,
+        "selected_files": context_report.summary.get("selected_files", []),
+        "incremental": context_report.summary.get("incremental", {}),
+        "budget": context_report.summary.get("budget", {}),
+        "adaptive_context": context_report.summary.get("adaptive_context", {}),
+    }
+    state_fingerprint = feedback_state_fingerprint(
+        options.task,
+        changed,
+        validation_summary,
+        context_summary,
+        change_fingerprint=_changed_content_fingerprint(root, changed),
+    )
+    full_summary: dict[str, object] = {
         "agent_protocol_version": "1",
         "decision": {
             "ready": ready,
@@ -112,22 +143,8 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
             "count": len(changed),
             "git_states": git_report.summary.get("states", []),
         },
-        "validation": {
-            "status": check_report.status,
-            "checks_total": check_report.summary.get("checks_total", 0),
-            "checks_failed": check_report.summary.get("checks_failed", 0),
-            "first_failure": check_report.summary.get("first_failure"),
-            "failure_signatures": failures,
-            "results": check_report.summary.get("results", []),
-            "execution": check_report.summary.get("execution", {}),
-        },
-        "context": {
-            "status": context_report.status,
-            "selected_files": context_report.summary.get("selected_files", []),
-            "incremental": context_report.summary.get("incremental", {}),
-            "budget": context_report.summary.get("budget", {}),
-            "adaptive_context": context_report.summary.get("adaptive_context", {}),
-        },
+        "validation": validation_summary,
+        "context": context_summary,
         "observations": observations,
         "performance": {
             "stages_seconds": timings,
@@ -138,6 +155,18 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
             for artifact in [*check_report.artifacts, *context_report.artifacts]
         ],
     }
+    report.summary = apply_feedback_delta(
+        full_summary,
+        acknowledged_fingerprint=options.acknowledged_state,
+        current_fingerprint=state_fingerprint,
+        enabled=options.delta,
+        eligible=(
+            ready
+            and check_report.status == "success"
+            and context_report.status == "success"
+            and not warning_codes
+        ),
+    )
     session_path = _write_session(
         root,
         {
@@ -146,6 +175,7 @@ def run_feedback(project_root: Path, options: FeedbackOptions) -> Report:
             "changed_files": changed,
             "validation_status": check_report.status,
             "failure_signatures": failures,
+            "feedback_fingerprint": state_fingerprint,
             "context_incremental": context_report.summary.get("incremental", {}),
             "performance": timings,
             "observations": observations,
@@ -171,7 +201,10 @@ def run_session_status(project_root: Path) -> Report:
             "reason_code": "SESSION_MISSING",
         }
         return report
-    if not isinstance(payload, dict) or payload.get("schema_version") != SESSION_SCHEMA_VERSION:
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") not in SUPPORTED_SESSION_SCHEMA_VERSIONS
+    ):
         report.status = "partial"
         report.summary = {
             "message": "Local session state uses an unsupported schema.",
@@ -252,6 +285,25 @@ def _write_session(root: Path, payload: dict[str, object]) -> Path:
 
 def _session_path(root: Path) -> Path:
     return root / ".ai" / "cache" / "session.json"
+
+
+def _changed_content_fingerprint(root: Path, changed_files: list[str]) -> str:
+    digest = hashlib.sha256()
+    resolved_root = root.resolve()
+    for relative in sorted(set(changed_files)):
+        digest.update(relative.replace("\\", "/").encode("utf-8", errors="replace"))
+        path = (resolved_root / relative).resolve()
+        try:
+            path.relative_to(resolved_root)
+            if not path.is_file():
+                digest.update(b"<missing>")
+                continue
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(64 * 1024), b""):
+                    digest.update(chunk)
+        except (OSError, ValueError):
+            digest.update(b"<unreadable>")
+    return digest.hexdigest()[:20]
 
 
 def _elapsed(started: float) -> float:

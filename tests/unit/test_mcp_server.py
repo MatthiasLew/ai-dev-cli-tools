@@ -234,6 +234,11 @@ def test_feedback_defaults_to_preview_only(tmp_path: Path) -> None:
     structured = result["structuredContent"]
     assert structured["summary"]["validation"]["results"] == []
     assert structured["summary"]["performance"]["total_seconds"] >= 0
+    assert structured["summary"]["delta"]["enabled"] is True
+
+    state = structured["summary"]["delta"]["state_fingerprint"]
+    repeated = _call(server, "feedback", {"acknowledged_state": state})
+    assert repeated["structuredContent"]["summary"]["delta"]["reused"] is True
 
 
 def test_explain_evidence_returns_bounded_not_found_result(tmp_path: Path) -> None:

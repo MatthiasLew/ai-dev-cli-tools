@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ai_dev_tools.cli import main
+from ai_dev_tools.cli import build_parser, main
 
 
 def test_integrations_and_dashboard_status_cli(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -67,3 +67,12 @@ def test_adaptive_context_cli_reports_resolved_budget(tmp_path: Path, capsys) ->
     assert code == 0
     assert payload["summary"]["adaptive_context"]["enabled"] is True
     assert payload["summary"]["adaptive_context"]["intent"] == "docs"
+
+
+def test_feedback_delta_cli_flags_parse_explicit_handshake() -> None:
+    args = build_parser().parse_args(
+        ["feedback", "--no-delta", "--ack-state", "abc123"]
+    )
+
+    assert args.delta is False
+    assert args.ack_state == "abc123"
