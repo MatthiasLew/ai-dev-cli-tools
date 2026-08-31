@@ -57,8 +57,10 @@ def _reset(scenario: str) -> int:
 
 
 def _repair(variant: str, started: float) -> int:
+    expected = {"src/pricing.py", "tests/test_pricing.py"}
     if variant == "baseline":
         visible = _all_source_text()
+        selected = set(_all_source_paths())
         commands = 3
     else:
         report = build_context(
@@ -81,15 +83,23 @@ def _repair(variant: str, started: float) -> int:
             },
             separators=(",", ":"),
         )
+        selected = _selected_paths(report.summary)
         commands = 4
     _set_pricing(fixed=True)
     actionable = time.monotonic() - started
     print(visible)
-    _metrics(commands=commands, validation_subprocesses=1, actionable=actionable)
+    _metrics(
+        commands=commands,
+        validation_subprocesses=1,
+        actionable=actionable,
+        selected=selected,
+        expected=expected,
+    )
     return 0
 
 
 def _affected(variant: str, started: float) -> int:
+    expected = {"tests/test_orders.py"}
     if variant == "baseline":
         tests = [
             str(path.relative_to(FIXTURE)) for path in sorted((FIXTURE / "tests").glob("test_*.py"))
@@ -107,6 +117,8 @@ def _affected(variant: str, started: float) -> int:
         commands=5 if variant == "ai-dev" else 4,
         validation_subprocesses=2,
         actionable=actionable,
+        selected={path.replace("\\", "/") for path in tests},
+        expected=expected,
     )
     return result.returncode
 
@@ -125,6 +137,7 @@ def _multiturn(variant: str, started: float) -> int:
             profile="minimal",
             max_file_chars=500,
             max_chars=12_000,
+            max_files=12,
             incremental=True,
             format="json",
         )
@@ -139,12 +152,30 @@ def _multiturn(variant: str, started: float) -> int:
             separators=(",", ":"),
         )
         commands = 5
-        _metrics(commands=commands, validation_subprocesses=1, actionable=first_actionable)
+        selected = _selected_paths(first_report.summary) | _selected_paths(second_report.summary)
+        expected = {
+            path.relative_to(FIXTURE).as_posix()
+            for folder in (FIXTURE / "src", FIXTURE / "tests")
+            for path in folder.glob("*.py")
+        }
+        _metrics(
+            commands=commands,
+            validation_subprocesses=1,
+            actionable=first_actionable,
+            selected=selected,
+            expected=expected,
+        )
         print(visible)
         return 0
     actionable = time.monotonic() - started
     print(visible)
-    _metrics(commands=commands, validation_subprocesses=1, actionable=actionable)
+    _metrics(
+        commands=commands,
+        validation_subprocesses=1,
+        actionable=actionable,
+        selected=set(_all_source_paths()),
+        expected=set(_all_source_paths()),
+    )
     return 0
 
 
@@ -174,7 +205,13 @@ def _monorepo(variant: str, started: float) -> int:
     actionable = time.monotonic() - started
     print(visible)
     print(result.stdout.strip())
-    _metrics(commands=commands, validation_subprocesses=2, actionable=actionable)
+    _metrics(
+        commands=commands,
+        validation_subprocesses=2,
+        actionable=actionable,
+        selected=set(tests) if variant == "ai-dev" else set(_all_source_paths()),
+        expected={"workspaces/billing/tests"},
+    )
     return result.returncode
 
 def _validate(scenario: str) -> int:
@@ -224,6 +261,14 @@ def _all_source_text() -> str:
     return "\n".join(chunks)
 
 
+def _all_source_paths() -> list[str]:
+    return [
+        path.relative_to(FIXTURE).as_posix()
+        for path in sorted(FIXTURE.rglob("*.py"))
+        if ".ai" not in path.parts and "__pycache__" not in path.parts
+    ]
+
+
 def _set_pricing(*, fixed: bool) -> None:
     text = PRICING.read_text(encoding="utf-8")
     replacement = FIXED if fixed else BROKEN
@@ -240,11 +285,34 @@ def _turn_summary(summary: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _metrics(*, commands: int, validation_subprocesses: int, actionable: float) -> None:
+def _selected_paths(summary: dict[str, object]) -> set[str]:
+    selected = summary.get("selected_files", [])
+    if not isinstance(selected, list):
+        return set()
+    return {
+        str(item["path"])
+        for item in selected
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    }
+
+
+def _metrics(
+    *,
+    commands: int,
+    validation_subprocesses: int,
+    actionable: float,
+    selected: set[str],
+    expected: set[str],
+) -> None:
+    true_positives = len(selected & expected)
     payload = {
         "commands": commands,
         "validation_subprocesses": validation_subprocesses,
         "actionable_seconds": round(actionable, 6),
+        "selected_items": len(selected),
+        "relevant_items": len(expected),
+        "true_positive_items": true_positives,
+        "false_negative_items": len(expected - selected),
     }
     print(METRICS_PREFIX + json.dumps(payload, separators=(",", ":")), file=sys.stderr)
 

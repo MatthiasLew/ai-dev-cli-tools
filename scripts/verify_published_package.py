@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -42,6 +43,7 @@ def run_checked(command: list[str], cwd: Path, env: dict[str, str] | None = None
 
 
 def smoke(entrypoint: Path, project: Path, version: str) -> None:
+    version = re.sub(r"^(\d+\.\d+\.\d+)-rc\.(\d+)$", r"\1rc\2", version)
     output = run_checked([str(entrypoint), "--version"], project).strip()
     if output != f"ai-dev {version}":
         raise RuntimeError(f"unexpected version output: {output!r}")

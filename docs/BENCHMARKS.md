@@ -33,6 +33,8 @@ from the same declared state and ends with independently checked correctness.
 ai-dev benchmark run --suite benchmarks/agent-workflows.json --variant baseline --trials 5 --cache-state cold
 ai-dev benchmark run --suite benchmarks/agent-workflows.json --variant ai-dev --trials 5 --cache-state cold
 ai-dev benchmark compare .ai/benchmarks/runs/<baseline>.json .ai/benchmarks/runs/<candidate>.json
+ai-dev benchmark gate .ai/benchmarks/runs/<baseline>.json .ai/benchmarks/runs/<candidate>.json
+ai-dev benchmark corpus --manifest examples/benchmarks/agent-corpus.json --trials 3
 ~~~
 
 Cold and warm results are deliberately separate and cannot be compared with each other. A
@@ -44,6 +46,11 @@ commands, validation subprocesses, masked agent-visible bytes, estimated tokens,
 correctness, fixture identity, and a local machine profile. Token estimates use
 masked_utf8_bytes_divided_by_4; they are a stable approximation, not a model tokenizer claim.
 Raw JSON and compact Markdown reports stay under `.ai/benchmarks/`.
+
+`benchmark gate` fails when correctness differs, candidate time or token regressions exceed their
+bounds, precision/recall fall below their floors, or false negatives exceed the allowance. The
+versioned corpus runs all four representative agent tasks and applies the shared thresholds from
+`examples/benchmarks/agent-corpus.json`; it is suitable as a CI release gate.
 
 A suite variant may emit one private `AI_DEV_BENCHMARK_METRICS=` JSON line on stderr to
 report its real command count, validation subprocess count, and time to its first actionable

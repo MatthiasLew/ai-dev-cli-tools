@@ -79,6 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
     for action in ["status", "update", "rebuild"]:
         index_sub.add_parser(action)
     index_daemon = index_sub.add_parser("daemon")
+    index_daemon.add_argument(
+        "daemon_action",
+        nargs="?",
+        choices=["start", "status", "stop", "foreground"],
+        default="start",
+    )
     index_daemon.add_argument("--poll", type=int, default=500, metavar="MILLISECONDS")
     index_daemon.add_argument("--max-updates", type=int, default=0)
     index_daemon.add_argument("--idle-timeout", type=int, default=0, metavar="SECONDS")
@@ -204,6 +210,20 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_compare = benchmark_sub.add_parser("compare")
     benchmark_compare.add_argument("baseline", type=Path)
     benchmark_compare.add_argument("candidate", type=Path)
+    benchmark_gate = benchmark_sub.add_parser("gate")
+    benchmark_gate.add_argument("baseline", type=Path)
+    benchmark_gate.add_argument("candidate", type=Path)
+    benchmark_gate.add_argument("--max-time-regression", type=float, default=20.0)
+    benchmark_gate.add_argument("--max-token-regression", type=float, default=5.0)
+    benchmark_gate.add_argument("--min-precision", type=float, default=0.8)
+    benchmark_gate.add_argument("--min-recall", type=float, default=0.9)
+    benchmark_gate.add_argument("--max-false-negatives", type=int, default=0)
+    benchmark_corpus = benchmark_sub.add_parser("corpus")
+    benchmark_corpus.add_argument(
+        "--manifest", type=Path, default=Path("examples/benchmarks/agent-corpus.json")
+    )
+    benchmark_corpus.add_argument("--trials", type=int, default=3)
+    benchmark_corpus.add_argument("--timeout", type=int, default=300)
 
     performance = sub.add_parser("performance")
     performance_sub = performance.add_subparsers(dest="performance_command", required=True)
@@ -220,6 +240,21 @@ def build_parser() -> argparse.ArgumentParser:
     mcp = sub.add_parser("mcp")
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
     mcp_sub.add_parser("serve")
+
+    integrations = sub.add_parser("integrations")
+    integrations_sub = integrations.add_subparsers(dest="integrations_command", required=True)
+    integrations_install = integrations_sub.add_parser("install")
+    integrations_install.add_argument(
+        "client", nargs="?", choices=["all", "codex", "claude", "cursor", "generic"], default="all"
+    )
+    integrations_install.add_argument("--force", action="store_true")
+
+    dashboard = sub.add_parser("dashboard")
+    dashboard_sub = dashboard.add_subparsers(dest="dashboard_command", required=True)
+    dashboard_sub.add_parser("status")
+    dashboard_serve = dashboard_sub.add_parser("serve")
+    dashboard_serve.add_argument("--host", default="127.0.0.1")
+    dashboard_serve.add_argument("--port", type=int, default=8765)
 
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
@@ -240,6 +275,13 @@ def main(argv: list[str] | None = None) -> int:
         from ai_dev_tools.mcp_server import serve_mcp
 
         return serve_mcp(project_root)
+    if args.command == "dashboard" and args.dashboard_command == "serve":
+        from ai_dev_tools.dashboard import serve_dashboard
+
+        try:
+            return serve_dashboard(project_root, args.host, args.port)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.command == "completion":
         from ai_dev_tools.completion import render_completion
 
@@ -453,6 +495,10 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         return run_cache(project_root, args.cache_command)
     if command == "index":
         if args.index_command == "daemon":
+            if getattr(args, "daemon_action", "start") in {"start", "status", "stop"}:
+                from ai_dev_tools.index_daemon_service import control_index_daemon
+
+                return control_index_daemon(project_root, args.daemon_action)
             from ai_dev_tools.runners.index_daemon import run_index_daemon
 
             return run_index_daemon(
@@ -530,7 +576,12 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             getattr(args, "name", None),
         )
     if command == "benchmark":
-        from ai_dev_tools.runners.benchmark import compare_benchmarks, run_benchmark
+        from ai_dev_tools.runners.benchmark import (
+            compare_benchmarks,
+            gate_benchmarks,
+            run_benchmark,
+            run_benchmark_corpus,
+        )
 
         if args.benchmark_command == "run":
             return run_benchmark(
@@ -541,7 +592,30 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 cache_state=args.cache_state,
                 timeout_seconds=args.timeout,
             )
-        return compare_benchmarks(project_root, args.baseline, args.candidate)
+        if args.benchmark_command == "compare":
+            return compare_benchmarks(project_root, args.baseline, args.candidate)
+        if args.benchmark_command == "corpus":
+            return run_benchmark_corpus(
+                project_root, args.manifest, trials=args.trials, timeout_seconds=args.timeout
+            )
+        return gate_benchmarks(
+            project_root,
+            args.baseline,
+            args.candidate,
+            max_time_regression=args.max_time_regression,
+            max_token_regression=args.max_token_regression,
+            min_precision=args.min_precision,
+            min_recall=args.min_recall,
+            max_false_negatives=args.max_false_negatives,
+        )
+    if command == "integrations":
+        from ai_dev_tools.integrations import install_integrations
+
+        return install_integrations(project_root, args.client, force=args.force)
+    if command == "dashboard":
+        from ai_dev_tools.dashboard import dashboard_status
+
+        return dashboard_status(project_root)
     if command == "performance":
         from ai_dev_tools.runners.performance import compare_performance, run_performance_latest
 
@@ -621,6 +695,11 @@ def _capabilities_report(project_root: Path) -> Report:
         "baseline list",
         "benchmark run",
         "benchmark compare",
+        "benchmark gate",
+        "benchmark corpus",
+        "integrations install",
+        "dashboard status",
+        "dashboard serve",
         "performance latest",
         "performance compare",
         "explain",

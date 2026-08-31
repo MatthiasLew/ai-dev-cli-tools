@@ -1,19 +1,21 @@
 # Changelog
 
-## Unreleased - 1.1.0.dev0
+## 1.1.0rc1 - 2026-08-31
 
 - Add `plan` and MCP `plan_work` for bounded, preview-only implementation plans with scope,
   dependencies, validation, risk, policy assessments, and stable evidence references.
-- Add an optional semantic-backend entry-point contract, local structural symbol index, LSP
-  capability discovery, and explicit safe fallback behavior.
-- Add a foreground persistent index daemon with bounded polling, lifecycle state, and status
-  visibility.
+- Add built-in Tree-sitter AST and LSP document-symbol backends alongside the local structural
+  fallback and semantic plugin contract.
+- Add a detached, localhost-authenticated index daemon using native filesystem events, IPC
+  start/status/stop control, lifecycle state, and no periodic repository rescans.
 - Classify command failures and retry only transient infrastructure failures while preserving the
   first failure and recovery evidence.
 - Add configurable command allow/deny prefixes and impact limits, enforced by checks, bootstrap,
   and application startup, plus a preview-only `policy assess` command.
 - Extend reproducible benchmarks with precision, recall, false negatives, iterations, files read,
-  and reported token metrics.
+  reported token metrics, a versioned real-agent corpus, and enforceable regression gates.
+- Add ready project-scoped MCP configurations for Codex, Claude Code, Cursor, and generic clients.
+- Add a loopback-only local dashboard for index, semantic, cache, runtime, daemon, and error health.
 - Add deterministic report-to-SARIF conversion and a GitHub Actions code-scanning summary job.
 - Upgrade and SHA-pin supported GitHub Actions used by CI, docs, and publishing workflows.
 

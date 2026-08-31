@@ -25,9 +25,14 @@ def read_project_version(root: Path = ROOT) -> str:
 def validate_release(root: Path, tag: str, dist: Path | None = None) -> list[str]:
     errors: list[str] = []
     version = read_project_version(root)
-    expected_tag = f"v{version}"
-    if tag != expected_tag:
-        errors.append(f"tag {tag!r} does not match project version {expected_tag!r}")
+    expected_tags = {f"v{version}"}
+    candidate = re.fullmatch(r"(\d+\.\d+\.\d+)rc(\d+)", version)
+    if candidate:
+        expected_tags.add(f"v{candidate.group(1)}-rc.{candidate.group(2)}")
+    if tag not in expected_tags:
+        errors.append(
+            f"tag {tag!r} does not match project version; expected one of {sorted(expected_tags)!r}"
+        )
 
     init_text = (root / "src" / "ai_dev_tools" / "__init__.py").read_text(encoding="utf-8")
     match = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', init_text, re.MULTILINE)

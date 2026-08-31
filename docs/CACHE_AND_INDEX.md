@@ -12,18 +12,29 @@ ai-dev index rebuild
 
 The schema-versioned index records relative path, size, modification time, SHA-256, and a bounded local impact graph for eligible project files. Import and source-to-test edges are recomputed only for changed files and reused for unchanged files. An update reuses hashes when size and modification time are unchanged; rebuild hashes every eligible file. Generated, dependency, VCS, fixture, and `.ai` paths are excluded. Deleting the index is safe because it can always be rebuilt.
 
-`ai-dev index daemon` keeps that index warm in a foreground process. It polls at a bounded interval
-(`--poll`, minimum 50 ms), updates only when the repository fingerprint changes, and records local
-lifecycle state in `.ai/cache/index-daemon.json`. `--max-updates` and `--idle-timeout` provide
-deterministic exits for CI and supervisors. The command does not detach itself; the invoking agent
-or process manager owns its lifetime. `index status` includes the last daemon state when present.
+`ai-dev index daemon start` launches a detached background process. Native filesystem events are
+debounced into incremental index updates, so there is no periodic full-tree scan. Control uses an
+authenticated loopback-only IPC socket and keeps private lifecycle state in
+`.ai/cache/index-daemon.json`.
+
+```bash
+ai-dev index daemon start
+ai-dev index daemon status
+ai-dev index daemon stop
+```
+
+For CI and process supervisors, `ai-dev index daemon foreground --max-updates 2` retains the old
+bounded foreground mode.
 
 `ai-dev semantic index --backend auto` builds a separate bounded symbol index at
-`.ai/cache/semantic-index.json`. The dependency-free structural backend is the safe default.
+`.ai/cache/semantic-index.json`. With the `semantic` extra installed, `auto` uses a real
+Tree-sitter AST parser; otherwise the dependency-free structural parser is the safe fallback.
+`--backend lsp` starts a locally installed language server over JSON-RPC/stdio and requests
+document symbols for supported files.
 Installed providers may register the `ai_dev_tools.semantic_backends` Python entry-point group;
 they are loaded only when explicitly named. `semantic status` reports available providers and
-locally discovered language-server executables. Provider failure falls back to structural parsing
-only for `--backend auto`; an explicitly selected provider fails visibly.
+locally discovered language-server executables. An explicitly selected unavailable backend fails
+visibly; `auto` remains local and deterministic.
 
 ## Prompt cache layout
 

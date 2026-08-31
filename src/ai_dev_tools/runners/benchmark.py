@@ -173,6 +173,160 @@ def compare_benchmarks(project_root: Path, baseline: Path, candidate: Path) -> R
     return report
 
 
+def gate_benchmarks(
+    project_root: Path,
+    baseline: Path,
+    candidate: Path,
+    *,
+    max_time_regression: float = 20.0,
+    max_token_regression: float = 5.0,
+    min_precision: float = 0.8,
+    min_recall: float = 0.9,
+    max_false_negatives: int = 0,
+) -> Report:
+    report = Report(command="benchmark gate", project_root=project_root)
+    if (
+        max_time_regression < 0
+        or max_token_regression < 0
+        or not 0 <= min_precision <= 1
+        or not 0 <= min_recall <= 1
+        or max_false_negatives < 0
+    ):
+        report.status = "invalid_configuration"
+        report.summary = {"reason_code": "INVALID_BENCHMARK_THRESHOLDS"}
+        return report
+    comparison = compare_benchmarks(project_root, baseline, candidate)
+    if comparison.status != "success":
+        report.status = "failed"
+        report.summary = {
+            "passed": False,
+            "reason_code": "BENCHMARK_EQUIVALENCE_FAILED",
+            "comparison": comparison.summary,
+        }
+        report.issues.extend(comparison.issues)
+        return report
+    try:
+        candidate_run = _load_run(project_root, candidate)
+        stats = candidate_run["summary"]["statistics"]
+    except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
+        report.status = "invalid_configuration"
+        report.summary = {"reason_code": "INVALID_BENCHMARK_RUN", "message": str(exc)}
+        return report
+
+    metrics = comparison.summary["metrics"]
+    checks = {
+        "time_regression": _percent_within(metrics["median_seconds"], max_time_regression),
+        "token_regression": _percent_within(
+            metrics["median_estimated_tokens"], max_token_regression
+        ),
+        "precision": _stat_value(stats, "median_selection_precision") >= min_precision,
+        "recall": _stat_value(stats, "median_selection_recall") >= min_recall,
+        "false_negatives": (
+            _stat_value(stats, "total_false_negative_items") <= max_false_negatives
+        ),
+    }
+    passed = all(checks.values())
+    report.status = "success" if passed else "failed"
+    report.summary = {
+        "passed": passed,
+        "checks": checks,
+        "thresholds": {
+            "max_time_regression_percent": max_time_regression,
+            "max_token_regression_percent": max_token_regression,
+            "min_precision": min_precision,
+            "min_recall": min_recall,
+            "max_false_negatives": max_false_negatives,
+        },
+        "candidate_statistics": stats,
+        "comparison": comparison.summary,
+    }
+    for name, passed_check in checks.items():
+        if not passed_check:
+            report.issues.append(
+                Issue("error", f"Benchmark gate failed: {name}", code="BENCHMARK_REGRESSION")
+            )
+    return report
+
+
+def run_benchmark_corpus(
+    project_root: Path, manifest: Path, *, trials: int = 3, timeout_seconds: int = 300
+) -> Report:
+    report = Report(command="benchmark corpus", project_root=project_root)
+    path = manifest if manifest.is_absolute() else project_root / manifest
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+        suites = spec["suites"]
+        thresholds = spec["thresholds"]
+        if (
+            spec.get("schema_version") != "1.0"
+            or not isinstance(suites, list)
+            or not isinstance(thresholds, dict)
+            or not 1 <= trials <= 50
+        ):
+            raise ValueError("Unsupported corpus manifest")
+        gate_options: dict[str, Any] = {
+            "max_time_regression": float(thresholds.get("max_time_regression_percent", 20)),
+            "max_token_regression": float(thresholds.get("max_token_regression_percent", 5)),
+            "min_precision": float(thresholds.get("min_precision", 0.8)),
+            "min_recall": float(thresholds.get("min_recall", 0.9)),
+            "max_false_negatives": int(thresholds.get("max_false_negatives", 0)),
+        }
+    except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
+        report.status = "invalid_configuration"
+        report.summary = {"reason_code": "INVALID_BENCHMARK_CORPUS", "message": str(exc)}
+        return report
+    results: list[dict[str, Any]] = []
+    for suite in suites:
+        if not isinstance(suite, str):
+            report.status = "invalid_configuration"
+            report.summary = {"reason_code": "INVALID_BENCHMARK_CORPUS_SUITE"}
+            return report
+        baseline = run_benchmark(
+            project_root, Path(suite), "baseline", trials=trials, timeout_seconds=timeout_seconds
+        )
+        candidate = run_benchmark(
+            project_root, Path(suite), "ai-dev", trials=trials, timeout_seconds=timeout_seconds
+        )
+        baseline_path = _json_artifact(baseline)
+        candidate_path = _json_artifact(candidate)
+        if baseline_path is None or candidate_path is None:
+            gate = Report(command="benchmark gate", project_root=project_root, status="failed")
+            gate.summary = {"passed": False, "reason_code": "BENCHMARK_RUN_FAILED"}
+        else:
+            gate = gate_benchmarks(
+                project_root,
+                baseline_path,
+                candidate_path,
+                **gate_options,
+            )
+        results.append(
+            {
+                "suite": suite,
+                "baseline_status": baseline.status,
+                "candidate_status": candidate.status,
+                "gate_status": gate.status,
+                "checks": gate.summary.get("checks", {}),
+            }
+        )
+    passed = bool(results) and all(row["gate_status"] == "success" for row in results)
+    report.status = "success" if passed else "failed"
+    report.summary = {
+        "passed": passed,
+        "manifest": str(path.resolve()),
+        "suite_count": len(results),
+        "results": results,
+        "thresholds": thresholds,
+    }
+    if not passed:
+        report.issues.append(
+            Issue("error", "At least one corpus regression gate failed", code="CORPUS_REGRESSION")
+        )
+    output = project_root / ".ai" / "benchmarks" / f"corpus-{_timestamp()}.json"
+    write_json(report, output)
+    write_markdown(report, output.with_suffix(".md"))
+    return report
+
+
 def _load_spec(project_root: Path, path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -319,6 +473,8 @@ def _execution_metrics(execution: CommandResult) -> tuple[dict[str, float | int]
         stderr_text = "\n".join(visible_stderr)
         visible = f"{visible}\n{stderr_text}".strip()
     return metrics, visible
+
+
 def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
     def values(key: str) -> list[float]:
         return [float(row[key]) for row in rows]
@@ -337,9 +493,7 @@ def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
         "median_commands": round(statistics.median(values("commands")), 3),
         "median_iterations": round(statistics.median(values("iterations")), 3),
         "median_files_read": round(statistics.median(values("files_read")), 3),
-        "median_selection_precision": round(
-            statistics.median(values("selection_precision")), 4
-        ),
+        "median_selection_precision": round(statistics.median(values("selection_precision")), 4),
         "median_selection_recall": round(statistics.median(values("selection_recall")), 4),
         "total_false_negative_items": round(sum(values("false_negative_items")), 3),
         "selection_metric_trials": round(sum(values("selection_metrics_reported")), 3),
@@ -365,6 +519,11 @@ def _comparison(baseline: float, candidate: float) -> dict[str, float | None]:
         "absolute_change": round(change, 3),
         "percent_change": round(change / baseline * 100, 2) if baseline else None,
     }
+
+
+def _percent_within(metric: dict[str, Any], maximum: float) -> bool:
+    change = metric.get("percent_change")
+    return change is None or (isinstance(change, (int, float)) and change <= maximum)
 
 
 def _recommendation(metrics: dict[str, dict[str, float | None]], valid: bool) -> str:
@@ -403,6 +562,13 @@ def _load_run(project_root: Path, path: Path) -> dict[str, Any]:
     if not isinstance(data, dict) or not str(data.get("command", "")).startswith("benchmark run"):
         raise ValueError(f"Not a benchmark run: {resolved}")
     return data
+
+
+def _json_artifact(report: Report) -> Path | None:
+    for artifact in report.artifacts:
+        if artifact.kind == "json":
+            return Path(artifact.path)
+    return None
 
 
 def _skipped(command: list[str]) -> CommandResult:

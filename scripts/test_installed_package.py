@@ -27,7 +27,10 @@ def main() -> int:
         _create_sample_project(project_dir)
         venv.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
         pip = _venv_python(venv_dir)
-        _run([str(pip), "-m", "pip", "install", "--no-index", str(wheel)], project_dir)
+        _run(
+            [str(pip), "-m", "pip", "install", "--no-index", "--no-deps", str(wheel)],
+            project_dir,
+        )
         entrypoint = entrypoint_path(venv_dir)
         if not entrypoint.exists():
             raise SmokeError(f"missing installed entrypoint: {entrypoint}")

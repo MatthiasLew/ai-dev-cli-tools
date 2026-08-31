@@ -64,11 +64,19 @@ def test_published_entrypoint_path_matches_platform(tmp_path: Path) -> None:
     assert path.name in {"ai-dev", "ai-dev.exe"}
 
 
-def test_stable_release_workflow_does_not_create_prerelease() -> None:
+def test_release_workflow_separates_rc_from_stable_promotion() -> None:
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
 
     assert "--draft" in workflow
-    assert "--prerelease" not in workflow
+    assert "--prerelease" in workflow
+    assert '*-rc.*' in workflow
+    publish = Path(".github/workflows/publish-pypi.yml").read_text(encoding="utf-8")
+    assert "github.event.release.prerelease == false" in publish
+
+
+def test_release_validation_accepts_human_readable_rc_tag(tmp_path: Path) -> None:
+    write_release_project(tmp_path, "1.2.3rc1")
+    assert validate_release(tmp_path, "v1.2.3-rc.1") == []
 
 
 def test_release_validation_rejects_generated_state_inside_archive(tmp_path: Path) -> None:

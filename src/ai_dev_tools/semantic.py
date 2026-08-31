@@ -9,6 +9,7 @@ from typing import Protocol, cast
 
 from ai_dev_tools.cache.repository import read_repository_index, update_repository_index
 from ai_dev_tools.models.report import Artifact, Issue, Report
+from ai_dev_tools.semantic_backends import lsp_index, tree_sitter_available, tree_sitter_index
 from ai_dev_tools.source_symbols import extract_source_symbols
 
 SEMANTIC_INDEX_PATH = Path(".ai/cache/semantic-index.json")
@@ -37,18 +38,42 @@ def run_semantic(project_root: Path, action: str, backend: str = "auto") -> Repo
 
     repository = read_repository_index(root) or update_repository_index(root)
     paths = _source_paths(root, repository.get("entries"))
-    selected_backend = "structural" if backend == "auto" else backend
+    selected_backend = (
+        "treesitter"
+        if backend == "auto" and tree_sitter_available()
+        else ("structural" if backend == "auto" else backend)
+    )
     try:
         symbols = _index_with_backend(root, paths, selected_backend)
-    except (ImportError, AttributeError, TypeError, ValueError) as exc:
-        report.status = "invalid_configuration"
-        report.summary = {
-            **capabilities,
-            "backend": selected_backend,
-            "reason_code": "SEMANTIC_BACKEND_UNAVAILABLE",
-            "message": str(exc),
-        }
-        return report
+    except (
+        ImportError,
+        AttributeError,
+        OSError,
+        RuntimeError,
+        TimeoutError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        if backend == "auto" and selected_backend == "treesitter":
+            selected_backend = "structural"
+            symbols = _structural_index(root, paths)
+            report.status = "partial"
+            report.issues.append(
+                Issue(
+                    "warning",
+                    f"Tree-sitter was unavailable; used structural fallback: {exc}",
+                    code="TREE_SITTER_FALLBACK",
+                )
+            )
+        else:
+            report.status = "invalid_configuration"
+            report.summary = {
+                **capabilities,
+                "backend": selected_backend,
+                "reason_code": "SEMANTIC_BACKEND_UNAVAILABLE",
+                "message": str(exc),
+            }
+            return report
     bounded_symbols = symbols[:10_000]
     payload: dict[str, object] = {
         "schema_version": "1",
@@ -59,7 +84,14 @@ def run_semantic(project_root: Path, action: str, backend: str = "auto") -> Repo
     }
     output = root / SEMANTIC_INDEX_PATH
     _write_json(output, payload)
-    report.summary = {**capabilities, **payload, "symbol_count": len(bounded_symbols)}
+    report.summary = {
+        **capabilities,
+        "schema_version": payload["schema_version"],
+        "backend": selected_backend,
+        "files_considered": len(paths),
+        "symbol_count": len(bounded_symbols),
+        "truncated": payload["truncated"],
+    }
     report.artifacts.append(Artifact(str(output), "semantic-index", "Local semantic symbol index"))
     if payload["truncated"]:
         report.status = "partial"
@@ -81,8 +113,9 @@ def semantic_capabilities() -> dict[str, object]:
     }
     return {
         "protocol_version": "1",
-        "default_backend": "structural",
-        "available_backends": ["structural", *plugins],
+        "default_backend": "treesitter_if_available",
+        "available_backends": ["structural", "treesitter", "lsp", *plugins],
+        "treesitter_available": tree_sitter_available(),
         "plugin_group": "ai_dev_tools.semantic_backends",
         "lsp_servers": lsp,
         "lsp_available": any(lsp.values()),
@@ -94,6 +127,10 @@ def semantic_capabilities() -> dict[str, object]:
 def _index_with_backend(root: Path, paths: list[Path], backend: str) -> list[dict[str, object]]:
     if backend == "structural":
         return _structural_index(root, paths)
+    if backend == "treesitter":
+        return tree_sitter_index(root, paths)
+    if backend == "lsp":
+        return lsp_index(root, paths)
     entry_points = _backend_entry_points()
     if backend not in entry_points:
         raise ValueError(f"Unknown semantic backend: {backend}")
