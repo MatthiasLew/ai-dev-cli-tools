@@ -1,8 +1,9 @@
 {
   "schema_version": "1.0",
   "name": "agent-workflows",
-  "description": "Versioned repair, affected-test, multi-turn, and monorepo agent tasks.",
+  "description": "Versioned adaptive-context, repair, affected-test, multi-turn, and monorepo agent tasks.",
   "suites": [
+    "examples/benchmarks/agent-adaptive-context.json",
     "examples/benchmarks/agent-repair-workflow.json",
     "examples/benchmarks/agent-affected-workflow.json",
     "examples/benchmarks/agent-multiturn-workflow.json",
@@ -11,6 +12,7 @@
   "thresholds": {
     "max_time_regression_percent": 50,
     "max_token_regression_percent": 5,
+    "min_token_reduction_percent": 15,
     "min_precision": 0.8,
     "min_recall": 0.9,
     "max_false_negatives": 0

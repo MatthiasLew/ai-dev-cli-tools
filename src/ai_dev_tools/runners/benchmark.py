@@ -180,6 +180,7 @@ def gate_benchmarks(
     *,
     max_time_regression: float = 20.0,
     max_token_regression: float = 5.0,
+    min_token_reduction: float = 0.0,
     min_precision: float = 0.8,
     min_recall: float = 0.9,
     max_false_negatives: int = 0,
@@ -188,6 +189,7 @@ def gate_benchmarks(
     if (
         max_time_regression < 0
         or max_token_regression < 0
+        or not 0 <= min_token_reduction <= 100
         or not 0 <= min_precision <= 1
         or not 0 <= min_recall <= 1
         or max_false_negatives < 0
@@ -219,6 +221,9 @@ def gate_benchmarks(
         "token_regression": _percent_within(
             metrics["median_estimated_tokens"], max_token_regression
         ),
+        "token_reduction": _minimum_reduction(
+            metrics["median_estimated_tokens"], min_token_reduction
+        ),
         "precision": _stat_value(stats, "median_selection_precision") >= min_precision,
         "recall": _stat_value(stats, "median_selection_recall") >= min_recall,
         "false_negatives": (
@@ -233,6 +238,7 @@ def gate_benchmarks(
         "thresholds": {
             "max_time_regression_percent": max_time_regression,
             "max_token_regression_percent": max_token_regression,
+            "min_token_reduction_percent": min_token_reduction,
             "min_precision": min_precision,
             "min_recall": min_recall,
             "max_false_negatives": max_false_negatives,
@@ -267,6 +273,7 @@ def run_benchmark_corpus(
         gate_options: dict[str, Any] = {
             "max_time_regression": float(thresholds.get("max_time_regression_percent", 20)),
             "max_token_regression": float(thresholds.get("max_token_regression_percent", 5)),
+            "min_token_reduction": float(thresholds.get("min_token_reduction_percent", 0)),
             "min_precision": float(thresholds.get("min_precision", 0.8)),
             "min_recall": float(thresholds.get("min_recall", 0.9)),
             "max_false_negatives": int(thresholds.get("max_false_negatives", 0)),
@@ -524,6 +531,13 @@ def _comparison(baseline: float, candidate: float) -> dict[str, float | None]:
 def _percent_within(metric: dict[str, Any], maximum: float) -> bool:
     change = metric.get("percent_change")
     return change is None or (isinstance(change, (int, float)) and change <= maximum)
+
+
+def _minimum_reduction(metric: dict[str, Any], minimum: float) -> bool:
+    if minimum == 0:
+        return True
+    change = metric.get("percent_change")
+    return isinstance(change, (int, float)) and change <= -minimum
 
 
 def _recommendation(metrics: dict[str, dict[str, float | None]], valid: bool) -> str:

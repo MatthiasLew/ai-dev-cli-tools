@@ -13,6 +13,7 @@ from ai_dev_tools.runners.check import infer_tests_for_changed_files
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "examples" / "benchmarks" / "fixtures" / "agent-workflow"
+ADAPTIVE_FIXTURE = FIXTURE / ".ai" / "adaptive-context"
 PRICING = FIXTURE / "src" / "pricing.py"
 FIXED = "return subtotal + tax"
 BROKEN = "return subtotal - tax"
@@ -22,12 +23,13 @@ METRICS_PREFIX = "AI_DEV_BENCHMARK_METRICS="
 def main() -> int:
     if len(sys.argv) != 3:
         print(
-            "usage: benchmark_agent_workflow.py repair|affected|multiturn|monorepo reset|baseline|ai-dev|validate",  # noqa: E501
+            "usage: benchmark_agent_workflow.py repair|affected|multiturn|monorepo|adaptive reset|baseline|ai-dev|validate",  # noqa: E501
             file=sys.stderr,
         )
         return 2
     scenario, action = sys.argv[1:]
-    if scenario not in {"repair", "affected", "multiturn", "monorepo"} or action not in {
+    supported_scenarios = {"repair", "affected", "multiturn", "monorepo", "adaptive"}
+    if scenario not in supported_scenarios or action not in {
         "reset",
         "baseline",
         "ai-dev",
@@ -45,6 +47,8 @@ def main() -> int:
         return _affected(action, started)
     if scenario == "monorepo":
         return _monorepo(action, started)
+    if scenario == "adaptive":
+        return _adaptive(action, started)
     return _multiturn(action, started)
 
 
@@ -73,6 +77,7 @@ def _repair(variant: str, started: float) -> int:
                 max_file_chars=700,
                 max_chars=8_000,
                 format="json",
+                adaptive=True,
             ),
         )
         visible = json.dumps(
@@ -140,6 +145,7 @@ def _multiturn(variant: str, started: float) -> int:
             max_files=12,
             incremental=True,
             format="json",
+            adaptive=True,
         )
         first_report = build_context(FIXTURE, options)
         first_actionable = time.monotonic() - started
@@ -214,7 +220,39 @@ def _monorepo(variant: str, started: float) -> int:
     )
     return result.returncode
 
+
+def _adaptive(variant: str, started: float) -> int:
+    paths = _prepare_adaptive_fixture()
+    report = build_context(
+        ADAPTIVE_FIXTURE,
+        ContextOptions(
+            no_git=True,
+            include=("*.md",),
+            task="document the focused public API",
+            format="json",
+            adaptive=variant == "ai-dev",
+        ),
+    )
+    visible = json.dumps(report.summary, separators=(",", ":"))
+    selected = _selected_paths(report.summary)
+    actionable = time.monotonic() - started
+    print(visible)
+    _metrics(
+        commands=3,
+        validation_subprocesses=0,
+        actionable=actionable,
+        selected=selected,
+        expected={path.name for path in paths},
+    )
+    return 0
+
 def _validate(scenario: str) -> int:
+    if scenario == "adaptive":
+        if not ADAPTIVE_FIXTURE.is_dir():
+            print("adaptive context fixture was not created", file=sys.stderr)
+            return 1
+        print("verified:adaptive:complete-selection")
+        return 0
     if scenario == "repair" and BROKEN in PRICING.read_text(encoding="utf-8"):
         print("repair was not applied", file=sys.stderr)
         return 1
@@ -267,6 +305,18 @@ def _all_source_paths() -> list[str]:
         for path in sorted(FIXTURE.rglob("*.py"))
         if ".ai" not in path.parts and "__pycache__" not in path.parts
     ]
+
+
+def _prepare_adaptive_fixture() -> list[Path]:
+    ADAPTIVE_FIXTURE.mkdir(parents=True, exist_ok=True)
+    paths = [ADAPTIVE_FIXTURE / f"module-{index}.md" for index in range(1, 5)]
+    for index, path in enumerate(paths, start=1):
+        lines = [f"# Public module {index}"]
+        lines.extend(
+            f"API detail {index}.{line}: deterministic benchmark context." for line in range(160)
+        )
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return paths
 
 
 def _set_pricing(*, fixed: bool) -> None:

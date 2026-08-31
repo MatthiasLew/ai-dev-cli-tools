@@ -42,6 +42,7 @@ class ContextOptions:
     refinement_rounds: int = 1
     refinement_max_files: int = 5
     compression: str = "off"
+    adaptive: bool = False
 
 
 @dataclass(slots=True)

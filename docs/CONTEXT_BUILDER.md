@@ -39,6 +39,24 @@ Defaults:
 - `--max-diff-chars 15000`
 
 The report records truncation and reasons for selected or rejected files.
+Before JSON or MCP serialization, the global character budget removes content from the
+lowest-priority selected entries while retaining their path, reason, fingerprinted evidence, and
+expansion command. If metadata alone is large, duplicated Git state and bounded candidate lists are
+compacted deterministically. The `character_budget` block reports exactly what was avoided.
+
+### Adaptive budget
+
+`--adaptive` derives a smaller ceiling from the task intent, changed-file count, candidate count,
+and current failure evidence. The deterministic classifier recognizes debug, review, docs,
+maintenance, and implementation work. Focused tasks shrink the ceiling, while broad or uncertain
+tasks expand it conservatively. Explicit `--max-*` values always win. Reports expose the decision,
+signals, reason codes, task-scope fingerprint, resolved limits, and estimated token ceiling under
+`adaptive_context`.
+
+When adaptive and incremental modes are combined, unchanged-file memory is reused only for the
+same normalized task fingerprint. Changing tasks therefore re-emits relevant unchanged files
+instead of incorrectly assuming the new agent turn has already seen them. Raw task text is not
+stored in the context manifest.
 
 ## Selective retrieval
 

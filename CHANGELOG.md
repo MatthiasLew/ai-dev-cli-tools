@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add deterministic adaptive context budgets and task-scoped incremental memory for agent turns.
+- Require a configurable minimum token reduction in A/B release corpus gates.
+
 ## 1.1.0 - 2026-08-31
 
 Stable promotion of `1.1.0rc1` after cross-platform CI, benchmark regression gates, and a clean

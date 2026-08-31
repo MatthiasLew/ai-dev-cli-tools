@@ -154,6 +154,7 @@ ai-dev context build --retrieval auto --explain  # explains retrieval or abstent
 ai-dev context build --tokenizer o200k_base --token-budget source=8000 --token-budget diffs=2000
 ai-dev context build --refine issue:<id> --refinement-rounds 2 --refinement-max-files 5
 ai-dev context build --compression conservative
+ai-dev context build --adaptive  # task-aware budget; uncertainty expands, explicit limits win
 ai-dev context build --include "src/**/*.py" --exclude "tests/fixtures/**"
 ai-dev context build --explain --json
 ```
@@ -178,7 +179,7 @@ Short reports are written to `.ai/reports/` as Markdown and JSON. Full command o
 
 JSON reports use schema `1.1` with `schema_version`, `tool_version`, `command`, `status`, `exit_code`, timestamps, `project_root`, `summary`, `issues`, `artifacts`, and `metadata`.
 
-`ai-dev feedback` combines Git changes, changed validation, incremental context, focused rerun hints, stage timings, and local session state into one compact agent protocol report. Its observation lifecycle keeps the current failure, unresolved warnings, or final verification inline while replacing superseded results with content-addressed IDs expandable through `ai-dev explain`; see `docs/OBSERVATION_LIFECYCLE.md`.
+`ai-dev feedback` combines Git changes, changed validation, adaptive incremental context, focused rerun hints, stage timings, and local session state into one compact agent protocol report. Adaptive context remains local and deterministic, scopes unchanged-file memory to a normalized task fingerprint, broadens uncertain requests, and never overrides explicit limits. Its observation lifecycle keeps the current failure, unresolved warnings, or final verification inline while replacing superseded results with content-addressed IDs expandable through `ai-dev explain`; see `docs/OBSERVATION_LIFECYCLE.md`.
 
 Every expandable issue, check, file, snippet, diff, workspace, and artifact receives a stable local `evidence_id`. The report metadata lists references; `ai-dev explain <evidence-id> --tail 100` retrieves only that evidence. `ai-dev baseline create <name>` stores a compact local snapshot under `.ai/cache/baselines/`, and `baseline compare <name>` leads with new/resolved failures, issue codes, and status regressions. Pass `--compare <name>` to `check` or `context build` to apply that regression contract directly to the current report. Reproducible local A/B suites use benchmark run and benchmark compare; see docs/BENCHMARKS.md.
 Research-backed context and token-efficiency recommendations are documented in `docs/TOKEN_EFFICIENCY_RESEARCH.md`.

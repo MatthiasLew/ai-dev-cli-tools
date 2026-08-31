@@ -52,6 +52,19 @@ def test_benchmark_gate_enforces_efficiency_and_quality_thresholds(tmp_path: Pat
     assert failed.status == "failed"
     assert failed.summary["checks"]["token_regression"] is False
 
+    _run(candidate, "ai-dev", seconds=11, tokens=90)
+    reduced = gate_benchmarks(
+        tmp_path, baseline, candidate, min_token_reduction=15
+    )
+    assert reduced.status == "failed"
+    assert reduced.summary["checks"]["token_reduction"] is False
+
+    _run(candidate, "ai-dev", seconds=11, tokens=80)
+    reduced = gate_benchmarks(
+        tmp_path, baseline, candidate, min_token_reduction=15
+    )
+    assert reduced.status == "success"
+
 
 def test_corpus_runs_every_suite_and_aggregates_gates(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     manifest = tmp_path / "corpus.json"

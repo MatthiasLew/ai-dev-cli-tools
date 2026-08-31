@@ -46,6 +46,7 @@ and longer-term direction without presenting proposed interfaces as available co
 | 24 | Optional semantic providers | Implemented | A bounded local structural index is built in; explicitly selected entry-point providers can add Tree-sitter or LSP-backed semantics, while auto mode fails closed to structural parsing. |
 | 25 | Execution policy | Implemented | Audit/enforce modes, allow/deny prefixes, impact ceilings, preview assessment, and enforcement cover checks, bootstrap, and managed application startup. |
 | 26 | CI-native agent evidence | Implemented | Reports convert deterministically to SARIF and the pinned GitHub Actions workflow publishes a compact plan summary plus code-scanning evidence. |
+| 27 | Adaptive context engine | Implemented | Task intent and local scope signals derive conservative token ceilings, explicit limits win, task-scoped incremental memory prevents cross-task omission, and the release corpus requires a measured token reduction without recall loss. |
 
 ## Implemented supporting capabilities
 

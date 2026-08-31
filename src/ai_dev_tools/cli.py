@@ -149,6 +149,11 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--refinement-rounds", type=int, choices=range(0, 4), default=1)
     context_build.add_argument("--refinement-max-files", type=int, default=5)
     context_build.add_argument("--compression", choices=["off", "conservative"], default="off")
+    context_build.add_argument(
+        "--adaptive",
+        action="store_true",
+        help="derive a smaller task-aware context budget while preserving explicit limits",
+    )
 
     git = sub.add_parser("git")
     git_sub = git.add_subparsers(dest="git_command", required=True)
@@ -215,6 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_gate.add_argument("candidate", type=Path)
     benchmark_gate.add_argument("--max-time-regression", type=float, default=20.0)
     benchmark_gate.add_argument("--max-token-regression", type=float, default=5.0)
+    benchmark_gate.add_argument("--min-token-reduction", type=float, default=0.0)
     benchmark_gate.add_argument("--min-precision", type=float, default=0.8)
     benchmark_gate.add_argument("--min-recall", type=float, default=0.9)
     benchmark_gate.add_argument("--max-false-negatives", type=int, default=0)
@@ -444,6 +450,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 refinement_rounds=args.refinement_rounds,
                 refinement_max_files=max(args.refinement_max_files, 0),
                 compression=args.compression,
+                adaptive=args.adaptive,
             ),
         )
     if command == "bootstrap":
@@ -604,6 +611,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             args.candidate,
             max_time_regression=args.max_time_regression,
             max_token_regression=args.max_token_regression,
+            min_token_reduction=args.min_token_reduction,
             min_precision=args.min_precision,
             min_recall=args.min_recall,
             max_false_negatives=args.max_false_negatives,

@@ -214,6 +214,26 @@ def _find_in_value(value: object, reference: str) -> dict[str, object] | None:
 def _bounded_evidence(root: Path, evidence: dict[str, object], tail: int) -> dict[str, object]:
     result = dict(evidence)
     artifact_path = evidence.get("path")
+    if (
+        evidence.get("budget_reason_code") == "GLOBAL_CONTEXT_BUDGET"
+        and isinstance(artifact_path, str)
+    ):
+        path = (root / artifact_path).resolve()
+        try:
+            path.relative_to(root)
+            if not path.is_file() or path.stat().st_size > 2_000_000:
+                return result
+            content = mask_text(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            return result
+        lines = content.splitlines()
+        expected = evidence.get("omitted_content_sha256")
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        result["expanded_content"] = lines[:tail] if tail else []
+        result["expanded_line_count"] = min(len(lines), tail)
+        result["total_line_count"] = len(lines)
+        result["evidence_state"] = "unchanged" if expected == digest else "recomputed"
+        return result
     if evidence.get("kind") and isinstance(artifact_path, str):
         path = Path(artifact_path)
         path = path if path.is_absolute() else root / path
