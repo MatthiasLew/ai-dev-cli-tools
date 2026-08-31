@@ -5,7 +5,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ai_dev_tools.cache.graph import related_tests
+from ai_dev_tools.cache.repository import update_repository_index
 from ai_dev_tools.models.report import Report
+from ai_dev_tools.security.secrets import mask_text
+from ai_dev_tools.source_symbols import extract_source_symbols
 
 _COLLECTION_KINDS = {
     "artifacts": "artifact",
@@ -59,6 +63,71 @@ def run_explain(project_root: Path, reference: str, tail: int = 100) -> Report:
         "evidence": _bounded_evidence(root, match, max(tail, 0)),
     }
     return report
+
+
+def run_explain_symbol(project_root: Path, reference: str, tail: int = 100) -> Report:
+    root = project_root.resolve()
+    report = Report(command=f"explain --symbol {reference}", project_root=root)
+    relative, separator, symbol_name = reference.replace("\\", "/").partition("#")
+    if not separator or not relative or not symbol_name:
+        report.status = "invalid_configuration"
+        report.summary = {
+            "reason_code": "INVALID_SYMBOL_REFERENCE",
+            "expected": "project/relative/path.ext#qualified.symbol",
+        }
+        return report.finish()
+    path = (root / relative).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        report.status = "failed"
+        report.summary = {"reason_code": "SYMBOL_PATH_OUTSIDE_PROJECT", "path": relative}
+        return report.finish()
+    try:
+        if not path.is_file() or path.stat().st_size > 2_000_000:
+            raise OSError
+        source = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        report.status = "failed"
+        report.summary = {"reason_code": "SYMBOL_FILE_UNAVAILABLE", "path": relative}
+        return report.finish()
+    symbols = extract_source_symbols(source, path.suffix)
+    if symbols is None:
+        report.status = "failed"
+        report.summary = {"reason_code": "SYMBOL_PARSE_UNAVAILABLE", "path": relative}
+        return report.finish()
+    match = next((item for item in symbols if item.name == symbol_name), None)
+    if match is None:
+        report.status = "failed"
+        report.summary = {
+            "reason_code": "SYMBOL_NOT_FOUND",
+            "path": relative,
+            "symbol": symbol_name,
+            "available_symbols": [item.name for item in symbols[:100]],
+        }
+        return report.finish()
+    lines = source.splitlines()
+    selected = lines[match.start_line - 1 : match.end_line]
+    limit = max(tail, 0)
+    truncated = limit < len(selected)
+    if truncated:
+        selected = selected[:limit]
+    index = update_repository_index(root)
+    tests = related_tests(index.get("graph"), [relative])
+    report.summary = {
+        "reason_code": "SYMBOL_EXPANDED",
+        "path": relative,
+        "symbol": match.name,
+        "kind": match.kind,
+        "start_line": match.start_line,
+        "end_line": match.end_line,
+        "content": mask_text("\n".join(selected)),
+        "expanded_line_count": len(selected),
+        "total_line_count": match.end_line - match.start_line + 1,
+        "truncated": truncated,
+        "related_tests": tests,
+    }
+    return report.finish()
 
 
 def _walk_summary(value: object, references: list[str], key: str = "") -> None:

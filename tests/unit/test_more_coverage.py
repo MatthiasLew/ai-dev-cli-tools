@@ -1,4 +1,6 @@
+import sys
 from pathlib import Path
+from threading import Event
 
 from ai_dev_tools.parsers.logs import summarize_latest_log
 from ai_dev_tools.runners.check import run_check
@@ -30,6 +32,22 @@ def test_subprocess_helpers(tmp_path: Path) -> None:
     result = run_command(["definitely-not-a-real-ai-dev-command"], tmp_path, 1)
     assert result.exit_code == 127
     assert result.combined_output
+
+
+def test_owned_subprocess_can_be_cancelled_safely(tmp_path: Path) -> None:
+    cancellation = Event()
+    cancellation.set()
+
+    result = run_command(
+        [sys.executable, "-c", "import time; time.sleep(10)"],
+        tmp_path,
+        timeout_seconds=30,
+        cancel_event=cancellation,
+    )
+
+    assert result.exit_code == 130
+    assert result.cancelled is True
+    assert result.timed_out is False
 
 
 def test_windows_batch_command_wrapper() -> None:

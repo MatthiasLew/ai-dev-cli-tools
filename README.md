@@ -23,17 +23,17 @@ be safe for `ai-dev` to recreate.
 
 ```bash
 python -m pip install --upgrade pipx
-pipx install ai-dev-cli-tools==0.5.0a1
+pipx install ai-dev-cli-tools==1.0.0
 ai-dev --help
 ```
 
-For a source checkout before the public alpha is published, use `pipx install .`. See
-`docs/DISTRIBUTION.md` for the Trusted Publishing and upgrade policy.
+For a source checkout, use `pipx install .`. See `docs/DISTRIBUTION.md` for the Trusted Publishing
+and upgrade policy.
 
 For development:
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -c requirements-dev.lock -e ".[dev]"
 ```
 
 ## Windows
@@ -60,6 +60,7 @@ ai-dev check --mode fast
 ai-dev check --mode changed  # reports changed files and falls back safely when test mapping is uncertain
 ai-dev check --mode full --jobs 4
 ai-dev check --mode changed --policy feedback-first --resume
+ai-dev check --mode changed --compare main
 ai-dev check --mode changed --retry-flaky 1
 ai-dev index update
 ai-dev cache status
@@ -68,6 +69,7 @@ ai-dev baseline create main
 ai-dev baseline compare main
 ai-dev benchmark run --suite examples/benchmarks/output-budget-smoke.json --variant baseline
 ai-dev explain issue:<id> --tail 100
+ai-dev explain --symbol "src/app.py#Application.run" --tail 100
 ai-dev feedback --task "fix authentication timeout"
 ai-dev watch --mode changed --debounce 500
 ai-dev session status
@@ -128,7 +130,11 @@ kills an arbitrary PID read from stale state. See `docs/RUNTIME.md`.
 ai-dev context build --task "fix auth tests"
 ai-dev context build --changed-only --max-chars 50000
 ai-dev context build --incremental  # emits only candidates changed since the last pack
+ai-dev context build --incremental --since <context-id>
+ai-dev context build --compare main
 ai-dev context build --profile review
+ai-dev context build --profile implement
+ai-dev context build --profile docs
 ai-dev context build --retrieval auto --explain  # explains retrieval or abstention
 ai-dev context build --tokenizer o200k_base --token-budget source=8000 --token-budget diffs=2000
 ai-dev context build --refine issue:<id> --refinement-rounds 2 --refinement-max-files 5
@@ -143,7 +149,12 @@ Selective retrieval defaults to `auto`: focused includes or changed files can ab
 
 Install `ai-dev-cli-tools[tokenizers]` to enable exact local `cl100k_base` or `o200k_base` counting. Without that optional extra, accounting uses the explicit UTF-8-bytes/4 estimate and reports a fallback if an exact tokenizer was requested. Repeated `--token-budget category=N` limits source, diffs, tests, logs, maps, history, cached input, or output independently. `--provider-usage <json>` normalizes OpenAI or Anthropic usage fields from a project-local file without network access.
 
-Incremental mode stores a schema-versioned manifest under `.ai/cache/` and reports changed versus reused files. Default limits are `--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`. Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`, and `.ai/reports` are excluded from snippets.
+Incremental mode stores the latest schema-versioned manifest plus up to 50 content-addressed
+historical manifests under `.ai/cache/`, and reports changed versus reused files. Pass
+`--since <context-id>` to compare against an explicitly retained context. Default limits are
+`--max-chars 50000`, `--max-files 30`, `--max-file-chars 8000`, and `--max-diff-chars 15000`.
+Secret-bearing and generated paths such as `.env`, private keys, caches, build output, `.ai/logs`,
+and `.ai/reports` are excluded from snippets.
 ## Reports and Logs
 
 Validation results are cached by default using repository, command, workspace, runtime, and platform fingerprints; use `check --no-cache` to force execution. `check --resume` reuses only exact successful checkpoint fingerprints. `--policy feedback-first` runs cheaper waves first and cancels later expensive waves after a required failure; `complete` retains comprehensive execution. `index status/update/rebuild` manages the reusable repository index, while `cache status/prune/clear` provides bounded local cache maintenance; `cache layout` emits a deterministic stable-prefix manifest and provider breakpoint recommendations. See `docs/CACHE_AND_INDEX.md`.
@@ -154,7 +165,7 @@ JSON reports use schema `1.1` with `schema_version`, `tool_version`, `command`, 
 
 `ai-dev feedback` combines Git changes, changed validation, incremental context, focused rerun hints, stage timings, and local session state into one compact agent protocol report. Its observation lifecycle keeps the current failure, unresolved warnings, or final verification inline while replacing superseded results with content-addressed IDs expandable through `ai-dev explain`; see `docs/OBSERVATION_LIFECYCLE.md`.
 
-Every expandable issue, check, file, snippet, diff, workspace, and artifact receives a stable local `evidence_id`. The report metadata lists references; `ai-dev explain <evidence-id> --tail 100` retrieves only that evidence. `ai-dev baseline create <name>` stores a compact local snapshot under `.ai/cache/baselines/`, and `baseline compare <name>` leads with new/resolved failures, issue codes, and status regressions. Reproducible local A/B suites use benchmark run and benchmark compare; see docs/BENCHMARKS.md.
+Every expandable issue, check, file, snippet, diff, workspace, and artifact receives a stable local `evidence_id`. The report metadata lists references; `ai-dev explain <evidence-id> --tail 100` retrieves only that evidence. `ai-dev baseline create <name>` stores a compact local snapshot under `.ai/cache/baselines/`, and `baseline compare <name>` leads with new/resolved failures, issue codes, and status regressions. Pass `--compare <name>` to `check` or `context build` to apply that regression contract directly to the current report. Reproducible local A/B suites use benchmark run and benchmark compare; see docs/BENCHMARKS.md.
 Research-backed context and token-efficiency recommendations are documented in `docs/TOKEN_EFFICIENCY_RESEARCH.md`.
 
 ## Auto Detection
@@ -247,6 +258,6 @@ git diff --check
 - Auto-commit, auto-push, destructive cleanup, remote source transmission, and GUI are intentionally out of scope.
 
 ## Intentional Limits
-Version 0.5.0a1 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+Version 1.0.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
 
 Shell completion scripts are generated with `ai-dev completion bash|zsh|fish|powershell` and can be sourced or installed using the normal mechanism for the selected shell.

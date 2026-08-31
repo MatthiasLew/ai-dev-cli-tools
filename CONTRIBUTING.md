@@ -5,6 +5,7 @@ Keep changes small, typed, tested, and conservative. Runtime code should avoid p
 Before pushing a larger stage, run:
 
 ```bash
+python -m pip install -c requirements-dev.lock -e ".[dev]"
 python -m ruff check .
 python -m mypy src tests scripts
 python -m coverage run -m pytest

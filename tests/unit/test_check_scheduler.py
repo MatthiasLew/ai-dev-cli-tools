@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from ai_dev_tools.runners import check
 from ai_dev_tools.runners.check_models import CheckTask
@@ -49,6 +50,56 @@ def test_complete_policy_preserves_deterministic_result_order() -> None:
     assert [task.name for task in result.tasks] == ["first", "second"]
     assert [item.command for item in result.results] == [["one"], ["two"]]
     assert result.cancelled == []
+
+
+def test_scheduler_respects_dependencies_and_cancels_blocked_dependents() -> None:
+    prepare = CheckTask("prepare", "build", ["prepare"], "fast", "configured")
+    test = CheckTask(
+        "test",
+        "unit_tests",
+        ["test"],
+        "medium",
+        "configured",
+        depends_on=("prepare",),
+    )
+    calls: list[str] = []
+
+    def execute(task: CheckTask) -> CommandResult:
+        calls.append(task.name)
+        return _result(task, 1 if task.name == "prepare" else 0)
+
+    result = schedule_checks(
+        [test, prepare],
+        jobs=4,
+        policy="complete",
+        execute=execute,
+    )
+
+    assert calls == ["prepare"]
+    assert result.tasks == [prepare]
+    assert result.cancelled == [test]
+
+
+def test_scheduler_applies_memory_and_exclusive_resource_batches() -> None:
+    from ai_dev_tools.runners.check_scheduler import _resource_batches
+
+    tasks = [
+        CheckTask("lint", "lint", ["lint"], "fast", "configured"),
+        CheckTask("types", "typecheck", ["types"], "fast", "configured"),
+        CheckTask("tests", "unit_tests", ["tests"], "fast", "configured"),
+        CheckTask("build", "build", ["build"], "fast", "configured"),
+    ]
+
+    batches = _resource_batches(tasks, jobs=4)
+
+    assert [[task.name for task in batch] for batch in batches] == [
+        ["lint", "types"],
+        ["tests"],
+        ["build"],
+    ]
+    graph = schedule_graph(tasks, "complete")
+    resource_limits = cast(dict[str, object], graph["resource_limits"])
+    assert resource_limits["exclusive"] == 1
 
 
 def test_resume_reuses_only_exact_cached_checkpoints(tmp_path: Path) -> None:

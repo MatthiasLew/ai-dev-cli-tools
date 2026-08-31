@@ -10,7 +10,18 @@ from pathlib import Path
 from ai_dev_tools.detectors.runtime import detect_runtime_requirements
 from ai_dev_tools.models.workspace import Workspace
 
-_IGNORED = {".git", ".ai", ".venv", "node_modules", "dist", "build", "target", "vendor"}
+_IGNORED = {
+    ".git",
+    ".ai",
+    ".venv",
+    "env",
+    "venv",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    "vendor",
+}
 
 
 def detect_workspaces(root: Path) -> list[Workspace]:
@@ -42,7 +53,7 @@ def _add_manifest_roots(root: Path, candidates: dict[Path, set[str]]) -> None:
         directories[:] = sorted(
             name
             for name in directories
-            if name not in _IGNORED
+            if name.lower() not in _IGNORED
             and not (current_path.name in {"test", "tests"} and name == "fixtures")
         )
         for name in sorted(manifests & set(files)):
@@ -196,7 +207,7 @@ def _ignored(root: Path, path: Path) -> bool:
         relative = path.resolve().relative_to(root.resolve())
     except ValueError:
         return True
-    return any(part in _IGNORED for part in relative.parts)
+    return any(part.lower() in _IGNORED for part in relative.parts)
 
 
 def _rel(root: Path, path: Path) -> str:

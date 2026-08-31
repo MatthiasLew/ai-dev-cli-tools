@@ -60,6 +60,20 @@ def test_workspace_scan_prunes_generated_directories(tmp_path: Path) -> None:
     assert [item.root for item in workspaces] == [""]
 
 
+def test_workspace_scan_prunes_virtual_environment_directories(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='root'\n", encoding="utf-8")
+    for directory in (".venv", "venv", "env"):
+        dependency = tmp_path / directory / "Lib" / "site-packages" / "dependency"
+        dependency.mkdir(parents=True)
+        (dependency / "pyproject.toml").write_text(
+            "[project]\nname='dependency'\n", encoding="utf-8"
+        )
+
+    workspaces = detect_workspaces(tmp_path)
+
+    assert [item.root for item in workspaces] == [""]
+
+
 def test_workspace_scan_prunes_test_fixtures(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text("[project]\nname='root'\n", encoding="utf-8")
     fixture = tmp_path / "tests" / "fixtures" / "projects" / "rust"

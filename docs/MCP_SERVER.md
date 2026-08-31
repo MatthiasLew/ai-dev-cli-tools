@@ -76,7 +76,7 @@ than running it as an unsupervised background daemon.
 The source test suite verifies initialization, tool discovery, notifications, parse errors,
 strict arguments, preview defaults, read-only status behavior, concise structured results, CLI
 wiring, and installed-wheel initialization. MCP tool names and required input fields should
-remain backward compatible within the 0.5 release line.
+remain backward compatible within the 1.x release line.
 
 For manual inspection, use an MCP Inspector that supports local STDIO and call every tool with
 both representative and invalid inputs. The official implementation guidance recommends focused

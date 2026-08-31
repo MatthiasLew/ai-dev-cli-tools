@@ -35,6 +35,21 @@ def test_check_reports_failure(monkeypatch, tmp_path: Path) -> None:  # type: ig
     assert report.summary["results"][0]["failure_signature"].startswith("failure:")
 
 
+def test_nonzero_check_result_cannot_report_success(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / ".ai-dev-tools.toml").write_text("[commands]\ntest='pytest'\n", encoding="utf-8")
+    monkeypatch.setattr(
+        check,
+        "run_command",
+        lambda command, root: CommandResult(command, 2, "collection interrupted", "", 0.01),
+    )
+
+    report = check.run_check(tmp_path, "full", use_cache=False)
+
+    result = report.summary["results"][0]
+    assert result["exit_code"] == 2
+    assert result["status"] == "failed"
+
+
 def test_changed_mode_reports_broad_fallback(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     (tmp_path / ".ai-dev-tools.toml").write_text("[commands]\ntest='pytest'\n", encoding="utf-8")
 

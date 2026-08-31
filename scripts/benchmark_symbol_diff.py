@@ -27,7 +27,7 @@ def main() -> int:
         source.write_text(after, encoding="utf-8")
 
         if sys.argv[1] == "baseline":
-            result = subprocess.run(
+            baseline_result = subprocess.run(
                 ["git", "diff", "--unified=80", "--", "service.py"],
                 cwd=root,
                 text=True,
@@ -37,11 +37,11 @@ def main() -> int:
                 shell=False,
                 check=True,
             )
-            print(result.stdout, end="")
+            print(baseline_result.stdout, end="")
             return 0
 
-        result = analyze_symbol_diff(root, ["service.py"])
-        print(json.dumps(result, separators=(",", ":"), sort_keys=True))
+        symbol_result = analyze_symbol_diff(root, ["service.py"])
+        print(json.dumps(symbol_result, separators=(",", ":"), sort_keys=True))
         return 0
 
 

@@ -1,7 +1,24 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 - 2026-08-31
 
+- Stabilize the local CLI and report schema for the 1.0 release line.
+- Add deterministic `implement` and `docs` context profiles with contract-tested budgets.
+- Add project-scoped `explain --symbol PATH#QUALIFIED_SYMBOL` with bounded content and related tests.
+- Add configuration ownership, generated-source relationships, reverse-dependent traversal, and
+  bounded reason paths to the impact graph.
+- Add nested Java/PHP owner qualification and overload-safe Java member identities.
+- Add dependency-aware, resource-bounded check scheduling with deterministic report order.
+- Safely cancel only subprocesses owned by obsolete watch validations while retaining their logs.
+- Add a pinned development-tool baseline and disable unrelated globally installed pytest-qt hooks.
+- Add an end-to-end regression for ignored virtual environments, CP1250 output, and non-zero check
+  result status consistency.
+- Add retained historical incremental context manifests and `context build --since <context-id>`.
+- Add direct named baseline regression checks through `check --compare` and
+  `context build --compare`.
+- Add bounded shortest reason paths for changed-file, related-test, symbol, and check selection.
+- Exclude `env` and `venv` dependency trees from workspace discovery, make text reports safe on
+  legacy Windows console encodings, and keep non-zero check results from reporting success.
 - Add explainable `auto|always|never` selective retrieval with conservative fallback and related-test false-negative measurement.
 - Add a local observation lifecycle that replaces superseded feedback with expandable content-addressed evidence while retaining current failures, warnings, and final verification.
 - Add a relocatable deterministic prompt-cache layout manifest with stable-prefix fingerprints and OpenAI, Anthropic, and provider-neutral breakpoint recommendations.

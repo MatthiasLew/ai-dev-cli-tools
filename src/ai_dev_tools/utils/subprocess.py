@@ -7,6 +7,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event
 
 
 @dataclass(slots=True)
@@ -22,6 +23,7 @@ class CommandResult:
     flaky: bool = False
     initial_exit_code: int | None = None
     initial_output: str = ""
+    cancelled: bool = False
 
     @property
     def combined_output(self) -> str:
@@ -34,9 +36,18 @@ def split_command(command: str) -> list[str]:
     return shlex.split(command, posix=os.name != "nt")
 
 
-def run_command(command: list[str], cwd: Path, timeout_seconds: int = 300) -> CommandResult:
+def run_command(
+    command: list[str],
+    cwd: Path,
+    timeout_seconds: int = 300,
+    cancel_event: Event | None = None,
+) -> CommandResult:
     started = time.monotonic()
     executable_command = _windows_batch_command(command)
+    if cancel_event is not None:
+        return _run_cancellable(
+            command, executable_command, cwd, timeout_seconds, cancel_event, started
+        )
     try:
         completed = subprocess.run(
             executable_command,
@@ -64,6 +75,58 @@ def run_command(command: list[str], cwd: Path, timeout_seconds: int = 300) -> Co
         return CommandResult(
             command, 124, stdout, stderr, round(time.monotonic() - started, 3), True
         )
+
+
+def _run_cancellable(
+    command: list[str],
+    executable_command: list[str],
+    cwd: Path,
+    timeout_seconds: int,
+    cancel_event: Event,
+    started: float,
+) -> CommandResult:
+    try:
+        process = subprocess.Popen(
+            executable_command,
+            cwd=cwd,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+        )
+    except FileNotFoundError as exc:
+        return CommandResult(command, 127, "", str(exc), round(time.monotonic() - started, 3))
+    deadline = started + max(timeout_seconds, 0)
+    while process.poll() is None:
+        cancelled = cancel_event.wait(0.05)
+        timed_out = time.monotonic() >= deadline
+        if not cancelled and not timed_out:
+            continue
+        process.terminate()
+        try:
+            stdout, stderr = process.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+        return CommandResult(
+            command,
+            130 if cancelled else 124,
+            stdout,
+            stderr,
+            round(time.monotonic() - started, 3),
+            timed_out=timed_out,
+            cancelled=cancelled,
+        )
+    stdout, stderr = process.communicate()
+    return CommandResult(
+        command,
+        process.returncode,
+        stdout,
+        stderr,
+        round(time.monotonic() - started, 3),
+    )
 
 
 def _windows_batch_command(command: list[str]) -> list[str]:

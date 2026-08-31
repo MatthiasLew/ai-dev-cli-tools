@@ -21,6 +21,10 @@ def test_completion_scripts_include_shell_registration_and_commands(
     assert "diagnostics" in script
     assert "mcp" in script
     assert "--project" in script or "-l 'project'" in script
+    assert "--profile" in script or "-l 'profile'" in script
+    assert "--since" in script or "-l 'since'" in script
+    assert "--compare" in script or "-l 'compare'" in script
+    assert "--symbol" in script or "-l 'symbol'" in script
 
 
 def test_completion_rejects_unknown_shell() -> None:

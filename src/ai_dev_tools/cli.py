@@ -63,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--resume", action="store_true")
     check.add_argument("--retry-flaky", type=int, default=0, metavar="COUNT")
     check.add_argument("--policy", choices=["complete", "feedback-first"], default="complete")
+    check.add_argument("--compare", metavar="BASELINE")
     check.add_argument(
         "--explain", action="store_true", help="Show selected checks without running them"
     )
@@ -94,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--task", default="")
     context_build.add_argument(
         "--profile",
-        choices=["default", "minimal", "debug", "review", "full"],
+        choices=["default", "minimal", "debug", "review", "implement", "docs", "full"],
         default="default",
     )
     context_build.add_argument("--max-chars", type=int, default=50_000)
@@ -110,6 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
     context_build.add_argument("--output", type=Path)
     context_build.add_argument("--explain", action="store_true")
     context_build.add_argument("--incremental", action="store_true")
+    context_build.add_argument("--since", metavar="CONTEXT_ID")
+    context_build.add_argument("--compare", metavar="BASELINE")
     context_build.add_argument("--retrieval", choices=["auto", "always", "never"], default="auto")
     context_build.add_argument(
         "--tokenizer", choices=["estimate", "cl100k_base", "o200k_base"], default="estimate"
@@ -190,7 +193,8 @@ def build_parser() -> argparse.ArgumentParser:
     performance_compare.add_argument("candidate", type=Path)
 
     explain = sub.add_parser("explain")
-    explain.add_argument("reference")
+    explain.add_argument("reference", nargs="?")
+    explain.add_argument("--symbol", metavar="PATH#SYMBOL")
     explain.add_argument("--tail", type=int, default=100)
 
     mcp = sub.add_parser("mcp")
@@ -336,6 +340,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         args.resume = False
         args.retry_flaky = 0
         args.policy = "complete"
+        args.compare = None
     if command == "logs" and args.logs_command == "summarize":
         from ai_dev_tools.parsers.logs import summarize_latest_log, summarize_log_file
 
@@ -363,6 +368,8 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 format=args.format,
                 explain=args.explain,
                 incremental=args.incremental,
+                since=args.since,
+                compare=args.compare,
                 retrieval=args.retrieval,
                 tokenizer=args.tokenizer,
                 token_budgets=tuple(args.token_budget),
@@ -413,6 +420,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             policy=args.policy,
             resume=args.resume,
             retry_flaky=args.retry_flaky,
+            compare=args.compare,
         )
     if command == "cache":
         from ai_dev_tools.runners.cache import run_cache
@@ -488,9 +496,13 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             return run_performance_latest(project_root)
         return compare_performance(project_root, args.baseline, args.candidate)
     if command == "explain":
-        from ai_dev_tools.reporters.progressive import run_explain
+        from ai_dev_tools.reporters.progressive import run_explain, run_explain_symbol
 
-        return run_explain(project_root, args.reference, args.tail)
+        if args.symbol:
+            return run_explain_symbol(project_root, args.symbol, args.tail)
+        if args.reference:
+            return run_explain(project_root, args.reference, args.tail)
+        raise SystemExit(EXIT_USAGE)
     if command == "diagnostics":
         from ai_dev_tools.runners.diagnostics import run_diagnostics
 
@@ -572,16 +584,23 @@ def _capabilities_report(project_root: Path) -> Report:
 
 
 def _print_text(report: Report) -> None:
-    print(f"STATUS: {report.status.upper()}")
-    print(f"COMMAND: {report.command}")
-    print(f"DURATION: {report.duration_seconds}s")
+    _print_console_line(f"STATUS: {report.status.upper()}")
+    _print_console_line(f"COMMAND: {report.command}")
+    _print_console_line(f"DURATION: {report.duration_seconds}s")
     for key, value in report.summary.items():
-        print(f"{key.upper()}: {value}")
+        _print_console_line(f"{key.upper()}: {value}")
     if report.issues:
-        print("ISSUES:")
+        _print_console_line("ISSUES:")
         for issue in report.issues:
             location = f" [{issue.location}]" if issue.location else ""
-            print(f"- {issue.severity}: {issue.message}{location}")
+            _print_console_line(f"- {issue.severity}: {issue.message}{location}")
+
+
+def _print_console_line(value: str) -> None:
+    encoding = getattr(sys.stdout, "encoding", None)
+    if encoding:
+        value = value.encode(encoding, errors="replace").decode(encoding)
+    print(value)
 
 
 if __name__ == "__main__":

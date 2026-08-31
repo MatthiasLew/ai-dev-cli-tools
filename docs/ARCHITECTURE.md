@@ -26,6 +26,11 @@ Add small modules under `detectors/`, `runners/`, or `parsers/`. Keep runtime de
 
 `check` builds deterministic `CheckTask` entries with name, category, command, cost, source, and required fields. Modes filter by semantics rather than slicing command lists.
 
+The scheduler additionally models explicit task dependencies and conservative local resource
+classes. CPU tasks consume one slot, memory-heavy tasks consume two, and exclusive build tasks run
+alone. Results are always restored to deterministic plan order. Watch cancellation propagates an
+in-memory token only to subprocesses created by the active validation.
+
 The stable `runners.check` facade orchestrates execution and re-exports its public models and selection functions. `check_models` owns report contracts, while `check_selection` owns changed-file and affected-test strategy.
 
 ## Context Builders

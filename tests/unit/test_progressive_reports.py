@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from ai_dev_tools.models.report import Artifact, Issue, Report
-from ai_dev_tools.reporters.progressive import run_explain
+from ai_dev_tools.reporters.progressive import run_explain, run_explain_symbol
 from ai_dev_tools.reporters.writer import write_json
 
 
@@ -59,3 +59,25 @@ def test_explain_reports_unknown_reference(tmp_path: Path) -> None:
 
     assert report.status == "failed"
     assert report.summary["reason_code"] == "EVIDENCE_NOT_FOUND"
+
+
+def test_symbol_explain_is_bounded_qualified_and_project_scoped(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "service.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def helper():\n    return 1\n\ndef run_service():\n    return helper()\n",
+        encoding="utf-8",
+    )
+    test = tmp_path / "tests" / "test_service.py"
+    test.parent.mkdir(parents=True)
+    test.write_text("from src.service import run_service\n", encoding="utf-8")
+
+    report = run_explain_symbol(tmp_path, "src/service.py#run_service", tail=1)
+    unsafe = run_explain_symbol(tmp_path, "../outside.py#run", tail=10)
+
+    assert report.status == "success"
+    assert report.summary["content"] == "def run_service():"
+    assert report.summary["truncated"] is True
+    assert report.summary["related_tests"] == ["tests/test_service.py"]
+    assert unsafe.status == "failed"
+    assert unsafe.summary["reason_code"] == "SYMBOL_PATH_OUTSIDE_PROJECT"

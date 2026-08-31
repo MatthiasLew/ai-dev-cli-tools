@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import tarfile
 import tomllib
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,7 +53,39 @@ def validate_release(root: Path, tag: str, dist: Path | None = None) -> list[str
             errors.append(f"missing distribution files: {sorted(missing)}")
         if unexpected:
             errors.append(f"unexpected distribution files: {sorted(unexpected)}")
+        for name in sorted(expected & actual):
+            errors.extend(_validate_archive(dist_path / name))
     return errors
+
+
+def _validate_archive(path: Path) -> list[str]:
+    try:
+        if path.suffix == ".whl":
+            with zipfile.ZipFile(path) as archive:
+                names = archive.namelist()
+        else:
+            with tarfile.open(path, "r:gz") as archive:
+                names = archive.getnames()
+    except (OSError, tarfile.TarError, zipfile.BadZipFile):
+        return [f"invalid distribution archive: {path.name}"]
+    forbidden = {
+        ".ai",
+        ".coverage",
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__pycache__",
+        "build",
+        "dist",
+    }
+    unsafe = sorted(
+        name
+        for name in names
+        if any(part in forbidden for part in Path(name.replace("\\", "/")).parts)
+    )
+    return [f"distribution contains generated or private paths: {unsafe[:20]}"] if unsafe else []
 
 
 def main(argv: list[str] | None = None) -> int:

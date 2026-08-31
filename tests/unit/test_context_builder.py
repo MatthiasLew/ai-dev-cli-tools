@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from ai_dev_tools.context import ContextOptions, build_context
@@ -235,6 +236,48 @@ def test_incremental_context_reuses_unchanged_files_and_invalidates_changes(
     artifact_paths = {item["path"] for item in data["artifacts"]}
     assert str(tmp_path / ".ai" / "context" / "context-latest.json") in artifact_paths
     assert str(tmp_path / ".ai" / "cache" / "context-manifest.json") in artifact_paths
+
+
+def test_incremental_context_can_compare_with_historical_context_id(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
+    source = tmp_path / "app.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    options = ContextOptions(
+        no_git=True,
+        include=("app.py",),
+        incremental=True,
+        format="json",
+        max_chars=20_000,
+    )
+
+    first = build_context(tmp_path, options)
+    context_id = first.summary["incremental"]["context_id"]
+    history = tmp_path / ".ai" / "cache" / "context-manifests" / f"{context_id}.json"
+    assert history.exists()
+
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    compared = build_context(tmp_path, replace(options, since=context_id))
+
+    assert compared.summary["incremental"]["base_context_id"] == context_id
+    assert [item["path"] for item in compared.summary["selected_files"]] == ["app.py"]
+
+
+def test_incremental_context_rejects_unknown_or_unsafe_context_id(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("docs", encoding="utf-8")
+
+    missing = build_context(
+        tmp_path,
+        ContextOptions(no_git=True, include=("README.md",), since="0" * 16),
+    )
+    unsafe = build_context(
+        tmp_path,
+        ContextOptions(no_git=True, include=("README.md",), since="../outside"),
+    )
+
+    assert missing.status == "failed"
+    assert missing.summary["reason_code"] == "CONTEXT_MANIFEST_NOT_FOUND"
+    assert unsafe.status == "failed"
+    assert unsafe.summary["reason_code"] == "INVALID_CONTEXT_ID"
 
 
 def test_review_context_compacts_raw_diff_to_changed_symbols(tmp_path: Path) -> None:

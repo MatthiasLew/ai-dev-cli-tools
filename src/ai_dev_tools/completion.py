@@ -6,6 +6,20 @@ TOP_LEVEL_COMMANDS = (
     "capabilities finish completion"
 )
 GLOBAL_FLAGS = "--project --json --quiet --help --version"
+COMMAND_FLAGS = (
+    "--mode --jobs --no-cache --resume --retry-flaky --policy --compare --dry-run "
+    "--explain --create-env --if-needed --foreground --timeout --ready-http --ready-tcp "
+    "--startup-timeout --startup-log-lines --max-files --max-depth --tool --task --profile "
+    "--max-chars --max-file-chars --max-diff-chars --include --exclude --changed-only "
+    "--staged-only --no-git --format --output --incremental --since --retrieval --tokenizer "
+    "--token-budget --provider-usage --refine --refinement-rounds --refinement-max-files "
+    "--compression --debounce --poll --initial --max-runs --title --path --depends-on --agent "
+    "--lease-seconds --suite --variant --trials --cache-state --symbol --tail"
+)
+
+
+def _candidates() -> list[str]:
+    return TOP_LEVEL_COMMANDS.split() + GLOBAL_FLAGS.split() + COMMAND_FLAGS.split()
 
 
 def render_completion(shell: str) -> str:
@@ -23,14 +37,14 @@ def render_completion(shell: str) -> str:
 def _bash() -> str:
     return f'''_ai_dev_complete() {{
   local current="${{COMP_WORDS[COMP_CWORD]}}"
-  COMPREPLY=($(compgen -W "{TOP_LEVEL_COMMANDS} {GLOBAL_FLAGS}" -- "$current"))
+  COMPREPLY=($(compgen -W "{TOP_LEVEL_COMMANDS} {GLOBAL_FLAGS} {COMMAND_FLAGS}" -- "$current"))
 }}
 complete -F _ai_dev_complete ai-dev
 '''
 
 
 def _zsh() -> str:
-    words = " ".join(TOP_LEVEL_COMMANDS.split() + GLOBAL_FLAGS.split())
+    words = " ".join(_candidates())
     return f"""#compdef ai-dev
 _ai_dev() {{
   local -a candidates
@@ -49,7 +63,7 @@ def _fish() -> str:
     )
     lines.extend(
         f"complete -c ai-dev -l '{item[2:]}'"
-        for item in GLOBAL_FLAGS.split()
+        for item in GLOBAL_FLAGS.split() + COMMAND_FLAGS.split()
         if item.startswith("--")
     )
     return "\n".join(lines) + "\n"
@@ -57,7 +71,7 @@ def _fish() -> str:
 
 def _powershell() -> str:
     candidates = ", ".join(
-        f"'{item}'" for item in TOP_LEVEL_COMMANDS.split() + GLOBAL_FLAGS.split()
+        f"'{item}'" for item in _candidates()
     )
     return f"""Register-ArgumentCompleter -Native -CommandName ai-dev -ScriptBlock {{
   param($wordToComplete, $commandAst, $cursorPosition)

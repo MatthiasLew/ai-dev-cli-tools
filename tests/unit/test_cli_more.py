@@ -1,8 +1,10 @@
 import io
 import json
+import sys
 from pathlib import Path
 
-from ai_dev_tools.cli import main
+from ai_dev_tools.cli import _print_text, main
+from ai_dev_tools.models.report import Issue, Report
 
 
 def test_cli_doctor_json(monkeypatch, tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -11,6 +13,23 @@ def test_cli_doctor_json(monkeypatch, tmp_path: Path, capsys) -> None:  # type: 
     monkeypatch.setattr(environment, "TOOLS", tuple())
     assert main(["--project", str(tmp_path), "--json", "doctor"]) == 0
     assert '"command": "doctor"' in capsys.readouterr().out
+
+
+def test_text_report_replaces_characters_unsupported_by_console_encoding(tmp_path: Path) -> None:
+    output = io.BytesIO()
+    console = io.TextIOWrapper(output, encoding="cp1250", errors="strict")
+    original = sys.stdout
+    report = Report(command="check", project_root=tmp_path)
+    report.issues.append(Issue(severity="error", message="invalid: \ufffd"))
+    try:
+        sys.stdout = console
+        _print_text(report)
+        console.flush()
+    finally:
+        sys.stdout = original
+
+    rendered = output.getvalue().decode("cp1250")
+    assert "invalid: ?" in rendered
 
 
 def test_cli_git_non_repo(tmp_path: Path) -> None:

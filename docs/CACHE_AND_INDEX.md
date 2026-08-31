@@ -47,4 +47,8 @@ Reports expose `cached` and `reuse` (`executed`, `cached`, or `resumed`) per res
 
 ## Incremental context
 
-`ai-dev context build --incremental` uses the same repository index and a separate schema-versioned context manifest. Only changed candidate files are emitted. Files omitted because of the file budget remain pending for a later run rather than being incorrectly marked as delivered.
+`ai-dev context build --incremental` uses the same repository index and a separate schema-versioned
+context manifest. Only changed candidate files are emitted. The latest manifest is accompanied by
+up to 50 content-addressed historical manifests; `--since <context-id>` selects a retained manifest
+as the explicit comparison base. Files omitted because of the file budget remain pending for a
+later run rather than being incorrectly marked as delivered.

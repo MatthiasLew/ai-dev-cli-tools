@@ -553,27 +553,31 @@ def _additional_language_definitions(
                     r"\s*(?:(?:public|abstract|final|sealed)\s+)*(?:class|record)\s+([A-Za-z_$][\w$]*)"
                 ),
                 "class",
-                {0},
+                {0, 1, 2, 3},
             ),
             (
                 re.compile(r"\s*(?:(?:public|sealed)\s+)*interface\s+([A-Za-z_$][\w$]*)"),
                 "interface",
-                {0},
+                {0, 1, 2, 3},
             ),
-            (re.compile(r"\s*(?:public\s+)?enum\s+([A-Za-z_$][\w$]*)"), "enum", {0}),
             (
-                re.compile(
-                    r"\s*(?:(?:public|protected|private|static|final|synchronized|native|abstract)\s+)+(?:[\w$<>?,.\[\]]+\s+)+([A-Za-z_$][\w$]*)\s*\("
-                ),
-                "method",
-                {1},
+                re.compile(r"\s*(?:public\s+)?enum\s+([A-Za-z_$][\w$]*)"),
+                "enum",
+                {0, 1, 2, 3},
             ),
             (
                 re.compile(
                     r"\s*(?:(?:public|protected|private)\s+)?([A-Za-z_$][\w$]*)\s*\("
                 ),
                 "constructor",
-                {1},
+                {1, 2, 3, 4},
+            ),
+            (
+                re.compile(
+                    r"\s*(?:(?:public|protected|private|static|final|synchronized|native|abstract)\s+)*(?:[\w$<>?,.\[\]]+\s+)+([A-Za-z_$][\w$]*)\s*\("
+                ),
+                "method",
+                {1, 2, 3, 4},
             ),
         )
     elif suffix == ".rs":
@@ -596,10 +600,14 @@ def _additional_language_definitions(
         )
     else:
         patterns = (
-            (re.compile(r"\s*(?:(?:final|abstract)\s+)?class\s+([A-Za-z_][\w]*)"), "class", {0}),
-            (re.compile(r"\s*interface\s+([A-Za-z_][\w]*)"), "interface", {0}),
-            (re.compile(r"\s*trait\s+([A-Za-z_][\w]*)"), "trait", {0}),
-            (re.compile(r"\s*enum\s+([A-Za-z_][\w]*)"), "enum", {0}),
+            (
+                re.compile(r"\s*(?:(?:final|abstract)\s+)?class\s+([A-Za-z_][\w]*)"),
+                "class",
+                {0, 1, 2, 3},
+            ),
+            (re.compile(r"\s*interface\s+([A-Za-z_][\w]*)"), "interface", {0, 1, 2, 3}),
+            (re.compile(r"\s*trait\s+([A-Za-z_][\w]*)"), "trait", {0, 1, 2, 3}),
+            (re.compile(r"\s*enum\s+([A-Za-z_][\w]*)"), "enum", {0, 1, 2, 3}),
             (
                 re.compile(
                     r"\s*(?:(?:public|protected|private|static|final|abstract)\s+)*function\s+&?\s*([A-Za-z_][\w]*)"
@@ -627,17 +635,44 @@ def _additional_language_definitions(
             if end_line is not None:
                 found.append(SourceSymbol(match.group(1), kind, line_index + 1, end_line))
             break
-    return _qualify_additional_symbols(found, suffix)
+    return _qualify_additional_symbols(found, suffix, cleaned)
 
 
 def _qualify_additional_symbols(
-    symbols: list[SourceSymbol], suffix: str
+    symbols: list[SourceSymbol], suffix: str, source: str
 ) -> list[SourceSymbol]:
     owner_kinds = {"impl", "trait"} if suffix == ".rs" else {"class", "interface", "trait", "enum"}
     member_kinds = {"function"} if suffix == ".rs" else {"method", "constructor"}
     separator = "::" if suffix == ".rs" else "."
+    owner_names: dict[int, str] = {}
+    for symbol in symbols:
+        if symbol.kind not in owner_kinds:
+            continue
+        enclosing = [
+            candidate
+            for candidate in symbols
+            if candidate is not symbol
+            and candidate.kind in owner_kinds
+            and candidate.start_line < symbol.start_line
+            and candidate.end_line >= symbol.end_line
+        ]
+        parent = min(enclosing, key=lambda item: item.end_line - item.start_line, default=None)
+        parent_name = owner_names.get(id(parent)) if parent is not None else None
+        owner_names[id(symbol)] = (
+            f"{parent_name}{separator}{symbol.name}" if parent_name else symbol.name
+        )
     qualified: list[SourceSymbol] = []
     for symbol in symbols:
+        if symbol.kind in owner_kinds:
+            qualified.append(
+                SourceSymbol(
+                    owner_names[id(symbol)],
+                    symbol.kind,
+                    symbol.start_line,
+                    symbol.end_line,
+                )
+            )
+            continue
         if symbol.kind not in member_kinds:
             qualified.append(symbol)
             continue
@@ -649,7 +684,9 @@ def _qualify_additional_symbols(
             and candidate.end_line >= symbol.end_line
         ]
         owner = min(owners, key=lambda item: item.end_line - item.start_line) if owners else None
-        if symbol.kind == "constructor" and (owner is None or symbol.name != owner.name):
+        if symbol.kind == "constructor" and (
+            owner is None or symbol.name != _unqualified_name(owner.name)
+        ):
             continue
         if owner is None:
             kind = "function" if suffix == ".php" and symbol.kind == "method" else symbol.kind
@@ -657,10 +694,44 @@ def _qualify_additional_symbols(
             continue
         qualified.append(
             SourceSymbol(
-                f"{owner.name}{separator}{symbol.name}",
+                f"{owner_names[id(owner)]}{separator}{symbol.name}",
                 symbol.kind,
                 symbol.start_line,
                 symbol.end_line,
             )
         )
-    return qualified
+    duplicate_names = {
+        (item.name, item.kind)
+        for item in qualified
+        if sum(other.name == item.name and other.kind == item.kind for other in qualified) > 1
+    }
+    return [
+        SourceSymbol(
+            f"{item.name}{_parameter_identity(source, item.start_line)}"
+            if (item.name, item.kind) in duplicate_names and item.kind in member_kinds
+            else item.name,
+            item.kind,
+            item.start_line,
+            item.end_line,
+        )
+        for item in qualified
+    ]
+
+
+def _parameter_identity(source: str, start_line: int) -> str:
+    lines = source.splitlines()
+    declaration = " ".join(lines[start_line - 1 : min(start_line + 5, len(lines))])
+    opening = declaration.find("(")
+    if opening < 0:
+        return "(?)"
+    depth = 0
+    for index in range(opening, len(declaration)):
+        char = declaration[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                parameters = re.sub(r"\s+", " ", declaration[opening + 1 : index].strip())
+                return f"({parameters})"
+    return "(?)"

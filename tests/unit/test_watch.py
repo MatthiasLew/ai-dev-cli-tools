@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -97,3 +98,35 @@ def test_watch_cli_is_wired(
     assert exit_code == 0
     assert payload["command"] == "watch --mode changed"
     assert payload["summary"]["validations"] == 1
+
+
+def test_watch_cancels_obsolete_validation_and_queues_latest_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshots = [
+        {},
+        {"src/demo.py": (1, 1)},
+        {"src/demo.py": (1, 1)},
+        {"src/demo.py": (2, 1)},
+    ]
+    cancellation_seen: list[bool] = []
+
+    monkeypatch.setattr(
+        watch,
+        "_snapshot",
+        lambda root, ignored: snapshots.pop(0) if len(snapshots) > 1 else snapshots[0],
+    )
+
+    def fake_check(root: Path, **kwargs: object) -> Report:
+        cancel_event = kwargs["cancel_event"]
+        assert isinstance(cancel_event, Event)
+        cancel_event.wait(1)
+        cancellation_seen.append(cancel_event.is_set())
+        return Report(command="check", project_root=root, status="failed").finish()
+
+    monkeypatch.setattr(watch, "run_check", fake_check)
+    report = run_watch(tmp_path, WatchOptions(max_runs=1, debounce_ms=0, poll_ms=10))
+
+    assert cancellation_seen == [True]
+    assert report.summary["cancelled_obsolete"] == 1
+    assert report.summary["queued_during_validation"] == 1
