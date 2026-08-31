@@ -124,7 +124,8 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
         _remove_stale_request(paths["request"])
         supervisor_command = [
             sys.executable,
-            str(Path(__file__).with_name("supervisor.py")),
+            "-m",
+            "ai_dev_tools.runtime.supervisor",
             "--metadata",
             str(paths["metadata"]),
             "--request",
