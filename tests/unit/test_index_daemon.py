@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from ai_dev_tools.runners.index import run_index
 from ai_dev_tools.runners.index_daemon import run_index_daemon
 
@@ -23,8 +25,8 @@ def test_index_daemon_rejects_busy_polling(tmp_path: Path) -> None:
 
 
 def test_index_daemon_updates_changed_fingerprint_and_is_visible(
-    monkeypatch, tmp_path: Path
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from ai_dev_tools.runners import index_daemon
 
     indexes = iter(
@@ -34,7 +36,7 @@ def test_index_daemon_updates_changed_fingerprint_and_is_visible(
         ]
     )
     monkeypatch.setattr(index_daemon, "update_repository_index", lambda root: next(indexes))
-    monkeypatch.setattr(index_daemon.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr("ai_dev_tools.runners.index_daemon.time.sleep", lambda seconds: None)
 
     report = run_index_daemon(tmp_path, poll_ms=50, max_updates=2)
 
@@ -45,14 +47,13 @@ def test_index_daemon_updates_changed_fingerprint_and_is_visible(
 
 
 def test_index_daemon_handles_interrupt_and_invalid_fingerprint(
-    monkeypatch, tmp_path: Path
-) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from ai_dev_tools.runners import index_daemon
 
     monkeypatch.setattr(index_daemon, "update_repository_index", lambda root: {"entries": "bad"})
     monkeypatch.setattr(
-        index_daemon.time,
-        "sleep",
+        "ai_dev_tools.runners.index_daemon.time.sleep",
         lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
 
