@@ -1,5 +1,6 @@
 import socket
 import sys
+import time
 from contextlib import nullcontext
 from pathlib import Path
 from urllib import request as urllib_request
@@ -223,7 +224,7 @@ def test_background_start_stops_after_two_dead_supervisors(
 
     monkeypatch.setattr(runner, "_spawn_supervisor", spawn_dead_supervisor)
     monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: {})
-    monkeypatch.setattr(runner.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
 
     report = run_application(tmp_path, RunOptions())
 
