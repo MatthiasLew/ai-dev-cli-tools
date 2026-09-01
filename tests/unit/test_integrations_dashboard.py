@@ -24,6 +24,7 @@ def test_ready_client_configs_are_generated_without_overwriting(tmp_path: Path) 
     profile = json.loads((tmp_path / ".ai-dev/clients/codex.json").read_text())
     assert profile["content_default"] == "references"
     assert profile["delta"] is True
+    assert profile["telemetry_tool"] == "record_usage"
 
     (tmp_path / ".mcp.json").write_text('{"keep": true}\n', encoding="utf-8")
     second = install_integrations(tmp_path, "claude")
@@ -67,6 +68,7 @@ def test_dashboard_collects_local_index_cache_and_errors(tmp_path: Path) -> None
     assert status["errors"] == ["boom"]
     assert status["token_efficiency"]["total_saved_tokens"] == 120
     assert status["token_efficiency"]["latest_delivery"] == "references"
+    assert status["provider_usage"]["sessions"] == 0
     assert dashboard_status(tmp_path).summary["semantic"]["symbols"] == 1
 
 

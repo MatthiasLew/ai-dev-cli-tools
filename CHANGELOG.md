@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add bounded OpenAI, Anthropic, and generic provider-usage adapters, MCP `record_usage`,
+  idempotent JSON/JSONL imports, optional project-local pricing estimates, and per-client usage
+  totals in the CLI and loopback dashboard without storing model input or output content.
 - Add one-shot `ai-dev task` and MCP `prepare_task` workflows that combine a bounded plan,
   context references, validation preview, per-client acknowledgement state, and a measurable token
   savings receipt; full file content is now an explicit opt-in on this path.

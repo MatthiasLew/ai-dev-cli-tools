@@ -85,6 +85,8 @@ ai-dev benchmark run --suite examples/benchmarks/output-budget-smoke.json --vari
 ai-dev benchmark corpus --manifest examples/benchmarks/agent-corpus.json --trials 3
 ai-dev integrations install all
 ai-dev dashboard serve --port 8765
+ai-dev telemetry import response.json --client codex --format openai
+ai-dev telemetry status --json
 ai-dev explain issue:<id> --tail 100
 ai-dev explain --symbol "src/app.py#Application.run" --tail 100
 ai-dev feedback --task "fix authentication timeout"
@@ -181,6 +183,14 @@ state fingerprint and a token savings receipt; return that fingerprint with `--a
 after consuming the response. Explicit acknowledgements are stored per client under
 `.ai/cache/client-state/`, so Codex, Claude Code, Cursor, and generic consumers never inherit one
 another's assumed context. Receipts remain local under `.ai/token-efficiency/`.
+
+Provider-reported usage can be recorded through MCP `record_usage` or imported from a bounded,
+project-local JSON/JSONL file with `ai-dev telemetry import`. OpenAI Responses, Anthropic, and a
+stable generic envelope for Cursor or other clients are normalized without retaining prompt or
+response content. `telemetry status` and the loopback dashboard aggregate input, cached input,
+output, and reasoning tokens by client. Optional cost values are local estimates computed from
+`.ai-dev/telemetry-pricing.json`; no changing provider price is hardcoded and no value is presented
+as a provider invoice. See `docs/INTEGRATIONS_AND_DASHBOARD.md`.
 
 Incremental mode stores the latest schema-versioned manifest plus up to 50 content-addressed
 historical manifests under `.ai/cache/`, and reports changed versus reused files. Pass
@@ -285,6 +295,7 @@ git diff --check
 | benchmark run/compare/gate/corpus | implemented |
 | integrations install | implemented for Codex, Claude Code, Cursor, and generic MCP |
 | dashboard status/serve | implemented, loopback-only |
+| telemetry import/status and MCP record_usage | implemented, provider-reported usage only |
 | performance latest/compare | implemented |
 | capabilities | implemented |
 | git status | implemented |

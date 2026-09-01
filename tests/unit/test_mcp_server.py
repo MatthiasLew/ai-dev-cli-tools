@@ -68,6 +68,7 @@ def test_initialize_advertises_tools_and_bounded_instructions(tmp_path: Path) ->
         "plan_work",
         "prepare_task",
         "project_status",
+        "record_usage",
         "run_checks",
     ]
     status = next(tool for tool in tools if tool["name"] == "project_status")
@@ -182,6 +183,45 @@ def test_prepare_task_returns_one_compact_token_accounted_payload(tmp_path: Path
     assert summary["constraints"]["content_default"] == "references"
     assert "token_savings" in summary
     assert summary["state"]["fingerprint"]
+
+
+def test_record_usage_stores_only_bounded_numeric_telemetry(tmp_path: Path) -> None:
+    server = LocalMcpServer(tmp_path)
+
+    result = _call(
+        server,
+        "record_usage",
+        {
+            "client": "codex",
+            "input_tokens": 1200,
+            "cached_input_tokens": 800,
+            "cache_write_input_tokens": 100,
+            "output_tokens": 90,
+            "reasoning_tokens": 40,
+            "model": "gpt-test",
+            "request_id": "resp-safe",
+        },
+    )
+
+    assert result["isError"] is False
+    summary = result["structuredContent"]["summary"]
+    assert summary["measurement"] == "provider_reported"
+    assert summary["total_tokens"] == 1290
+    stored = json.loads(Path(result["structuredContent"]["artifacts"][0]["path"]).read_text())
+    assert "prompt" not in stored
+    assert stored["cached_input_tokens"] == 800
+    assert stored["cache_write_input_tokens"] == 100
+
+
+def test_record_usage_rejects_cache_larger_than_input(tmp_path: Path) -> None:
+    result = _call(
+        LocalMcpServer(tmp_path),
+        "record_usage",
+        {"client": "generic", "input_tokens": 1, "cached_input_tokens": 2,
+         "output_tokens": 0},
+    )
+
+    assert result["isError"] is True
 
 
 def test_context_tool_is_preview_only_and_bounded_by_default(tmp_path: Path) -> None:
