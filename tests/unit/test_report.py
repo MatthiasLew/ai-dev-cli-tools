@@ -11,7 +11,7 @@ def test_report_schema_contains_required_fields(tmp_path: Path) -> None:
     ).finish()
     data = report.to_dict()
     assert data["schema_version"] == "1.1"
-    assert data["tool_version"] == "1.2.0"
+    assert data["tool_version"] == "1.2.1"
     assert data["status"] == "success"
     assert data["command"] == "scan"
     assert data["summary"] == {}

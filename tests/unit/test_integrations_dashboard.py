@@ -86,7 +86,15 @@ def test_dashboard_http_is_loopback_read_only(tmp_path: Path) -> None:
         with urllib.request.urlopen(base + "/api/status", timeout=2) as response:  # noqa: S310
             assert json.load(response)["project_root"] == str(tmp_path.resolve())
         with urllib.request.urlopen(base + "/", timeout=2) as response:  # noqa: S310
-            assert b"ai-dev dashboard" in response.read()
+            page = response.read().decode()
+            assert "ai-dev dashboard" in page
+            assert "document.getElementById('root')" in page
+            assert "document.getElementById('grid')" in page
+            assert "if(!response.ok)" in page
+            assert "Dashboard failed to load" in page
+            assert ".replaceChildren(" in page
+            assert "errors?.join('\\n')" in page
+            assert "grid.innerHTML" not in page
         try:
             urllib.request.urlopen(base + "/missing", timeout=2)  # noqa: S310
         except urllib.error.HTTPError as exc:
