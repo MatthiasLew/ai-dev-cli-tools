@@ -50,7 +50,9 @@ not.
 
 1. Complete `docs/RELEASE_CHECKLIST.md` on a clean commit already present on `main`.
 2. Confirm the TestPyPI and PyPI Trusted Publisher records and GitHub environments above.
-3. Create and push the signed tag `v1.2.1` from that exact commit.
+3. Create and push an annotated tag `v1.2.1` from that exact commit. If the maintainer has already
+   configured a signing key, cryptographically sign the tag and verify its signature before push;
+   release automation must not generate or select a maintainer credential implicitly.
 4. Approve the `testpypi` environment if configured to require review.
 5. Confirm the TestPyPI installation smoke job passes and inspect the generated draft release.
 6. Review the attached wheel/sdist, release notes, and protected `pypi` environment.
