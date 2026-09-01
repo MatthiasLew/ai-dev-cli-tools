@@ -1,3 +1,4 @@
+import os
 import socket
 import sys
 import time
@@ -85,6 +86,18 @@ def test_run_blocks_when_managed_process_is_fresh(tmp_path: Path) -> None:
 
     assert report.status == "blocked"
     assert report.issues[0].code == "ALREADY_RUNNING"
+
+
+def test_supervisor_environment_starts_with_absolute_package_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PYTHONPATH", f"relative{os.pathsep}another")
+
+    environment = runner._supervisor_environment()
+    entries = environment["PYTHONPATH"].split(os.pathsep)
+
+    assert Path(entries[0]).is_absolute()
+    assert entries[1:] == ["relative", "another"]
 
 
 def test_run_blocks_without_detected_command(tmp_path: Path) -> None:
