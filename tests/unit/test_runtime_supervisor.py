@@ -107,6 +107,17 @@ def test_supervisor_rejects_empty_command(tmp_path: Path) -> None:
     )
 
 
+def test_release_working_directory_uses_filesystem_anchor(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    changed_to: list[str] = []
+    monkeypatch.setattr(os, "chdir", changed_to.append)
+
+    supervisor._release_working_directory(tmp_path, current_directory=tmp_path)
+
+    assert changed_to == [tmp_path.resolve().anchor]
+
+
 def test_supervisor_masks_streamed_application_output(tmp_path: Path) -> None:
     metadata = tmp_path / "process.json"
     log = tmp_path / "application.log"

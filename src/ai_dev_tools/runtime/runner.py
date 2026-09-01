@@ -144,7 +144,12 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
         for attempt in range(1, 3):
             startup_attempts = attempt
             supervisor = _spawn_supervisor(supervisor_command, settings.project_root)
-            state = _wait_for_state(paths["metadata"], {"running", "exited"}, 10.0)
+            state = _wait_for_state(
+                paths["metadata"],
+                {"running", "exited"},
+                20.0,
+                expected_token=token,
+            )
             if state.get("status") in {"running", "exited"}:
                 break
             # Retry only after the supervisor itself has exited before publishing
@@ -232,7 +237,12 @@ def stop_application(
     else:
         paths["request"].parent.mkdir(parents=True, exist_ok=True)
         paths["request"].write_text(str(state["token"]), encoding="utf-8")
-        stopped = _wait_for_state(paths["metadata"], {"stopped", "exited"}, timeout_seconds)
+        stopped = _wait_for_state(
+            paths["metadata"],
+            {"stopped", "exited"},
+            timeout_seconds,
+            expected_token=str(state["token"]),
+        )
         if stopped.get("status") not in {"stopped", "exited"}:
             report.status = "failed"
             report.issues.append(
@@ -381,18 +391,33 @@ def _runtime_paths(root: Path) -> dict[str, Path]:
     }
 
 
-def _wait_for_state(path: Path, statuses: set[str], timeout: float) -> dict[str, object]:
+def _wait_for_state(
+    path: Path,
+    statuses: set[str],
+    timeout: float,
+    *,
+    expected_token: str | None = None,
+) -> dict[str, object]:
     deadline = time.monotonic() + max(timeout, 0)
     latest: dict[str, object] = {}
     while time.monotonic() <= deadline:
         latest = _read_json(path)
-        if latest.get("status") in statuses:
+        if _state_matches(latest, statuses, expected_token):
             return latest
         pending = _read_json(path.with_suffix(path.suffix + ".tmp"))
-        if pending.get("status") in statuses:
+        if _state_matches(pending, statuses, expected_token):
             return pending
         time.sleep(0.05)
     return latest
+
+
+def _state_matches(
+    state: dict[str, object], statuses: set[str], expected_token: str | None
+) -> bool:
+    return state.get("status") in statuses and (
+        expected_token is None
+        or secrets.compare_digest(str(state.get("token", "")), expected_token)
+    )
 
 
 def _read_json(path: Path) -> dict[str, object]:

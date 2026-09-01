@@ -132,7 +132,11 @@ def test_background_start_failure_is_reported(monkeypatch, tmp_path: Path) -> No
     monkeypatch.setattr(
         runner,
         "_wait_for_state",
-        lambda path, statuses, timeout: {"status": "exited", "exit_code": 1},
+        lambda path, statuses, timeout, **kwargs: {
+            "status": "exited",
+            "exit_code": 1,
+            "token": kwargs.get("expected_token"),
+        },
     )
 
     report = run_application(tmp_path, RunOptions())
@@ -163,7 +167,9 @@ def test_background_start_retries_dead_supervisor_once(
 
     monkeypatch.setattr(runner, "_spawn_supervisor", spawn_dead_supervisor)
     states = iter(({}, {"status": "running", "supervisor_pid": 1, "child_pid": 2}))
-    monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: next(states))
+    monkeypatch.setattr(
+        runner, "_wait_for_state", lambda path, statuses, timeout, **kwargs: next(states)
+    )
 
     report = run_application(tmp_path, RunOptions())
 
@@ -193,7 +199,9 @@ def test_background_start_never_duplicates_live_supervisor(
         return LiveSupervisor()
 
     monkeypatch.setattr(runner, "_spawn_supervisor", spawn_live_supervisor)
-    monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: {})
+    monkeypatch.setattr(
+        runner, "_wait_for_state", lambda path, statuses, timeout, **kwargs: {}
+    )
 
     report = run_application(tmp_path, RunOptions())
 
@@ -223,7 +231,9 @@ def test_background_start_stops_after_two_dead_supervisors(
         return DeadSupervisor()
 
     monkeypatch.setattr(runner, "_spawn_supervisor", spawn_dead_supervisor)
-    monkeypatch.setattr(runner, "_wait_for_state", lambda path, statuses, timeout: {})
+    monkeypatch.setattr(
+        runner, "_wait_for_state", lambda path, statuses, timeout, **kwargs: {}
+    )
     monkeypatch.setattr(time, "sleep", lambda seconds: None)
 
     report = run_application(tmp_path, RunOptions())
@@ -268,7 +278,10 @@ def test_stop_explain_and_timeout(monkeypatch, tmp_path: Path) -> None:  # type:
     monkeypatch.setattr(
         runner,
         "_wait_for_state",
-        lambda path, statuses, timeout: {"status": "running", "token": "secret"},
+        lambda path, statuses, timeout, **kwargs: {
+            "status": "running",
+            "token": "secret",
+        },
     )
     timed_out = stop_application(tmp_path, timeout_seconds=0)
     assert timed_out.status == "failed"
@@ -297,6 +310,26 @@ def test_wait_for_state_accepts_complete_atomic_pending_state(tmp_path: Path) ->
     state = runner._wait_for_state(metadata, {"stopped"}, 0.1)
 
     assert state["status"] == "stopped"
+
+
+def test_wait_for_state_ignores_stale_launch_metadata(tmp_path: Path) -> None:
+    metadata = tmp_path / "process.json"
+    metadata.write_text(
+        '{"status": "exited", "token": "previous-launch"}', encoding="utf-8"
+    )
+    metadata.with_suffix(".json.tmp").write_text(
+        '{"status": "running", "token": "current-launch"}', encoding="utf-8"
+    )
+
+    state = runner._wait_for_state(
+        metadata,
+        {"running", "exited"},
+        0.1,
+        expected_token="current-launch",
+    )
+
+    assert state["status"] == "running"
+    assert state["token"] == "current-launch"
 
 
 def test_readiness_helpers_support_tcp_http_timeout_and_bounded_logs(
@@ -362,10 +395,11 @@ def test_background_readiness_failure_stops_owned_process(
     monkeypatch.setattr(
         runner,
         "_wait_for_state",
-        lambda path, statuses, timeout: {
+        lambda path, statuses, timeout, **kwargs: {
             "status": "running",
             "supervisor_pid": 1,
             "child_pid": 2,
+            "token": kwargs.get("expected_token"),
         },
     )
     monkeypatch.setattr(
