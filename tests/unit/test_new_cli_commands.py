@@ -76,3 +76,29 @@ def test_feedback_delta_cli_flags_parse_explicit_handshake() -> None:
 
     assert args.delta is False
     assert args.ack_state == "abc123"
+
+
+def test_task_cli_returns_reference_first_receipt(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='cli-task'\nversion='0.0.0'\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    code = main(
+        [
+            "--project",
+            str(tmp_path),
+            "--json",
+            "task",
+            "--task",
+            "inspect value",
+            "--client",
+            "codex",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["summary"]["client"] == "codex"
+    assert payload["summary"]["constraints"]["content_default"] == "references"
+    assert payload["summary"]["token_savings"]["delivery"]["delivery"] == "references"

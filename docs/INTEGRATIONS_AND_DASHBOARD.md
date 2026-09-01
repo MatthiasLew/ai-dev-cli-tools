@@ -10,7 +10,8 @@ ai-dev integrations install cursor
 ```
 
 The generated files are `.codex/config.toml`, `.mcp.json`, `.cursor/mcp.json`, and
-`mcp.ai-dev.json`. Existing files are preserved unless `--force` is explicitly supplied. Each
+`mcp.ai-dev.json`. Matching reference-first task profiles are written to `.ai-dev/clients/`.
+Existing files are preserved unless `--force` is explicitly supplied. Each
 configuration launches the same Python environment as the installer via stdio and pins the
 project root, which avoids working-directory ambiguity.
 
@@ -21,5 +22,6 @@ ai-dev dashboard serve --host 127.0.0.1 --port 8765
 ai-dev dashboard status --json
 ```
 
-It shows repository and semantic index size, cache use, daemon and managed-runtime state, and
-recent local report errors. The JSON endpoint is `GET /api/status`; no mutation endpoint exists.
+It shows repository and semantic index size, cache use, daemon and managed-runtime state, recent
+local report errors, total recorded token savings, the latest delivery mode, and cache-hit state.
+The JSON endpoint is `GET /api/status`; no mutation endpoint exists.

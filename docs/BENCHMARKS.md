@@ -35,6 +35,8 @@ ai-dev benchmark run --suite benchmarks/agent-workflows.json --variant ai-dev --
 ai-dev benchmark compare .ai/benchmarks/runs/<baseline>.json .ai/benchmarks/runs/<candidate>.json
 ai-dev benchmark gate .ai/benchmarks/runs/<baseline>.json .ai/benchmarks/runs/<candidate>.json
 ai-dev benchmark corpus --manifest examples/benchmarks/agent-corpus.json --trials 3
+ai-dev benchmark run --suite benchmarks/real-codex.json --variant ai-dev --client codex --trials 5
+ai-dev benchmark gate <baseline.json> <candidate.json> --require-reported-tokens
 ~~~
 
 The corpus includes a repeated MCP `build_context` task that compares a forced full refresh with
@@ -69,6 +71,11 @@ is faster or smaller. The runner validates and removes the private line before c
 agent-visible bytes. Missing or invalid metrics safely fall back to generic measurements and are
 never presented as exact model-token counts. `selection_metric_trials` is zero when precision and
 recall were not reported; their zero medians must not be interpreted as measured selection quality.
+
+Use `--client codex|claude|cursor|generic` to label runs from a real client adapter. A real adapter
+should emit `input_tokens` or `output_tokens` in its private metrics line. The
+`--require-reported-tokens` gate fails unless every candidate trial contains provider-reported
+usage; this prevents estimated character counts from being presented as real client token data.
 
 ## Included suites
 

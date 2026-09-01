@@ -66,6 +66,7 @@ def test_initialize_advertises_tools_and_bounded_instructions(tmp_path: Path) ->
         "explain_evidence",
         "feedback",
         "plan_work",
+        "prepare_task",
         "project_status",
         "run_checks",
     ]
@@ -160,6 +161,27 @@ def test_plan_work_returns_preview_only_agent_plan(tmp_path: Path) -> None:
     assert structured["summary"]["constraints"]["preview_only"] is True
     assert structured["summary"]["constraints"]["commands_executed"] is False
     assert (tmp_path / ".ai" / "reports" / "agent-plan.json").exists()
+
+
+def test_prepare_task_returns_one_compact_token_accounted_payload(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='mcp-task'\nversion='0.0.0'\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    server = LocalMcpServer(tmp_path)
+
+    result = _call(
+        server,
+        "prepare_task",
+        {"task": "inspect value", "client": "claude"},
+    )
+
+    assert result["isError"] is False
+    summary = result["structuredContent"]["summary"]
+    assert summary["client"] == "claude"
+    assert summary["constraints"]["content_default"] == "references"
+    assert "token_savings" in summary
+    assert summary["state"]["fingerprint"]
 
 
 def test_context_tool_is_preview_only_and_bounded_by_default(tmp_path: Path) -> None:

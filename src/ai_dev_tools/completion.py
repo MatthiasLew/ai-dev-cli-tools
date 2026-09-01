@@ -3,7 +3,7 @@ from __future__ import annotations
 TOP_LEVEL_COMMANDS = (
     "doctor scan bootstrap environment run stop map check test logs context cache index "
     "baseline benchmark explain feedback watch session agents diagnostics git mcp semantic policy "
-    "capabilities plan sarif integrations dashboard finish completion"
+    "capabilities plan task sarif integrations dashboard finish completion"
 )
 GLOBAL_FLAGS = "--project --json --quiet --help --version"
 COMMAND_FLAGS = (
@@ -13,14 +13,15 @@ COMMAND_FLAGS = (
     "--max-chars --max-file-chars --max-diff-chars --include --exclude --changed-only "
     "--staged-only --no-git --format --output --incremental --since --retrieval --tokenizer "
     "--token-budget --provider-usage --refine --refinement-rounds --refinement-max-files "
-    "--compression --adaptive --no-delta --ack-state --debounce --poll --initial --max-runs "
+    "--compression --adaptive --no-delta --ack-state --no-persist-ack --include-content --client "
+    "--debounce --poll --initial --max-runs "
     "--max-updates "
     "--idle-timeout --backend "
     "--title --path --depends-on --agent --input "
     "--lease-seconds --suite --variant --trials --cache-state --symbol --tail --manifest "
     "--max-time-regression --max-token-regression --min-token-reduction --min-precision "
     "--min-recall "
-    "--max-false-negatives --host --port --force"
+    "--max-false-negatives --require-reported-tokens --host --port --force"
 )
 
 

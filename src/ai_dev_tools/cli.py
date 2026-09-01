@@ -223,6 +223,9 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_run.add_argument("--trials", type=int, default=3)
     benchmark_run.add_argument("--cache-state", choices=["cold", "warm"], default="cold")
     benchmark_run.add_argument("--timeout", type=int, default=300)
+    benchmark_run.add_argument(
+        "--client", choices=["codex", "claude", "cursor", "generic"], default="generic"
+    )
     benchmark_compare = benchmark_sub.add_parser("compare")
     benchmark_compare.add_argument("baseline", type=Path)
     benchmark_compare.add_argument("candidate", type=Path)
@@ -235,6 +238,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_gate.add_argument("--min-precision", type=float, default=0.8)
     benchmark_gate.add_argument("--min-recall", type=float, default=0.9)
     benchmark_gate.add_argument("--max-false-negatives", type=int, default=0)
+    benchmark_gate.add_argument("--require-reported-tokens", action="store_true")
     benchmark_corpus = benchmark_sub.add_parser("corpus")
     benchmark_corpus.add_argument(
         "--manifest", type=Path, default=Path("examples/benchmarks/agent-corpus.json")
@@ -278,6 +282,20 @@ def build_parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan")
     plan.add_argument("--task", default="")
     plan.add_argument("--mode", choices=["fast", "changed", "full"], default="changed")
+    task = sub.add_parser("task")
+    task.add_argument("--task", required=True)
+    task.add_argument("--mode", choices=["fast", "changed", "full"], default="changed")
+    task.add_argument(
+        "--profile",
+        choices=["default", "minimal", "debug", "review", "implement", "docs", "full"],
+        default="minimal",
+    )
+    task.add_argument(
+        "--client", choices=["codex", "claude", "cursor", "generic"], default="generic"
+    )
+    task.add_argument("--ack-state")
+    task.add_argument("--no-persist-ack", action="store_false", dest="persist_ack")
+    task.add_argument("--include-content", action="store_true")
     sub.add_parser("finish")
     return parser
 
@@ -615,6 +633,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 trials=args.trials,
                 cache_state=args.cache_state,
                 timeout_seconds=args.timeout,
+                client=args.client,
             )
         if args.benchmark_command == "compare":
             return compare_benchmarks(project_root, args.baseline, args.candidate)
@@ -632,6 +651,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             min_precision=args.min_precision,
             min_recall=args.min_recall,
             max_false_negatives=args.max_false_negatives,
+            require_reported_tokens=args.require_reported_tokens,
         )
     if command == "integrations":
         from ai_dev_tools.integrations import install_integrations
@@ -665,6 +685,21 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         from ai_dev_tools.runners.plan import run_agent_plan
 
         return run_agent_plan(project_root, task=args.task, mode=args.mode)
+    if command == "task":
+        from ai_dev_tools.runners.task import TaskOptions, run_prepare_task
+
+        return run_prepare_task(
+            project_root,
+            TaskOptions(
+                task=args.task,
+                mode=args.mode,
+                profile=args.profile,
+                client=args.client,
+                acknowledged_state=args.ack_state,
+                persist_ack=args.persist_ack,
+                include_content=args.include_content,
+            ),
+        )
     if command == "git":
         from ai_dev_tools.git.inspect import inspect_git
 

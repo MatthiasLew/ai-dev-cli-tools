@@ -45,6 +45,11 @@ def test_estimated_accounting_enforces_independent_content_budgets(tmp_path: Pat
         assert categories[name]["truncated"] is True
     assert summary["selected_files"][0]["token_budget_truncated"] is True
     assert accounting["provider_usage"]["available"] is False
+    receipt = accounting["savings_receipt"]
+    assert receipt["original_input_tokens"] >= receipt["input_tokens"]
+    assert receipt["saved_tokens"] > 0
+    assert receipt["selection"]["included_count"] == 2
+    assert receipt["expansion_command"].startswith("ai-dev explain")
 
 
 def test_provider_usage_normalizes_openai_and_anthropic_fields(tmp_path: Path) -> None:
@@ -68,6 +73,7 @@ def test_provider_usage_normalizes_openai_and_anthropic_fields(tmp_path: Path) -
 
     assert accounting["provider_usage"]["cached_input_tokens"] == 70
     assert accounting["provider_usage"]["cache_write_tokens"] == 10
+    assert accounting["savings_receipt"]["cache"]["hit"] is True
     assert accounting["budget_violations"] == ["cached_input"]
 
 

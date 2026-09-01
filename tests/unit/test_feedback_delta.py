@@ -80,6 +80,7 @@ def test_unchanged_success_becomes_small_expandable_receipt() -> None:
 
     assert projected["delta"]["reused"] is True  # type: ignore[index]
     assert projected["delta"]["chars_avoided"] > 5_000  # type: ignore[index]
+    assert projected["delta"]["estimated_tokens_avoided"] > 1_000  # type: ignore[index]
     assert projected["validation"]["unchanged"] is True  # type: ignore[index]
     assert projected["context"]["selected_file_count"] == 1  # type: ignore[index]
     assert "selected_files" not in projected["context"]  # type: ignore[operator]

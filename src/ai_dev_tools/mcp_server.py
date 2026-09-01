@@ -135,6 +135,49 @@ class LocalMcpServer:
         common_output = _common_output_schema()
         return [
             ToolDefinition(
+                name="prepare_task",
+                title="Prepare one token-efficient AI task",
+                description=(
+                    "Return a minimal plan, context references, validation preview, token savings "
+                    "receipt, and acknowledgement fingerprint in one call."
+                ),
+                input_schema=_object_schema(
+                    {
+                        "task": {"type": "string", "minLength": 1, "maxLength": 2000},
+                        "mode": {
+                            "type": "string",
+                            "enum": ["fast", "changed", "full"],
+                            "default": "changed",
+                        },
+                        "profile": {
+                            "type": "string",
+                            "enum": [
+                                "default",
+                                "minimal",
+                                "debug",
+                                "review",
+                                "implement",
+                                "docs",
+                                "full",
+                            ],
+                            "default": "minimal",
+                        },
+                        "client": {
+                            "type": "string",
+                            "enum": ["codex", "claude", "cursor", "generic"],
+                            "default": "generic",
+                        },
+                        "acknowledged_state": {"type": "string", "maxLength": 64},
+                        "persist_ack": {"type": "boolean", "default": True},
+                        "include_content": {"type": "boolean", "default": False},
+                    },
+                    required=["task"],
+                ),
+                output_schema=common_output,
+                annotations=_annotations(read_only=False),
+                handler=self._prepare_task,
+            ),
+            ToolDefinition(
                 name="plan_work",
                 title="Plan bounded development work",
                 description=(
@@ -417,6 +460,50 @@ class LocalMcpServer:
         from ai_dev_tools.runners.plan import run_agent_plan
 
         return _finish_report(run_agent_plan(self.project_root, task=task, mode=mode))
+
+    def _prepare_task(self, arguments: JsonObject) -> JsonObject:
+        _validate_keys(
+            arguments,
+            {
+                "task",
+                "mode",
+                "profile",
+                "client",
+                "acknowledged_state",
+                "persist_ack",
+                "include_content",
+            },
+        )
+        task = _string(arguments, "task", None, 2000)
+        mode = _choice(arguments, "mode", "changed", {"fast", "changed", "full"})
+        profile = _choice(
+            arguments,
+            "profile",
+            "minimal",
+            {"default", "minimal", "debug", "review", "implement", "docs", "full"},
+        )
+        client = _choice(
+            arguments, "client", "generic", {"codex", "claude", "cursor", "generic"}
+        )
+        _require_project(self.project_root)
+        from ai_dev_tools.runners.task import TaskOptions, run_prepare_task
+
+        return _finish_report(
+            run_prepare_task(
+                self.project_root,
+                TaskOptions(
+                    task=task,
+                    mode=mode,
+                    profile=profile,
+                    client=client,
+                    acknowledged_state=(
+                        _string(arguments, "acknowledged_state", "", 64) or None
+                    ),
+                    persist_ack=_boolean(arguments, "persist_ack", True),
+                    include_content=_boolean(arguments, "include_content", False),
+                ),
+            )
+        )
 
     def _feedback(self, arguments: JsonObject) -> JsonObject:
         _validate_keys(

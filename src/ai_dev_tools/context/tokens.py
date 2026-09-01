@@ -65,6 +65,43 @@ def apply_token_accounting(
     violations = [
         category for category, data in categories.items() if data["within_budget"] is False
     ]
+    input_tokens = sum(
+        _integer(categories[name].get("tokens"))
+        for name in ("source", "diffs", "tests", "logs", "maps", "history")
+    )
+    original_input_tokens = sum(
+        _integer(categories[name].get("original_tokens"))
+        for name in ("source", "diffs", "tests", "logs", "maps", "history")
+    )
+    saved_tokens = max(original_input_tokens - input_tokens, 0)
+    selected = summary.get("selected_files", [])
+    rejected = summary.get("rejected_files", [])
+    selected_rows = selected if isinstance(selected, list) else []
+    rejected_rows = rejected if isinstance(rejected, list) else []
+    receipt = {
+        "schema_version": "1",
+        "input_tokens": input_tokens,
+        "original_input_tokens": original_input_tokens,
+        "saved_tokens": saved_tokens,
+        "saved_percent": (
+            round(saved_tokens / original_input_tokens * 100, 2)
+            if original_input_tokens
+            else 0.0
+        ),
+        "cache": {
+            "hit": _integer(provider.get("cached_input_tokens")) > 0,
+            "cached_input_tokens": _integer(provider.get("cached_input_tokens")),
+            "cache_write_tokens": _integer(provider.get("cache_write_tokens")),
+        },
+        "selection": {
+            "included_count": len(selected_rows),
+            "rejected_count": len(rejected_rows),
+            "included": [_selection_row(item) for item in selected_rows[:20]],
+            "rejected": [_selection_row(item) for item in rejected_rows[:20]],
+            "truncated": len(selected_rows) > 20 or len(rejected_rows) > 20,
+        },
+        "expansion_command": "ai-dev explain <evidence-id> --tail 100",
+    }
     return {
         "tokenizer_requested": counter.requested,
         "tokenizer_used": counter.used,
@@ -72,10 +109,9 @@ def apply_token_accounting(
         "exact": counter.exact,
         "fallback_reason": counter.fallback_reason,
         "categories": categories,
-        "input_tokens": sum(
-            _integer(categories[name].get("tokens"))
-            for name in ("source", "diffs", "tests", "logs", "maps", "history")
-        ),
+        "input_tokens": input_tokens,
+        "original_input_tokens": original_input_tokens,
+        "savings_receipt": receipt,
         "provider_usage": provider,
         "budget_violations": violations,
     }
@@ -289,3 +325,12 @@ def _json(value: object) -> str:
 
 def _integer(value: object) -> int:
     return value if isinstance(value, int) else 0
+
+
+def _selection_row(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {"path": "", "reason_code": "UNKNOWN"}
+    return {
+        "path": str(value.get("path", "")),
+        "reason_code": str(value.get("reason_code", "UNKNOWN")),
+    }

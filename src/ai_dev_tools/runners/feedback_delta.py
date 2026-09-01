@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from copy import deepcopy
 
 from ai_dev_tools.context.adaptive import adaptive_task_scope
@@ -61,6 +62,7 @@ def apply_feedback_delta(
         "state_fingerprint": current_fingerprint,
         "acknowledged_fingerprint": acknowledged_fingerprint,
         "chars_avoided": 0,
+        "estimated_tokens_avoided": 0,
         "expansion_command": "ai-dev explain <evidence-id> --tail 100",
     }
     delta = projected["delta"]
@@ -70,6 +72,7 @@ def apply_feedback_delta(
             if delta["chars_avoided"] == avoided:
                 break
             delta["chars_avoided"] = avoided
+            delta["estimated_tokens_avoided"] = math.ceil(avoided / 4)
     return projected
 
 

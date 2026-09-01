@@ -15,7 +15,8 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 
 ## Recommended loop
 
-1. Call `plan_work` or run `ai-dev plan --task "<task>" --json` before broad edits.
+1. Prefer MCP `prepare_task` or `ai-dev task --task "<task>" --client <client> --json` for a
+   single bounded handoff. Use `plan_work` alone only when context selection is not yet needed.
 2. Run `ai-dev cache layout --json` once per content state and place stable sections before task-specific content at the recommended breakpoint.
 3. Prefer `ai-dev feedback --task "<task>" --json` for the normal compact loop.
 4. Inspect `decision`, `changes`, `validation`, `context`, `observations`, `delta`, and `performance`.
@@ -37,6 +38,9 @@ Use the local MCP server when the agent supports structured tools. Tool results 
 text and machine-readable `structuredContent`; consumers should prefer the structured data.
 
 - Call `project_status`, then `plan_work`, before broad repository work.
+- Prefer `prepare_task` when one compact call should replace separate planning, context, and check
+  discovery calls. File bodies are references by default; request `include_content=true` only on
+  demand.
 - Use `feedback`, `build_context`, and `run_checks` in their preview-only defaults.
 - Set execution or artifact-writing flags only when the task requires them.
 - Expand one stable ID with `explain_evidence` instead of requesting full logs.
@@ -48,6 +52,8 @@ For repeated `build_context` calls, return the prior `summary.delta.state_finger
 `acknowledged_state`. A receipt is emitted only when repository contents, request parameters, and
 the safe successful state still match. Changed, partial, warning, error, and secret-bearing states
 return full live context. Set `delta=false` whenever a complete refresh is required.
+- `prepare_task` accepts `client=codex|claude|cursor|generic`. Persisted acknowledgement state is
+  updated only when the caller explicitly supplies `acknowledged_state` with `persist_ack=true`.
 - Keep infrastructure retry separate from flaky-test retry; neither may retry code failures.
 
 See `MCP_SERVER.md` for setup and complete safety boundaries.

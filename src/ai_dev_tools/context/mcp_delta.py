@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from copy import deepcopy
 from pathlib import Path
 
@@ -53,6 +54,7 @@ def apply_context_delta(
         "state_fingerprint": current_fingerprint,
         "acknowledged_fingerprint": acknowledged_fingerprint,
         "chars_avoided": 0,
+        "estimated_tokens_avoided": 0,
         "live_context_chars_avoided": live_context_chars_avoided,
         "expansion_hint": "Call build_context with delta=false to request full live context.",
     }
@@ -63,6 +65,7 @@ def apply_context_delta(
             if delta["chars_avoided"] == avoided:
                 break
             delta["chars_avoided"] = avoided
+            delta["estimated_tokens_avoided"] = math.ceil(avoided / 4)
     return projected
 
 

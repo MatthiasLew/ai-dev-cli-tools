@@ -6,6 +6,7 @@
 .ai/logs/
 .ai/performance/
 .ai/reports/
+.ai/token-efficiency/
 .ai/release-venv/
 .coverage
 .mypy_cache/

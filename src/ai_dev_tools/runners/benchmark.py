@@ -28,8 +28,16 @@ def run_benchmark(
     trials: int = 3,
     cache_state: str = "cold",
     timeout_seconds: int = 300,
+    client: str = "generic",
 ) -> Report:
-    report = Report(command=f"benchmark run --variant {variant}", project_root=project_root)
+    report = Report(
+        command=f"benchmark run --variant {variant} --client {client}",
+        project_root=project_root,
+    )
+    if client not in {"codex", "claude", "cursor", "generic"}:
+        report.status = "invalid_configuration"
+        report.summary = {"reason_code": "UNKNOWN_BENCHMARK_CLIENT", "client": client}
+        return report.finish()
     manifest_path = suite if suite.is_absolute() else project_root / suite
     try:
         spec = _load_spec(project_root, manifest_path)
@@ -75,6 +83,7 @@ def run_benchmark(
         "fixture_version": spec["fixture_version"],
         "manifest": str(manifest_path.resolve()),
         "variant": variant,
+        "client": client,
         "cache_state": cache_state,
         "trials": rows,
         "statistics": _statistics(rows),
@@ -136,6 +145,8 @@ def compare_benchmarks(project_root: Path, baseline: Path, candidate: Path) -> R
         "median_files_read",
         "median_selection_precision",
         "median_selection_recall",
+        "median_reported_input_tokens",
+        "median_reported_output_tokens",
     )
     metrics = {
         key: _comparison(_stat_value(left_stats, key), _stat_value(right_stats, key))
@@ -147,6 +158,7 @@ def compare_benchmarks(project_root: Path, baseline: Path, candidate: Path) -> R
         "suite": left_summary["suite"],
         "fixture_version": left_summary["fixture_version"],
         "cache_state": left_summary["cache_state"],
+        "client": left_summary.get("client", "generic"),
         "baseline_variant": left_summary["variant"],
         "candidate_variant": right_summary["variant"],
         "metrics": metrics,
@@ -184,6 +196,7 @@ def gate_benchmarks(
     min_precision: float = 0.8,
     min_recall: float = 0.9,
     max_false_negatives: int = 0,
+    require_reported_tokens: bool = False,
 ) -> Report:
     report = Report(command="benchmark gate", project_root=project_root)
     if (
@@ -229,6 +242,16 @@ def gate_benchmarks(
         "false_negatives": (
             _stat_value(stats, "total_false_negative_items") <= max_false_negatives
         ),
+        "reported_tokens": (
+            _stat_value(stats, "reported_token_trials") == len(candidate_run["summary"]["trials"])
+            if require_reported_tokens
+            else True
+        ),
+        "reported_token_regression": (
+            _percent_within(metrics["median_reported_input_tokens"], max_token_regression)
+            if require_reported_tokens
+            else True
+        ),
     }
     passed = all(checks.values())
     report.status = "success" if passed else "failed"
@@ -242,6 +265,7 @@ def gate_benchmarks(
             "min_precision": min_precision,
             "min_recall": min_recall,
             "max_false_negatives": max_false_negatives,
+            "require_reported_tokens": require_reported_tokens,
         },
         "candidate_statistics": stats,
         "comparison": comparison.summary,
@@ -277,6 +301,7 @@ def run_benchmark_corpus(
             "min_precision": float(thresholds.get("min_precision", 0.8)),
             "min_recall": float(thresholds.get("min_recall", 0.9)),
             "max_false_negatives": int(thresholds.get("max_false_negatives", 0)),
+            "require_reported_tokens": bool(thresholds.get("require_reported_tokens", False)),
         }
     except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
         report.status = "invalid_configuration"
@@ -510,6 +535,15 @@ def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
         "median_reported_output_tokens": round(
             statistics.median(values("reported_output_tokens")), 3
         ),
+        "reported_token_trials": round(
+            sum(
+                1
+                for row in rows
+                if int(row["reported_input_tokens"]) > 0
+                or int(row["reported_output_tokens"]) > 0
+            ),
+            3,
+        ),
     }
 
 
@@ -564,6 +598,8 @@ def _validate_comparable(left: dict[str, Any], right: dict[str, Any]) -> None:
             raise ValueError(f"Benchmark {key} differs")
     if left["summary"]["variant"] == right["summary"]["variant"]:
         raise ValueError("Benchmark variants must differ")
+    if left["summary"].get("client", "generic") != right["summary"].get("client", "generic"):
+        raise ValueError("Benchmark client differs")
 
 
 def _outcomes(summary: dict[str, Any]) -> list[str]:
