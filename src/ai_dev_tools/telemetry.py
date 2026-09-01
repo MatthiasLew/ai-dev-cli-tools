@@ -22,6 +22,10 @@ def import_usage(
     client: str,
     format_name: str = "auto",
     pricing_path: Path | None = None,
+    phase: str = "",
+    tool_name: str = "",
+    task_kind: str = "",
+    quality_passed: bool | None = None,
 ) -> Report:
     root = project_root.resolve()
     report = Report(command="telemetry import", project_root=root)
@@ -46,6 +50,10 @@ def import_usage(
             source=f"import:{format_name}",
             source_id=source_id,
             pricing_path=pricing_path,
+            phase=phase,
+            tool_name=tool_name,
+            task_kind=task_kind,
+            quality_passed=quality_passed,
         )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         report.status = "invalid_configuration"
@@ -79,6 +87,10 @@ def record_usage(
     source: str = "client_reported",
     source_id: str = "",
     pricing_path: Path | None = None,
+    phase: str = "",
+    tool_name: str = "",
+    task_kind: str = "",
+    quality_passed: bool | None = None,
 ) -> dict[str, Any]:
     root = project_root.resolve()
     if client not in CLIENTS:
@@ -99,6 +111,11 @@ def record_usage(
         raise ValueError("cached and cache-write input cannot exceed input_tokens")
     model = _bounded_text(model, "model", 200)
     request_id = _bounded_text(request_id, "request_id", 200)
+    phase = _bounded_text(phase, "phase", 100)
+    tool_name = _bounded_text(tool_name, "tool_name", 100)
+    task_kind = _bounded_text(task_kind, "task_kind", 100)
+    if quality_passed is not None and not isinstance(quality_passed, bool):
+        raise ValueError("quality_passed must be a boolean or null")
     recorded_at = datetime.now(UTC).isoformat()
     identity = source_id or request_id or recorded_at
     session_id = hashlib.sha256(
@@ -111,6 +128,10 @@ def record_usage(
         "client": client,
         "model": model or None,
         "request_id": request_id or None,
+        "phase": phase or None,
+        "tool_name": tool_name or None,
+        "task_kind": task_kind or None,
+        "quality_passed": quality_passed,
         "source": source,
         "measurement": "provider_reported",
         **values,

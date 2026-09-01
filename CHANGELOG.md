@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add an evidence-based, read-only token optimizer with p50/p95 attribution, safe budget
+  recommendations, and accuracy-first cheaper-model routing suggestions.
+- Allow provider usage records to include bounded phase, tool, task-kind, and boolean quality
+  evidence without storing prompts or responses.
 - Add telemetry budgets scoped globally, per client, and per model; equal-window regression gates;
   immediate MCP/CLI alerts; chronological session windows; and integrity-checked, versioned pricing
   snapshots with explicit activation and cost provenance.

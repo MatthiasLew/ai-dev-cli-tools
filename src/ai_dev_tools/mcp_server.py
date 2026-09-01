@@ -209,6 +209,10 @@ class LocalMcpServer:
                         },
                         "model": {"type": "string", "maxLength": 200},
                         "request_id": {"type": "string", "maxLength": 200},
+                        "phase": {"type": "string", "maxLength": 100},
+                        "tool_name": {"type": "string", "maxLength": 100},
+                        "task_kind": {"type": "string", "maxLength": 100},
+                        "quality_passed": {"type": "boolean"},
                     },
                     required=["client", "input_tokens", "output_tokens"],
                 ),
@@ -227,6 +231,41 @@ class LocalMcpServer:
                 output_schema=common_output,
                 annotations=_annotations(read_only=True),
                 handler=self._usage_status,
+            ),
+            ToolDefinition(
+                name="optimize_usage",
+                title="Recommend token budgets and model routing",
+                description=(
+                    "Analyze bounded local telemetry and return evidence-based token budget "
+                    "and cheaper-model recommendations. Never changes policy or model settings."
+                ),
+                input_schema=_object_schema(
+                    {
+                        "min_sessions": {
+                            "type": "integer", "minimum": 2, "maximum": 1000,
+                            "default": 5,
+                        },
+                        "percentile": {
+                            "type": "integer", "minimum": 50, "maximum": 100,
+                            "default": 95,
+                        },
+                        "safety_margin_percent": {
+                            "type": "integer", "minimum": 0, "maximum": 500,
+                            "default": 20,
+                        },
+                        "accuracy_target_percent": {
+                            "type": "integer", "minimum": 0, "maximum": 100,
+                            "default": 95,
+                        },
+                        "max_accuracy_drop_percent": {
+                            "type": "integer", "minimum": 0, "maximum": 100,
+                            "default": 0,
+                        },
+                    }
+                ),
+                output_schema=common_output,
+                annotations=_annotations(read_only=True),
+                handler=self._optimize_usage,
             ),
             ToolDefinition(
                 name="plan_work",
@@ -594,6 +633,10 @@ class LocalMcpServer:
                 "reasoning_tokens",
                 "model",
                 "request_id",
+                "phase",
+                "tool_name",
+                "task_kind",
+                "quality_passed",
             },
         )
         client = _choice(
@@ -601,6 +644,10 @@ class LocalMcpServer:
         )
         _require_project(self.project_root)
         from ai_dev_tools.telemetry import MAX_TOKENS, record_usage
+
+        quality_passed = arguments.get("quality_passed")
+        if quality_passed is not None and not isinstance(quality_passed, bool):
+            raise ToolInputError("quality_passed must be a boolean.")
 
         stored = record_usage(
             self.project_root,
@@ -616,6 +663,10 @@ class LocalMcpServer:
             reasoning_tokens=_integer(arguments, "reasoning_tokens", 0, 0, MAX_TOKENS),
             model=_optional_string(arguments, "model", 200),
             request_id=_optional_string(arguments, "request_id", 200),
+            phase=_optional_string(arguments, "phase", 100),
+            tool_name=_optional_string(arguments, "tool_name", 100),
+            task_kind=_optional_string(arguments, "task_kind", 100),
+            quality_passed=quality_passed,
         )
         path = Path(stored.pop("path"))
         policy = stored.get("policy")
@@ -648,6 +699,32 @@ class LocalMcpServer:
         from ai_dev_tools.telemetry import telemetry_status
 
         return _finish_report(telemetry_status(self.project_root))
+
+    def _optimize_usage(self, arguments: JsonObject) -> JsonObject:
+        _validate_keys(arguments, {
+            "min_sessions",
+            "percentile",
+            "safety_margin_percent",
+            "accuracy_target_percent",
+            "max_accuracy_drop_percent",
+        })
+        _require_project(self.project_root)
+        from ai_dev_tools.telemetry_optimizer import optimize_usage
+
+        return _finish_report(optimize_usage(
+            self.project_root,
+            min_sessions=_integer(arguments, "min_sessions", 5, 2, 1000),
+            percentile=_integer(arguments, "percentile", 95, 50, 100),
+            safety_margin_percent=_integer(
+                arguments, "safety_margin_percent", 20, 0, 500
+            ),
+            accuracy_target_percent=_integer(
+                arguments, "accuracy_target_percent", 95, 0, 100
+            ),
+            max_accuracy_drop_percent=_integer(
+                arguments, "max_accuracy_drop_percent", 0, 0, 100
+            ),
+        ))
 
     def _context(self, arguments: JsonObject) -> JsonObject:
         allowed = {
