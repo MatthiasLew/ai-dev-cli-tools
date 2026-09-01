@@ -46,11 +46,15 @@ def test_benchmark_gate_enforces_efficiency_and_quality_thresholds(tmp_path: Pat
     passed = gate_benchmarks(tmp_path, baseline, candidate)
     assert passed.status == "success"
     assert passed.summary["passed"] is True
+    assert passed.summary["decision"] == "keep_baseline"
+    assert passed.summary["automatic_rollback"] is False
 
     _run(candidate, "ai-dev", seconds=11, tokens=120)
     failed = gate_benchmarks(tmp_path, baseline, candidate)
     assert failed.status == "failed"
     assert failed.summary["checks"]["token_regression"] is False
+    assert failed.summary["decision"] == "rollback_candidate"
+    assert failed.summary["rollback_advised"] is True
 
     _run(candidate, "ai-dev", seconds=11, tokens=90)
     reduced = gate_benchmarks(
@@ -64,6 +68,23 @@ def test_benchmark_gate_enforces_efficiency_and_quality_thresholds(tmp_path: Pat
         tmp_path, baseline, candidate, min_token_reduction=15
     )
     assert reduced.status == "success"
+
+
+def test_gate_advises_adoption_only_for_faster_lower_token_candidate(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    _run(baseline, "baseline", seconds=10, tokens=100)
+    _run(candidate, "ai-dev", seconds=8, tokens=75)
+
+    report = gate_benchmarks(
+        tmp_path, baseline, candidate, min_token_reduction=20
+    )
+
+    assert report.status == "success"
+    assert report.summary["decision"] == "adopt_candidate"
+    assert report.summary["requires_human_approval"] is True
 
 
 def test_corpus_runs_every_suite_and_aggregates_gates(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

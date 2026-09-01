@@ -34,7 +34,7 @@ accepts `client`, total `input_tokens`, `cached_input_tokens` (cache reads),
 `cache_write_input_tokens`, `output_tokens`, `reasoning_tokens`, and optional `model` and
 `request_id`. To enable attribution without recording content, clients may also provide bounded
 `phase`, `tool_name`, and `task_kind` labels plus a boolean `quality_passed` result from an eval,
-test gate, or other application-owned quality check. It deliberately cannot accept prompt or
+test gate, or other application-owned quality check and bounded `duration_seconds`. It deliberately cannot accept prompt or
 response bodies.
 
 Existing JSON or JSONL can be imported from inside the project:
@@ -158,3 +158,8 @@ establish the accuracy target first, then optimize cost and latency while mainta
 
 Neither CLI nor MCP automatically changes the selected model. Every routing recommendation
 contains `requires_human_approval: true` and `automatic_switch: false`.
+
+Use `ai-dev telemetry export --format json|csv --output <project-path>` to share aggregated
+optimizer evidence. The export contains daily and dimensional totals, percentiles, quality,
+latency, cache share, and local cost estimates. It never includes request IDs, prompts, responses,
+or repository content and refuses to overwrite an existing file.

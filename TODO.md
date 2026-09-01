@@ -9,9 +9,10 @@ cross-platform behavior are covered where applicable.
 
 ## Active work
 
-There are no known incomplete P1 or P2 implementation items for the 1.0 or 1.1 contracts. Adaptive
-context work for the next minor line is tracked by tests, documentation, report-contract additions,
-and the cross-platform agent corpus rather than an open implementation placeholder.
+There are no known incomplete P1 or P2 implementation items for the 1.0-1.2 contracts. The planned
+product capability set is complete. New work is maintenance and must be justified by a supported
+platform change, security issue, dependency update, reproducible regression, or backward-compatible
+integration requirement.
 
 ## Deferred or explicitly out of scope
 

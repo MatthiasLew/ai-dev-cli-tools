@@ -41,18 +41,31 @@ def main(argv: list[str] | None = None) -> int:
     args.log.parent.mkdir(parents=True, exist_ok=True)
     args.metadata.parent.mkdir(parents=True, exist_ok=True)
     with args.log.open("a", encoding="utf-8", errors="replace") as log:
-        child = subprocess.Popen(
-            command,
-            cwd=args.cwd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            shell=False,
-            env=os.environ.copy(),
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        starting: dict[str, object] = {
+            "schema_version": "1",
+            "status": "starting",
+            "supervisor_pid": os.getpid(),
+            "command": command,
+            "cwd": str(args.cwd),
+            "log": str(args.log),
+            "token": args.token,
+            "started_at": _now(),
+            "heartbeat_at": _now(),
+        }
+        _write_json(args.metadata, starting)
+        child, start_error, start_attempts = _spawn_child(command, args.cwd)
+        if child is None:
+            starting.update(
+                {
+                    "status": "failed",
+                    "start_attempts": start_attempts,
+                    "error": mask_text(start_error),
+                    "finished_at": _now(),
+                    "heartbeat_at": _now(),
+                }
+            )
+            _write_json(args.metadata, starting)
+            return 75
         if child.stdout is None:
             return 2
         output_thread = Thread(target=_copy_output, args=(child.stdout, log), daemon=True)
@@ -68,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
             "token": args.token,
             "started_at": _now(),
             "heartbeat_at": _now(),
+            "start_attempts": start_attempts,
         }
         _write_json(args.metadata, state)
         try:
@@ -98,6 +112,33 @@ def main(argv: list[str] | None = None) -> int:
         with suppress(OSError):
             args.request.unlink()
     return 0 if state["status"] == "stopped" else int(exit_code or 0)
+
+
+def _spawn_child(
+    command: list[str], cwd: Path, *, attempts: int = 3
+) -> tuple[subprocess.Popen[str] | None, str, int]:
+    """Start the child with bounded backoff for transient OS resource failures."""
+    last_error = ""
+    for attempt in range(1, attempts + 1):
+        try:
+            child = subprocess.Popen(
+                command,
+                cwd=cwd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                shell=False,
+                env=os.environ.copy(),
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            return child, "", attempt
+        except OSError as exc:
+            last_error = str(exc)
+            if attempt < attempts:
+                time.sleep(min(0.1 * attempt, 0.3))
+    return None, last_error, attempts
 
 
 def _request_stop(signum: int, frame: object) -> None:

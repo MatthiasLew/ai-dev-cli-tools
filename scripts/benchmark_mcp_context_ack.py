@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import sys
-import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +17,14 @@ def main() -> int:
         print("usage: benchmark_mcp_context_ack.py baseline|ai-dev", file=sys.stderr)
         return 2
 
-    with tempfile.TemporaryDirectory(prefix="ai-dev-context-ack-") as temporary:
-        root = Path(temporary)
+    root = (
+        Path.cwd()
+        / ".ai"
+        / "tmp"
+        / f"ai-dev-context-ack-{os.getpid()}-{uuid.uuid4().hex}"
+    )
+    root.mkdir(parents=True)
+    try:
         (root / "pyproject.toml").write_text(
             "[project]\nname='context-ack-benchmark'\nversion='0.0.0'\n",
             encoding="utf-8",
@@ -66,7 +74,9 @@ def main() -> int:
             file=sys.stderr,
         )
         print(json.dumps(second, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-    return 0
+        return 0
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def _call(server: LocalMcpServer, arguments: dict[str, object]) -> dict[str, Any]:

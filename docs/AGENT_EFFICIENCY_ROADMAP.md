@@ -49,6 +49,7 @@ and longer-term direction without presenting proposed interfaces as available co
 | 27 | Adaptive context engine | Implemented | Task intent and local scope signals derive conservative token ceilings, explicit limits win, task-scoped incremental memory prevents cross-task omission, and the release corpus requires a measured token reduction without recall loss. |
 | 28 | Session delta feedback | Implemented | A client-acknowledged identical success is replaced by a fingerprinted validation/context receipt with exact expansion handles; missing acknowledgement, changed content, semantic validation changes, failures, warnings, and explicit opt-out preserve the full live payload. |
 | 29 | Evidence-based token optimizer | Implemented | Bounded p50/p95 attribution proposes token ceilings and cheaper models only after local quality and cost evidence meets explicit thresholds. |
+| 30 | Closed optimization loop | Implemented | Provider duration, daily trends, content-free JSON/CSV export, and correctness-gated benchmark decisions advise adopt, keep, or rollback while never mutating model policy automatically. |
 
 ## Implemented supporting capabilities
 
@@ -65,7 +66,7 @@ The current foundation also includes:
 
 ## Active direction
 
-The 1.0 capability set is complete. Further development should prioritize measured correctness,
+The planned 1.0-1.2 capability set is complete. Further development is maintenance and should prioritize measured correctness,
 backward-compatible schema evolution, parser fixtures for newly supported tool versions, and
 cross-platform performance evidence rather than adding overlapping commands.
 

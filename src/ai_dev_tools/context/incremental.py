@@ -34,7 +34,7 @@ def load_incremental_manifest(root: Path, context_id: str) -> dict[str, str] | N
     if not valid_context_id(context_id):
         return None
     return _read_manifest(
-        root.resolve() / MANIFEST_HISTORY_RELATIVE_PATH / f"{context_id}.json",
+        _absolute_root(root) / MANIFEST_HISTORY_RELATIVE_PATH / f"{context_id}.json",
         context_id,
     )
 
@@ -46,6 +46,7 @@ def select_incremental(
     *,
     memory_scope: str | None = None,
 ) -> IncrementalSelection:
+    resolved_root = _absolute_root(root)
     index = update_repository_index(root)
     current_hashes = _index_hashes(index.get("entries"))
     if previous_hashes is None:
@@ -53,7 +54,10 @@ def select_incremental(
     selected: list[Path] = []
     reused: list[str] = []
     for path in candidates:
-        relative = path.resolve().relative_to(root.resolve()).as_posix()
+        try:
+            relative = path.relative_to(resolved_root).as_posix()
+        except ValueError:
+            relative = path.resolve().relative_to(resolved_root).as_posix()
         digest = current_hashes.get(relative)
         if digest is None or previous_hashes.get(relative) != digest:
             selected.append(path)
@@ -94,7 +98,7 @@ def save_incremental_manifest(
         "memory_scope": memory_scope,
         "files": hashes,
     }
-    resolved = root.resolve()
+    resolved = _absolute_root(root)
     manifest_path = resolved / MANIFEST_RELATIVE_PATH
     history_path = resolved / MANIFEST_HISTORY_RELATIVE_PATH / f"{context_id}.json"
     _write_manifest(manifest_path, payload)
@@ -104,7 +108,7 @@ def save_incremental_manifest(
 
 
 def _manifest_hashes(root: Path, memory_scope: str | None) -> dict[str, str]:
-    path = root.resolve() / MANIFEST_RELATIVE_PATH
+    path = _absolute_root(root) / MANIFEST_RELATIVE_PATH
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -169,3 +173,7 @@ def _index_hashes(value: object) -> dict[str, str]:
         if isinstance(path, str) and isinstance(digest, str):
             result[path] = digest
     return result
+
+
+def _absolute_root(root: Path) -> Path:
+    return root if root.is_absolute() else root.resolve()

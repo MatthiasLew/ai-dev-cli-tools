@@ -10,7 +10,7 @@ from typing import cast
 
 import pytest
 
-from ai_dev_tools.runtime import supervisor
+import ai_dev_tools.runtime.supervisor as supervisor
 
 
 def test_supervisor_records_natural_exit(tmp_path: Path) -> None:
@@ -107,6 +107,30 @@ def test_supervisor_rejects_empty_command(tmp_path: Path) -> None:
     )
 
 
+def test_child_start_retries_transient_os_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = 0
+
+    def flaky_popen(*args: object, **kwargs: object) -> subprocess.Popen[str]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("resource temporarily unavailable")
+        del args, kwargs
+        return cast("subprocess.Popen[str]", object())
+
+    monkeypatch.setattr(subprocess, "Popen", flaky_popen)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+
+    child, error, attempts = supervisor._spawn_child(
+        [sys.executable, "-c", "print('ready')"], tmp_path
+    )
+    assert child is not None
+    assert error == ""
+    assert attempts == 2
+
+
 def test_release_working_directory_uses_filesystem_anchor(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -159,14 +183,21 @@ def test_supervisor_masks_streamed_application_output(tmp_path: Path) -> None:
     assert "MASKED_OPENAI_KEY" in output
 
 
-def _wait_for_metadata(path: Path) -> dict[str, object]:
+def _wait_for_metadata(
+    path: Path, expected_status: str | None = None
+) -> dict[str, object]:
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         try:
-            return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+            state = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+            if expected_status is None or state.get("status") == expected_status:
+                return state
         except (OSError, json.JSONDecodeError):
-            time.sleep(0.02)
-    raise AssertionError(f"supervisor metadata was not created: {path}")
+            pass
+        time.sleep(0.02)
+    raise AssertionError(
+        f"supervisor metadata did not reach {expected_status or 'any state'}: {path}"
+    )
 
 
 def _external_supervisor(tmp_path: Path) -> tuple[subprocess.Popen[str], Path, Path]:
@@ -192,7 +223,7 @@ def _external_supervisor(tmp_path: Path) -> tuple[subprocess.Popen[str], Path, P
         "import time; time.sleep(30)",
     ]
     process = subprocess.Popen(command, text=True)
-    _wait_for_metadata(metadata)
+    _wait_for_metadata(metadata, "running")
     return process, metadata, request
 
 

@@ -77,6 +77,12 @@ should emit `input_tokens` or `output_tokens` in its private metrics line. The
 `--require-reported-tokens` gate fails unless every candidate trial contains provider-reported
 usage; this prevents estimated character counts from being presented as real client token data.
 
+Every comparison and gate is advisory and requires human approval. A passing candidate that is
+both faster and smaller returns `adopt_candidate`; a passing tradeoff returns `keep_baseline`; any
+correctness, recall, token, time, or reported-usage gate failure returns `rollback_candidate`.
+Reports always set `automatic_rollback: false`, so an agent cannot reinterpret the evidence as
+permission to change model or client configuration.
+
 ## Included suites
 
 `examples/benchmarks/mcp-recurring-status.json` compares recurring project status collection.

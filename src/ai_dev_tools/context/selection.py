@@ -41,6 +41,7 @@ def _select_candidates(
     map_summary: dict[str, object],
     related_tests: list[str],
 ) -> tuple[dict[Path, str], list[RejectedFile]]:
+    root = root.resolve()
     candidates: dict[Path, str] = {}
     rejected: list[RejectedFile] = []
     for pattern in options.include:
@@ -78,16 +79,16 @@ def _add_candidate(
         return
     try:
         resolved = path.resolve()
-        resolved.relative_to(root.resolve())
+        resolved.relative_to(root)
     except ValueError:
         rejected.append(RejectedFile(str(path), "outside project root", "OUTSIDE_PROJECT_ROOT"))
         return
-    rel = _rel(root, path)
-    blocked = _blocked_reason(path, rel, options.exclude)
+    rel = _rel(root, resolved)
+    blocked = _blocked_reason(resolved, rel, options.exclude)
     if blocked:
         rejected.append(RejectedFile(rel, blocked, _rejection_reason_code(blocked)))
         return
-    candidates[path] = reason
+    candidates[resolved] = reason
 
 
 def _blocked_reason(path: Path, rel: str, excludes: tuple[str, ...]) -> str | None:
@@ -291,4 +292,7 @@ def _object_list(value: object) -> list[str]:
 
 
 def _rel(root: Path, path: Path) -> str:
-    return path.resolve().relative_to(root.resolve()).as_posix()
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.resolve().relative_to(root.resolve()).as_posix()

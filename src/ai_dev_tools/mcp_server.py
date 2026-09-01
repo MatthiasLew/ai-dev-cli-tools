@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -213,6 +214,11 @@ class LocalMcpServer:
                         "tool_name": {"type": "string", "maxLength": 100},
                         "task_kind": {"type": "string", "maxLength": 100},
                         "quality_passed": {"type": "boolean"},
+                        "duration_seconds": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 604800,
+                        },
                     },
                     required=["client", "input_tokens", "output_tokens"],
                 ),
@@ -637,13 +643,18 @@ class LocalMcpServer:
                 "tool_name",
                 "task_kind",
                 "quality_passed",
+                "duration_seconds",
             },
         )
         client = _choice(
             arguments, "client", "generic", {"codex", "claude", "cursor", "generic"}
         )
         _require_project(self.project_root)
-        from ai_dev_tools.telemetry import MAX_TOKENS, record_usage
+        from ai_dev_tools.telemetry import (
+            MAX_DURATION_SECONDS,
+            MAX_TOKENS,
+            record_usage,
+        )
 
         quality_passed = arguments.get("quality_passed")
         if quality_passed is not None and not isinstance(quality_passed, bool):
@@ -667,6 +678,12 @@ class LocalMcpServer:
             tool_name=_optional_string(arguments, "tool_name", 100),
             task_kind=_optional_string(arguments, "task_kind", 100),
             quality_passed=quality_passed,
+            duration_seconds=_optional_number(
+                arguments,
+                "duration_seconds",
+                minimum=0.0,
+                maximum=MAX_DURATION_SECONDS,
+            ),
         )
         path = Path(stored.pop("path"))
         policy = stored.get("policy")
@@ -1034,6 +1051,24 @@ def _integer(
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
         raise ToolInputError(f"{name} must be an integer from {minimum} to {maximum}.")
     return value
+
+
+def _optional_number(
+    arguments: Mapping[str, object],
+    name: str,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float | None:
+    value = arguments.get(name)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ToolInputError(f"{name} must be a number from {minimum:g} to {maximum:g}.")
+    result = float(value)
+    if not math.isfinite(result) or not minimum <= result <= maximum:
+        raise ToolInputError(f"{name} must be a number from {minimum:g} to {maximum:g}.")
+    return result
 
 
 def _choice(

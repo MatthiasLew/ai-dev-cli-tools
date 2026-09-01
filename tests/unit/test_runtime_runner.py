@@ -179,6 +179,10 @@ def test_background_start_retries_dead_supervisor_once(
         def poll(self) -> int:
             return 1
 
+        def wait(self, timeout: float) -> int:
+            del timeout
+            return 1
+
     spawned: list[list[str]] = []
 
     def spawn_dead_supervisor(command: list[str], cwd: Path) -> DeadSupervisor:
@@ -244,6 +248,10 @@ def test_background_start_stops_after_three_dead_supervisors(
         def poll(self) -> int:
             return 1
 
+        def wait(self, timeout: float) -> int:
+            del timeout
+            return 1
+
     spawned: list[list[str]] = []
 
     def spawn_dead_supervisor(command: list[str], cwd: Path) -> DeadSupervisor:
@@ -262,6 +270,43 @@ def test_background_start_stops_after_three_dead_supervisors(
     assert report.status == "failed"
     assert report.summary["startup_attempts"] == 3
     assert len(spawned) == 3
+
+
+def test_background_start_retries_explicit_supervisor_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        runner,
+        "resolve_run_plan",
+        lambda settings: RunPlan(["demo"], "test"),
+    )
+
+    class DeadSupervisor:
+        def poll(self) -> int:
+            return 75
+
+        def wait(self, timeout: float) -> int:
+            del timeout
+            return 75
+
+    tokens: list[str] = []
+    states = iter(({"status": "failed"}, {"status": "running"}))
+
+    def wait_for_state(path, statuses, timeout, **kwargs):  # type: ignore[no-untyped-def]
+        del path, statuses, timeout
+        tokens.append(str(kwargs["expected_token"]))
+        state = next(states)
+        return {**state, "token": kwargs["expected_token"]}
+
+    monkeypatch.setattr(runner, "_spawn_supervisor", lambda command, cwd: DeadSupervisor())
+    monkeypatch.setattr(runner, "_wait_for_state", wait_for_state)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+
+    report = run_application(tmp_path, RunOptions())
+
+    assert report.status == "success"
+    assert report.summary["startup_attempts"] == 2
+    assert len(set(tokens)) == 2
 
 
 def test_stop_handles_absent_exited_and_invalid_state(tmp_path: Path) -> None:

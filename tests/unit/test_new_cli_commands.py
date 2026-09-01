@@ -114,12 +114,14 @@ def test_telemetry_import_and_status_cli(tmp_path: Path, capsys) -> None:  # typ
         "--project", str(tmp_path), "--json", "telemetry", "import", str(source),
         "--client", "cursor", "--format", "generic", "--phase", "review",
         "--tool-name", "build_context", "--task-kind", "review", "--quality-passed",
+        "--duration-seconds", "1.25",
     ])
     assert code == 0
     imported = json.loads(capsys.readouterr().out)["summary"]
     assert imported["input_tokens"] == 30
     assert imported["phase"] == "review"
     assert imported["quality_passed"] is True
+    assert imported["duration_seconds"] == 1.25
 
     second = tmp_path / "usage-second.json"
     second.write_text(json.dumps({"usage": {
@@ -142,6 +144,16 @@ def test_telemetry_import_and_status_cli(tmp_path: Path, capsys) -> None:  # typ
     assert code == 0
     optimized = json.loads(capsys.readouterr().out)["summary"]
     assert optimized["budget_recommendations"][0]["automatic_apply"] is False
+
+    export_path = tmp_path / "exports" / "usage.csv"
+    code = main([
+        "--project", str(tmp_path), "--json", "telemetry", "export",
+        "--format", "csv", "--output", str(export_path),
+    ])
+    exported = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert exported["summary"]["contains_prompt_or_response_content"] is False
+    assert export_path.is_file()
 
 
 def test_telemetry_pricing_and_gate_cli(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
