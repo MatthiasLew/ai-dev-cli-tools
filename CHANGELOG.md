@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add explicit MCP `build_context` acknowledgements: clients can return `acknowledged_state` to
+  receive a compact unchanged-context receipt, while changed, partial, or unsafe states retain
+  the full live payload. `delta=false` always requests full context.
 - Add deterministic adaptive context budgets and task-scoped incremental memory for agent turns.
 - Require a configurable minimum token reduction in A/B release corpus gates.
 - Add client-acknowledged feedback deltas that replace repeated successful validation and context

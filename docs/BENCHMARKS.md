@@ -37,6 +37,10 @@ ai-dev benchmark gate .ai/benchmarks/runs/<baseline>.json .ai/benchmarks/runs/<c
 ai-dev benchmark corpus --manifest examples/benchmarks/agent-corpus.json --trials 3
 ~~~
 
+The corpus includes a repeated MCP `build_context` task that compares a forced full refresh with
+an explicitly acknowledged unchanged receipt. Both variants must retain the same outcome,
+precision, and recall while the receipt satisfies the configured token-reduction threshold.
+
 Cold and warm results are deliberately separate and cannot be compared with each other. A
 comparison is valid only when the suite name, fixture version, cache state, and validated outcome
 signatures match and every trial succeeds.

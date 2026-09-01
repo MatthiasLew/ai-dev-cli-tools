@@ -47,7 +47,7 @@ The official Codex MCP configuration reference is available in the
 | `plan_work` | Scope, risk, dependencies, validation, and policy assessment | Preview-only; writes bounded plan artifacts | local write |
 | `project_status` | Project technology, Git state, cache/index health, and diagnostics | Read-only and does not write reports | read-only |
 | `feedback` | Changes, validation state, failures, timings, bounded context, and session deltas | Plans checks unless `execute_checks=true`; a receipt requires the prior `acknowledged_state`, and `delta=false` forces full output | local write |
-| `build_context` | Task-relevant files, symbols, diffs, tests, adaptive budgets, and evidence | Preview-only unless `write_artifacts=true`; adaptive task-scoped delta is on by default and explicit limits win | local write |
+| `build_context` | Task-relevant files, symbols, diffs, tests, adaptive budgets, and evidence | Preview-only unless `write_artifacts=true`; return `delta.state_fingerprint` as `acknowledged_state` for an unchanged receipt, or set `delta=false` for full live context | local write |
 | `run_checks` | Deterministic validation plan or execution | Plans checks unless `execute=true`; retries transient infrastructure failures once by default | local write |
 | `coordinate_agents` | Register, claim, renew, release, complete, or inspect local tasks | Mutates local coordination state | local write |
 | `explain_evidence` | Expand one stable evidence ID | Read-only | read-only |

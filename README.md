@@ -109,7 +109,9 @@ All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version`
 `ai-dev mcp serve` exposes project status, implementation planning, compact feedback, bounded context, validation,
 and progressive evidence as local structured tools for Codex-compatible MCP clients. The STDIO
 server is dependency-free, has no network listener, fixes all calls to one project root, and
-defaults validation to preview-only.
+defaults validation to preview-only. After consuming a successful `build_context` response, a
+client can return its `summary.delta.state_fingerprint` as `acknowledged_state`; an identical safe
+state then becomes a compact receipt, while changed or unsafe context remains live.
 
 ```bash
 codex mcp add ai-dev -- ai-dev --project "/absolute/path/to/project" mcp serve

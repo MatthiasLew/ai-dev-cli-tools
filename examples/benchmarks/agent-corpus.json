@@ -1,14 +1,15 @@
 {
   "schema_version": "1.0",
   "name": "agent-workflows",
-  "description": "Versioned adaptive-context, feedback-delta, repair, affected-test, multi-turn, and monorepo agent tasks.",
+  "description": "Versioned adaptive-context, acknowledged-context, feedback-delta, repair, affected-test, multi-turn, and monorepo agent tasks.",
   "suites": [
     "examples/benchmarks/agent-adaptive-context.json",
     "examples/benchmarks/agent-feedback-delta.json",
     "examples/benchmarks/agent-repair-workflow.json",
     "examples/benchmarks/agent-affected-workflow.json",
     "examples/benchmarks/agent-multiturn-workflow.json",
-    "examples/benchmarks/agent-monorepo-workflow.json"
+    "examples/benchmarks/agent-monorepo-workflow.json",
+    "examples/benchmarks/agent-context-acknowledgement.json"
   ],
   "thresholds": {
     "max_time_regression_percent": 50,
