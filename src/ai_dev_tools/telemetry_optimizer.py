@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import csv
+import json
 import math
 from collections import defaultdict
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ai_dev_tools.models.report import Issue, Report
+from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.telemetry import load_session_rows
 
 MAX_GROUPS = 25
@@ -58,6 +61,7 @@ def optimize_usage(
         "phases": _group_summaries(rows, lambda row: row.get("phase")),
         "tools": _group_summaries(rows, lambda row: row.get("tool_name")),
         "task_kinds": _group_summaries(rows, lambda row: row.get("task_kind")),
+        "days": _group_summaries(rows, _recorded_day),
     }
     budget_recommendations, budget_gaps = _budget_recommendations(
         rows,
@@ -136,6 +140,8 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     cache_write = totals["cache_write_input_tokens"]
     input_tokens = totals["input_tokens"]
     quality = [row["quality_passed"] for row in rows if isinstance(row.get("quality_passed"), bool)]
+    durations = [_duration_value(row) for row in rows]
+    valid_durations = [value for value in durations if value is not None]
     return {
         "sessions": len(rows),
         **totals,
@@ -153,6 +159,14 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             if quality
             else None
         ),
+        "latency_samples": len(valid_durations),
+        "average_duration_seconds": (
+            round(sum(valid_durations) / len(valid_durations), 3)
+            if valid_durations
+            else None
+        ),
+        "p50_duration_seconds": _percentile_number(valid_durations, 50.0),
+        "p95_duration_seconds": _percentile_number(valid_durations, 95.0),
         "estimated_costs": _cost_totals(rows),
     }
 
@@ -319,7 +333,101 @@ def _model_evidence(rows: list[dict[str, Any]]) -> dict[str, Any]:
             else None
         ),
         "currency": next(iter(currencies)) if complete_cost else None,
+        "average_duration_seconds": (
+            round(sum(durations) / len(durations), 3)
+            if (durations := [
+                value for row in rows if (value := _duration_value(row)) is not None
+            ])
+            else None
+        ),
     }
+
+
+def export_usage(
+    project_root: Path,
+    *,
+    format_name: str = "json",
+    output_path: Path | None = None,
+) -> Report:
+    root = project_root.resolve()
+    report = Report(command="telemetry export", project_root=root)
+    if format_name not in {"json", "csv"}:
+        report.status = "invalid_configuration"
+        report.summary = {"reason_code": "INVALID_TELEMETRY_EXPORT_FORMAT"}
+        return report
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    candidate = output_path or Path(f".ai/telemetry-exports/usage-{timestamp}.{format_name}")
+    resolved = (root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
+    if not resolved.is_relative_to(root):
+        report.status = "invalid_configuration"
+        report.summary = {"reason_code": "TELEMETRY_EXPORT_OUTSIDE_PROJECT"}
+        return report
+    if resolved.exists():
+        report.status = "invalid_configuration"
+        report.summary = {"reason_code": "TELEMETRY_EXPORT_EXISTS"}
+        return report
+    optimized = optimize_usage(root)
+    if optimized.status != "success":
+        return optimized
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    if format_name == "json":
+        resolved.write_text(
+            json.dumps(optimized.summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        exported_rows = int(optimized.summary.get("sessions", 0))
+    else:
+        rows = _export_rows(optimized.summary)
+        with resolved.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        exported_rows = len(rows)
+    report.summary = {
+        "format": format_name,
+        "path": str(resolved),
+        "exported_rows": exported_rows,
+        "contains_prompt_or_response_content": False,
+        "automatic_changes": False,
+    }
+    report.artifacts.append(
+        Artifact(str(resolved), "telemetry-export", "Aggregated token efficiency evidence")
+    )
+    return report
+
+
+def _export_rows(summary: dict[str, Any]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    scopes = [("overall", "all", summary.get("overall", {}))]
+    attribution = summary.get("attribution", {})
+    if isinstance(attribution, dict):
+        for dimension, values in attribution.items():
+            if isinstance(values, list):
+                scopes.extend(
+                    (str(dimension), str(item.get("name", "")), item)
+                    for item in values
+                    if isinstance(item, dict)
+                )
+    for dimension, name, item in scopes:
+        data = item if isinstance(item, dict) else {}
+        rows.append(
+            {
+                "dimension": dimension,
+                "name": name,
+                "sessions": data.get("sessions", 0),
+                "total_tokens": data.get("total_tokens", 0),
+                "p50_total_tokens": data.get("p50_total_tokens", 0),
+                "p95_total_tokens": data.get("p95_total_tokens", 0),
+                "cache_share_percent": data.get("cache_share_percent", 0),
+                "quality_pass_rate_percent": data.get("quality_pass_rate_percent"),
+                "p50_duration_seconds": data.get("p50_duration_seconds"),
+                "p95_duration_seconds": data.get("p95_duration_seconds"),
+                "estimated_costs": json.dumps(
+                    data.get("estimated_costs", {}), sort_keys=True
+                ),
+            }
+        )
+    return rows
 
 
 def _cost_value(row: dict[str, Any]) -> tuple[str, float] | None:
@@ -353,6 +461,31 @@ def _percentile(values: list[int], percentile: float) -> int:
     ordered = sorted(values)
     rank = max(1, math.ceil((percentile / 100) * len(ordered)))
     return ordered[rank - 1]
+
+
+def _percentile_number(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = max(1, math.ceil((percentile / 100) * len(ordered)))
+    return round(ordered[rank - 1], 3)
+
+
+def _duration_value(row: dict[str, Any]) -> float | None:
+    value = row.get("duration_seconds")
+    if (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+        and float(value) >= 0
+    ):
+        return float(value)
+    return None
+
+
+def _recorded_day(row: dict[str, Any]) -> object:
+    value = row.get("recorded_at")
+    return value[:10] if isinstance(value, str) and len(value) >= 10 else None
 
 
 def _bounded_int(value: object, name: str, minimum: int, maximum: int) -> int:

@@ -163,6 +163,8 @@ def compare_benchmarks(project_root: Path, baseline: Path, candidate: Path) -> R
         "candidate_variant": right_summary["variant"],
         "metrics": metrics,
         "recommendation": _recommendation(metrics, valid),
+        "requires_human_approval": True,
+        "automatic_change": False,
     }
     if not valid:
         report.issues.append(
@@ -254,9 +256,14 @@ def gate_benchmarks(
         ),
     }
     passed = all(checks.values())
+    decision = _gate_decision(checks, str(comparison.summary["recommendation"]))
     report.status = "success" if passed else "failed"
     report.summary = {
         "passed": passed,
+        "decision": decision,
+        "rollback_advised": decision == "rollback_candidate",
+        "automatic_rollback": False,
+        "requires_human_approval": True,
         "checks": checks,
         "thresholds": {
             "max_time_regression_percent": max_time_regression,
@@ -576,10 +583,10 @@ def _minimum_reduction(metric: dict[str, Any], minimum: float) -> bool:
 
 def _recommendation(metrics: dict[str, dict[str, float | None]], valid: bool) -> str:
     if not valid:
-        return "reject_incorrect_candidate"
+        return "rollback_candidate"
     recall_change = metrics["median_selection_recall"]["percent_change"]
     if isinstance(recall_change, float) and recall_change < 0:
-        return "reject_selection_recall_regression"
+        return "rollback_candidate"
     time_change = metrics["median_seconds"]["percent_change"]
     token_change = metrics["median_estimated_tokens"]["percent_change"]
     if (
@@ -590,6 +597,14 @@ def _recommendation(metrics: dict[str, dict[str, float | None]], valid: bool) ->
     ):
         return "adopt_candidate"
     return "investigate_tradeoffs"
+
+
+def _gate_decision(checks: dict[str, bool], recommendation: str) -> str:
+    if not all(checks.values()):
+        return "rollback_candidate"
+    if recommendation == "adopt_candidate":
+        return "adopt_candidate"
+    return "keep_baseline"
 
 
 def _validate_comparable(left: dict[str, Any], right: dict[str, Any]) -> None:

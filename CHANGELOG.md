@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.2.0 - 2026-09-01
+
+- Complete the measured optimization loop with bounded latency samples, daily trends, aggregated
+  JSON/CSV export, and explicit human-approved adopt/keep/rollback benchmark decisions.
+- Harden managed-process startup with an observable starting/failed handshake, unique retry
+  identities, bounded child-spawn backoff, and preserved masked failure diagnostics.
+- Declare the planned product capability set complete and move the repository to compatibility,
+  security, dependency, platform, and regression maintenance.
+
 - Add an evidence-based, read-only token optimizer with p50/p95 attribution, safe budget
   recommendations, and accuracy-first cheaper-model routing suggestions.
 - Allow provider usage records to include bounded phase, tool, task-kind, and boolean quality

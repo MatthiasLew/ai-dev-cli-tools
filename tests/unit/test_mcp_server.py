@@ -202,6 +202,7 @@ def test_record_usage_stores_only_bounded_numeric_telemetry(tmp_path: Path) -> N
             "reasoning_tokens": 40,
             "model": "gpt-test",
             "request_id": "resp-safe",
+            "duration_seconds": 2.5,
         },
     )
 
@@ -209,6 +210,7 @@ def test_record_usage_stores_only_bounded_numeric_telemetry(tmp_path: Path) -> N
     summary = result["structuredContent"]["summary"]
     assert summary["measurement"] == "provider_reported"
     assert summary["total_tokens"] == 1290
+    assert summary["duration_seconds"] == 2.5
     stored = json.loads(Path(result["structuredContent"]["artifacts"][0]["path"]).read_text())
     assert "prompt" not in stored
     assert stored["cached_input_tokens"] == 800

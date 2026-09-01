@@ -1,11 +1,12 @@
 # Distribution and Upgrade Policy
 
-Version 1.0.0 is the first stable release prepared for Trusted Publishing to TestPyPI and PyPI.
+Version 1.2.0 is the completed planned product line prepared for Trusted Publishing to TestPyPI
+and PyPI.
 The recommended isolated installation is:
 
 ```bash
 python -m pip install --upgrade pipx
-pipx install ai-dev-cli-tools==1.0.0
+pipx install ai-dev-cli-tools==1.2.0
 ai-dev --version
 ai-dev doctor
 ```
@@ -14,8 +15,8 @@ Until the release appears on PyPI, install the exact wheel from the matching Git
 pinned Git commit:
 
 ```bash
-python -m pip install ./dist/ai_dev_cli_tools-1.0.0-py3-none-any.whl
-pipx install "git+https://github.com/MatthiasLew/ai-dev-cli-tools.git@v1.0.0"
+python -m pip install ./dist/ai_dev_cli_tools-1.2.0-py3-none-any.whl
+pipx install "git+https://github.com/MatthiasLew/ai-dev-cli-tools.git@v1.2.0"
 ```
 
 Upgrades must pin a release tag or version, review `CHANGELOG.md`, and rerun `ai-dev doctor`.
@@ -49,7 +50,7 @@ not.
 
 1. Complete `docs/RELEASE_CHECKLIST.md` on a clean commit already present on `main`.
 2. Confirm the TestPyPI and PyPI Trusted Publisher records and GitHub environments above.
-3. Create and push the signed tag `v1.0.0` from that exact commit.
+3. Create and push the signed tag `v1.2.0` from that exact commit.
 4. Approve the `testpypi` environment if configured to require review.
 5. Confirm the TestPyPI installation smoke job passes and inspect the generated draft release.
 6. Review the attached wheel/sdist, release notes, and protected `pypi` environment.

@@ -43,6 +43,8 @@ Then verify:
 - [ ] Packaging and installed-wheel smoke jobs pass.
 - [ ] Uploaded diagnostic artifacts contain no unmasked secrets.
 - [ ] Required checks are attached to the release commit rather than an earlier commit.
+- [ ] Audit GitHub releases with the locally supported fields:
+  `gh release list --json tagName,name,isDraft,isPrerelease,isLatest,publishedAt`.
 
 ## Publish
 
@@ -71,7 +73,7 @@ local development command.
   toolchains, for commit `a86da2c`.
 - Docs run 33323925074 passed for the same commit.
 
-## Local 1.0.0 candidate evidence
+## Historical local 1.0.0 candidate evidence
 
 - On 2026-08-31, the clean pinned environment passed 327 tests with 7 toolchain-dependent skips
   and exactly 90% branch coverage.

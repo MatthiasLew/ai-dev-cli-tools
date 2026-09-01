@@ -10,7 +10,7 @@ from typing import cast
 
 import pytest
 
-from ai_dev_tools.runtime import supervisor
+import ai_dev_tools.runtime.supervisor as supervisor
 
 
 def test_supervisor_records_natural_exit(tmp_path: Path) -> None:
@@ -105,6 +105,30 @@ def test_supervisor_rejects_empty_command(tmp_path: Path) -> None:
         )
         == 2
     )
+
+
+def test_child_start_retries_transient_os_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = 0
+
+    def flaky_popen(*args: object, **kwargs: object) -> subprocess.Popen[str]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("resource temporarily unavailable")
+        del args, kwargs
+        return cast("subprocess.Popen[str]", object())
+
+    monkeypatch.setattr(subprocess, "Popen", flaky_popen)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+
+    child, error, attempts = supervisor._spawn_child(
+        [sys.executable, "-c", "print('ready')"], tmp_path
+    )
+    assert child is not None
+    assert error == ""
+    assert attempts == 2
 
 
 def test_release_working_directory_uses_filesystem_anchor(

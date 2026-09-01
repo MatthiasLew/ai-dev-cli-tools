@@ -13,6 +13,7 @@ CLIENTS = {"codex", "claude", "cursor", "generic"}
 FORMATS = {"auto", "openai", "anthropic", "generic"}
 MAX_IMPORT_BYTES = 5_000_000
 MAX_TOKENS = 10_000_000_000
+MAX_DURATION_SECONDS = 604_800.0
 
 
 def import_usage(
@@ -26,6 +27,7 @@ def import_usage(
     tool_name: str = "",
     task_kind: str = "",
     quality_passed: bool | None = None,
+    duration_seconds: float | None = None,
 ) -> Report:
     root = project_root.resolve()
     report = Report(command="telemetry import", project_root=root)
@@ -54,6 +56,7 @@ def import_usage(
             tool_name=tool_name,
             task_kind=task_kind,
             quality_passed=quality_passed,
+            duration_seconds=duration_seconds,
         )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         report.status = "invalid_configuration"
@@ -91,6 +94,7 @@ def record_usage(
     tool_name: str = "",
     task_kind: str = "",
     quality_passed: bool | None = None,
+    duration_seconds: float | None = None,
 ) -> dict[str, Any]:
     root = project_root.resolve()
     if client not in CLIENTS:
@@ -116,6 +120,7 @@ def record_usage(
     task_kind = _bounded_text(task_kind, "task_kind", 100)
     if quality_passed is not None and not isinstance(quality_passed, bool):
         raise ValueError("quality_passed must be a boolean or null")
+    duration = _duration(duration_seconds)
     recorded_at = datetime.now(UTC).isoformat()
     identity = source_id or request_id or recorded_at
     session_id = hashlib.sha256(
@@ -132,6 +137,7 @@ def record_usage(
         "tool_name": tool_name or None,
         "task_kind": task_kind or None,
         "quality_passed": quality_passed,
+        "duration_seconds": duration,
         "source": source,
         "measurement": "provider_reported",
         **values,
@@ -184,6 +190,12 @@ def aggregate_usage(project_root: Path) -> dict[str, Any]:
             amount = cost.get("estimated_amount")
             if isinstance(currency, str) and isinstance(amount, int | float):
                 costs[currency] = round(costs.get(currency, 0.0) + float(amount), 8)
+    durations = [
+        float(row["duration_seconds"])
+        for row in rows
+        if isinstance(row.get("duration_seconds"), int | float)
+        and not isinstance(row.get("duration_seconds"), bool)
+    ]
     return {
         "sessions": len(rows),
         "measurement": "provider_reported",
@@ -196,6 +208,10 @@ def aggregate_usage(project_root: Path) -> dict[str, Any]:
         "reasoning_tokens": sum(item["reasoning_tokens"] for item in by_client.values()),
         "by_client": by_client,
         "estimated_costs": costs,
+        "latency_samples": len(durations),
+        "average_duration_seconds": (
+            round(sum(durations) / len(durations), 3) if durations else None
+        ),
         "retention_limit": 1000,
     }
 
@@ -442,6 +458,19 @@ def _rate(value: object, name: str) -> float:
     if not math.isfinite(result) or result < 0:
         raise ValueError(f"{name} must be a finite non-negative number")
     return result
+
+
+def _duration(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError("duration_seconds must be a number or null")
+    result = float(value)
+    if not math.isfinite(result) or not 0 <= result <= MAX_DURATION_SECONDS:
+        raise ValueError(
+            f"duration_seconds must be from 0 to {MAX_DURATION_SECONDS:g}"
+        )
+    return round(result, 6)
 
 
 def _bounded_text(value: str, name: str, maximum: int) -> str:

@@ -45,7 +45,7 @@ The official Codex MCP configuration reference is available in the
 | Tool | Purpose | Default behavior | MCP annotation |
 | --- | --- | --- | --- |
 | `prepare_task` | One-call plan, context references, check preview, client state, and token receipt | Reference-first; full content requires `include_content=true`; explicit acknowledgements may be persisted per client | local write |
-| `record_usage` | Persist provider-reported input, cache, output, and reasoning token counts | Stores numbers plus optional model/request ID; never accepts prompt or response content | local write |
+| `record_usage` | Persist provider-reported input, cache, output, reasoning, and duration measurements | Stores numbers plus optional bounded labels/model/request ID; never accepts prompt or response content | local write |
 | `usage_status` | Compact provider usage, pricing estimates, budgets, and regression alerts | Read-only; does not duplicate session bodies or repository context | read-only |
 | `optimize_usage` | p50/p95 attribution, token budgets, and accuracy-gated cheaper-model recommendations | Read-only; never changes policy or model settings | read-only |
 | `plan_work` | Scope, risk, dependencies, validation, and policy assessment | Preview-only; writes bounded plan artifacts | local write |

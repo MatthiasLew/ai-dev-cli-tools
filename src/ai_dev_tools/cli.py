@@ -291,6 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_import.add_argument("--phase", default="")
     telemetry_import.add_argument("--tool-name", default="")
     telemetry_import.add_argument("--task-kind", default="")
+    telemetry_import.add_argument("--duration-seconds", type=float)
     telemetry_quality = telemetry_import.add_mutually_exclusive_group()
     telemetry_quality.add_argument(
         "--quality-passed", action="store_const", const=True, dest="quality_passed"
@@ -306,6 +307,9 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_optimize.add_argument("--safety-margin-percent", type=float, default=20.0)
     telemetry_optimize.add_argument("--accuracy-target-percent", type=float, default=95.0)
     telemetry_optimize.add_argument("--max-accuracy-drop-percent", type=float, default=0.0)
+    telemetry_export = telemetry_sub.add_parser("export")
+    telemetry_export.add_argument("--format", choices=["json", "csv"], default="json")
+    telemetry_export.add_argument("--output", type=Path)
     telemetry_gate = telemetry_sub.add_parser("gate")
     telemetry_gate.add_argument("--policy", type=Path)
     telemetry_pricing = telemetry_sub.add_parser("pricing")
@@ -731,6 +735,14 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 accuracy_target_percent=args.accuracy_target_percent,
                 max_accuracy_drop_percent=args.max_accuracy_drop_percent,
             )
+        if args.telemetry_command == "export":
+            from ai_dev_tools.telemetry_optimizer import export_usage
+
+            return export_usage(
+                project_root,
+                format_name=args.format,
+                output_path=args.output,
+            )
         if args.telemetry_command == "gate":
             return telemetry_gate(project_root, args.policy)
         if args.telemetry_command == "pricing":
@@ -756,6 +768,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             tool_name=args.tool_name,
             task_kind=args.task_kind,
             quality_passed=args.quality_passed,
+            duration_seconds=args.duration_seconds,
         )
     if command == "performance":
         from ai_dev_tools.runners.performance import compare_performance, run_performance_latest
@@ -859,6 +872,7 @@ def _capabilities_report(project_root: Path) -> Report:
         "telemetry import",
         "telemetry status",
         "telemetry optimize",
+        "telemetry export",
         "telemetry gate",
         "telemetry pricing import",
         "telemetry pricing activate",

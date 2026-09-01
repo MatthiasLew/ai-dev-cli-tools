@@ -120,33 +120,34 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             "timed_out": result.timed_out,
         }
     else:
-        token = secrets.token_urlsafe(24)
         _remove_stale_request(paths["request"])
-        supervisor_command = [
-            *_supervisor_python_command(),
-            "--metadata",
-            str(paths["metadata"]),
-            "--request",
-            str(paths["request"]),
-            "--token",
-            token,
-            "--supervisor-cwd",
-            str(settings.project_root),
-            "--cwd",
-            str(settings.project_root / plan.cwd),
-            "--log",
-            str(paths["log"]),
-            "--",
-            *plan.command,
-        ]
         state: dict[str, object] = {}
         startup_attempts = 0
+        token = ""
         for attempt in range(1, 4):
             startup_attempts = attempt
+            token = secrets.token_urlsafe(24)
+            supervisor_command = [
+                *_supervisor_python_command(),
+                "--metadata",
+                str(paths["metadata"]),
+                "--request",
+                str(paths["request"]),
+                "--token",
+                token,
+                "--supervisor-cwd",
+                str(settings.project_root),
+                "--cwd",
+                str(settings.project_root / plan.cwd),
+                "--log",
+                str(paths["log"]),
+                "--",
+                *plan.command,
+            ]
             supervisor = _spawn_supervisor(supervisor_command, settings.project_root)
             state = _wait_for_state(
                 paths["metadata"],
-                {"running", "exited"},
+                {"running", "exited", "failed"},
                 20.0,
                 expected_token=token,
             )
@@ -154,9 +155,12 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
                 break
             # Retry only after the supervisor itself has exited before publishing
             # a handshake. A live supervisor must never be duplicated.
+            if state.get("status") == "failed":
+                with suppress(subprocess.TimeoutExpired):
+                    supervisor.wait(timeout=1)
             if supervisor.poll() is None:
                 break
-            time.sleep(0.1)
+            time.sleep(min(0.25 * attempt, 0.75))
         readiness: dict[str, object] = {"status": "not_configured"}
         if state.get("status") != "running":
             report.status = "failed"
