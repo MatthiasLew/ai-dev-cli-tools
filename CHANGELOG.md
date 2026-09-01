@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add telemetry budgets scoped globally, per client, and per model; equal-window regression gates;
+  immediate MCP/CLI alerts; chronological session windows; and integrity-checked, versioned pricing
+  snapshots with explicit activation and cost provenance.
 - Add bounded OpenAI, Anthropic, and generic provider-usage adapters, MCP `record_usage`,
   idempotent JSON/JSONL imports, optional project-local pricing estimates, and per-client usage
   totals in the CLI and loopback dashboard without storing model input or output content.

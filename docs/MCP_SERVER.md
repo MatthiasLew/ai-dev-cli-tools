@@ -46,6 +46,7 @@ The official Codex MCP configuration reference is available in the
 | --- | --- | --- | --- |
 | `prepare_task` | One-call plan, context references, check preview, client state, and token receipt | Reference-first; full content requires `include_content=true`; explicit acknowledgements may be persisted per client | local write |
 | `record_usage` | Persist provider-reported input, cache, output, and reasoning token counts | Stores numbers plus optional model/request ID; never accepts prompt or response content | local write |
+| `usage_status` | Compact provider usage, pricing estimates, budgets, and regression alerts | Read-only; does not duplicate session bodies or repository context | read-only |
 | `plan_work` | Scope, risk, dependencies, validation, and policy assessment | Preview-only; writes bounded plan artifacts | local write |
 | `project_status` | Project technology, Git state, cache/index health, and diagnostics | Read-only and does not write reports | read-only |
 | `feedback` | Changes, validation state, failures, timings, bounded context, and session deltas | Plans checks unless `execute_checks=true`; a receipt requires the prior `acknowledged_state`, and `delta=false` forces full output | local write |
@@ -67,6 +68,7 @@ codes, bounded context, secret masking, and evidence IDs remain the source contr
   deployment, or deletion request.
 - `record_usage` accepts only bounded numeric usage and short identifiers; its schema has no field
   for model input or output content.
+- `usage_status` reads at most 1,000 normalized sessions and returns aggregate policy evidence.
 - Validation execution is opt-in per call.
 - Context and feedback continue to exclude sensitive paths and mask detected secrets.
 - `readOnlyHint`, `destructiveHint`, and `openWorldHint` describe actual behavior;

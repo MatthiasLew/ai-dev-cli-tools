@@ -87,6 +87,9 @@ ai-dev integrations install all
 ai-dev dashboard serve --port 8765
 ai-dev telemetry import response.json --client codex --format openai
 ai-dev telemetry status --json
+ai-dev telemetry gate --json
+ai-dev telemetry pricing import pricing.json --provider openai --version 2026-09-01
+ai-dev telemetry pricing activate openai 2026-09-01
 ai-dev explain issue:<id> --tail 100
 ai-dev explain --symbol "src/app.py#Application.run" --tail 100
 ai-dev feedback --task "fix authentication timeout"
@@ -191,6 +194,11 @@ response content. `telemetry status` and the loopback dashboard aggregate input,
 output, and reasoning tokens by client. Optional cost values are local estimates computed from
 `.ai-dev/telemetry-pricing.json`; no changing provider price is hardcoded and no value is presented
 as a provider invoice. See `docs/INTEGRATIONS_AND_DASHBOARD.md`.
+Project-local `.ai-dev/telemetry-budgets.json` can enforce rolling aggregate limits globally,
+per client, and per model, and compare two chronological session windows for token or cost
+regressions. `ai-dev telemetry gate` returns a failing report for violations, while MCP
+`record_usage` immediately returns the active alerts and read-only `usage_status` provides a
+compact pre-flight check.
 
 Incremental mode stores the latest schema-versioned manifest plus up to 50 content-addressed
 historical manifests under `.ai/cache/`, and reports changed versus reused files. Pass
@@ -296,6 +304,7 @@ git diff --check
 | integrations install | implemented for Codex, Claude Code, Cursor, and generic MCP |
 | dashboard status/serve | implemented, loopback-only |
 | telemetry import/status and MCP record_usage | implemented, provider-reported usage only |
+| telemetry gate/pricing snapshots and MCP usage_status | implemented, local and fail-closed |
 | performance latest/compare | implemented |
 | capabilities | implemented |
 | git status | implemented |

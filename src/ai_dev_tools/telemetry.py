@@ -55,6 +55,12 @@ def import_usage(
     stored_path = Path(stored["path"])
     stored["path"] = str(stored_path)
     report.summary = stored
+    policy = stored.get("policy")
+    if isinstance(policy, dict) and policy.get("passed") is False:
+        report.status = "partial"
+        report.issues.append(
+            Issue("warning", "Telemetry policy has active violations", code="TELEMETRY_ALERT")
+        )
     report.artifacts.append(Artifact(str(stored_path), "telemetry", "Normalized usage"))
     return report
 
@@ -120,21 +126,22 @@ def record_usage(
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     latest = directory / "latest-session.json"
     latest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return {**payload, "path": path}
+    from ai_dev_tools.telemetry_policy import optional_policy_status
+
+    return {**payload, "path": path, "policy": optional_policy_status(root)}
 
 
 def telemetry_status(project_root: Path) -> Report:
     root = project_root.resolve()
     report = Report(command="telemetry status", project_root=root)
-    report.summary = aggregate_usage(root)
+    from ai_dev_tools.telemetry_policy import optional_policy_status
+
+    report.summary = {**aggregate_usage(root), "policy": optional_policy_status(root)}
     return report
 
 
 def aggregate_usage(project_root: Path) -> dict[str, Any]:
-    directory = project_root.resolve() / ".ai" / "token-efficiency" / "sessions"
-    paths = sorted(directory.glob("*.json"))[-1000:] if directory.exists() else []
-    rows = [_read_object(path) for path in paths]
-    rows = [row for row in rows if row.get("measurement") == "provider_reported"]
+    rows = load_session_rows(project_root)
     by_client: dict[str, dict[str, int]] = {}
     costs: dict[str, float] = {}
     for row in rows:
@@ -170,6 +177,31 @@ def aggregate_usage(project_root: Path) -> dict[str, Any]:
         "estimated_costs": costs,
         "retention_limit": 1000,
     }
+
+
+def load_session_rows(project_root: Path, limit: int = 1000) -> list[dict[str, Any]]:
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
+        raise ValueError("session limit must be an integer from 1 to 1000")
+    directory = project_root.resolve() / ".ai" / "token-efficiency" / "sessions"
+    if not directory.exists():
+        return []
+    candidates = sorted(
+        directory.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True
+    )[: max(limit * 2, 1000)]
+    rows: list[dict[str, Any]] = []
+    for path in candidates:
+        if path.stat().st_size > 100_000:
+            continue
+        row = _read_object(path)
+        recorded_at = row.get("recorded_at")
+        if row.get("measurement") == "provider_reported" and isinstance(recorded_at, str):
+            try:
+                datetime.fromisoformat(recorded_at)
+            except ValueError:
+                continue
+            rows.append(row)
+    rows.sort(key=lambda item: str(item["recorded_at"]))
+    return rows[-limit:]
 
 
 def normalize_records(
@@ -292,6 +324,40 @@ def _load_pricing(root: Path, path: Path | None) -> dict[str, Any]:
         raise ValueError("pricing configuration must be valid UTF-8 JSON") from exc
     if not isinstance(value, dict):
         raise ValueError("pricing configuration must be a JSON object")
+    active = value.get("active_snapshot")
+    if active is not None:
+        expected_sha = value.get("sha256")
+        if not isinstance(active, str) or not active or "\x00" in active:
+            raise ValueError("active_snapshot must be a project-relative path")
+        snapshot = _local_file(root, Path(active), "active pricing snapshot")
+        if snapshot.stat().st_size > 100_000:
+            raise ValueError("active pricing snapshot is too large")
+        try:
+            value = json.loads(snapshot.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("active pricing snapshot must be valid UTF-8 JSON") from exc
+        if not isinstance(value, dict):
+            raise ValueError("active pricing snapshot must be a JSON object")
+        snapshot_core = {
+            key: value.get(key)
+            for key in (
+                "schema_version",
+                "provider",
+                "version",
+                "source",
+                "currency",
+                "models",
+            )
+        }
+        actual_sha = hashlib.sha256(
+            json.dumps(snapshot_core, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if (
+            not isinstance(expected_sha, str)
+            or value.get("sha256") != expected_sha
+            or actual_sha != expected_sha
+        ):
+            raise ValueError("active pricing snapshot integrity check failed")
     return value
 
 
@@ -329,6 +395,9 @@ def _estimate_cost(usage: dict[str, Any], pricing: dict[str, Any]) -> dict[str, 
         "estimated_amount": round(amount, 8),
         "currency": currency,
         "kind": "local_pricing_estimate",
+        "pricing_provider": pricing.get("provider"),
+        "pricing_version": pricing.get("version"),
+        "pricing_sha256": pricing.get("sha256"),
     }
 
 

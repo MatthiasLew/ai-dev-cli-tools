@@ -74,3 +74,61 @@ official `usage.input_tokens`, `usage.input_tokens_details.cached_tokens`,
 For Anthropic, total normalized input is the sum of uncached input, cache creation, and cache read
 fields as specified by the
 [Anthropic pricing and usage documentation](https://docs.anthropic.com/en/docs/about-claude/pricing).
+
+## Versioned pricing snapshots
+
+Importing a cennik creates an immutable project-local snapshot and, unless `--no-activate` is
+used, updates the active pointer:
+
+```bash
+ai-dev telemetry pricing import pricing.json \
+  --provider openai \
+  --version 2026-09-01 \
+  --source https://developers.openai.com/api/docs/models/compare
+ai-dev telemetry pricing import pricing.json --provider openai --version candidate --no-activate
+ai-dev telemetry pricing activate openai candidate
+```
+
+Snapshots live under `.ai-dev/pricing/<provider>/<version>.json`. Reusing a version with different
+content fails closed. Activation verifies the snapshot hash and writes only a project-relative
+pointer to `.ai-dev/telemetry-pricing.json`. Every newly priced session records the provider,
+version, and snapshot hash that produced its local estimate. This is important because official
+model pricing can include cached-input rates, long-context thresholds, or promotional periods;
+the [OpenAI model comparison](https://developers.openai.com/api/docs/models/compare) is the source
+to review before creating an OpenAI snapshot.
+
+## Budgets and regressions
+
+Create `.ai-dev/telemetry-budgets.json`:
+
+```json
+{
+  "schema_version": "1",
+  "window_sessions": 20,
+  "limits": {
+    "max_total_tokens": 200000,
+    "max_estimated_costs": {"USD": 5.0}
+  },
+  "clients": {
+    "codex": {"max_input_tokens": 120000}
+  },
+  "models": {
+    "gpt-example": {"max_output_tokens": 20000}
+  },
+  "regression": {
+    "recent_sessions": 5,
+    "min_baseline_sessions": 5,
+    "max_total_tokens_percent": 20,
+    "max_estimated_cost_percent": 25,
+    "currency": "USD"
+  }
+}
+```
+
+Run `ai-dev telemetry gate --json` in CI. Limits aggregate over the newest chronological
+`window_sessions`. Regression compares the average of the newest `recent_sessions` with the
+immediately preceding baseline window. Too little history produces an informational
+`TELEMETRY_REGRESSION_INSUFFICIENT_DATA`; it does not fail the gate. A configured cost limit or
+cost regression fails closed when any evaluated session lacks a matching currency estimate.
+`record_usage` and `telemetry import` return `partial` with `TELEMETRY_ALERT` after storing valid
+usage that breaches policy, so the next AI step can stop without losing the evidence.
