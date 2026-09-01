@@ -85,14 +85,17 @@ def main(argv: list[str] | None = None) -> int:
                 _terminate(child)
                 exit_code = child.poll()
             output_thread.join(timeout=1)
+            _release_working_directory(args.cwd)
             state["status"] = "stopped" if _STOP.is_set() or args.request.exists() else "exited"
             state["exit_code"] = exit_code
             state["finished_at"] = _now()
             state["heartbeat_at"] = _now()
-            _write_json(args.metadata, state)
-            if args.request.exists():
-                with suppress(OSError):
-                    args.request.unlink()
+    # Publish terminal acknowledgement only after the application log is
+    # closed and the project working directory has been released.
+    _write_json(args.metadata, state)
+    if args.request.exists():
+        with suppress(OSError):
+            args.request.unlink()
     return 0 if state["status"] == "stopped" else int(exit_code or 0)
 
 
@@ -121,6 +124,22 @@ def _copy_output(stream: TextIO, log: TextIO) -> None:
     for line in stream:
         log.write(mask_text(line))
         log.flush()
+
+
+def _release_working_directory(cwd: Path, *, current_directory: Path | None = None) -> None:
+    """Release the project directory before publishing the terminal state.
+
+    A detached Windows process keeps its current directory open. Pytest and
+    other callers may otherwise receive ``WinError 5`` while cleaning up a
+    successfully stopped temporary project.
+    """
+    resolved = cwd.resolve()
+    current = (current_directory or Path.cwd()).resolve()
+    if current != resolved and current not in resolved.parents:
+        return
+    anchor = current.anchor or os.sep
+    with suppress(OSError):
+        os.chdir(anchor)
 
 
 def _write_json(path: Path, data: dict[str, object]) -> None:

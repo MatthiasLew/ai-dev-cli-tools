@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bind managed-process startup and stop acknowledgements to the current control token, tolerate
+  slow CI startup handshakes, and release Windows project handles before publishing terminal state.
 - Document the repository's required squash-merge workflow and post-merge `main` verification.
 - Make benchmark corpus and comparison evidence IDs resolvable through `ai-dev explain`.
 - Make index-daemon state writes resilient to transient Windows sharing violations and count
