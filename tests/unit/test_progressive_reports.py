@@ -59,6 +59,31 @@ def test_explain_reports_unknown_reference(tmp_path: Path) -> None:
 
     assert report.status == "failed"
     assert report.summary["reason_code"] == "EVIDENCE_NOT_FOUND"
+    assert ".ai/benchmarks" in report.summary["searched"]
+
+
+def test_explain_expands_corpus_gate_evidence(tmp_path: Path) -> None:
+    report = Report(command="benchmark corpus", project_root=tmp_path)
+    report.summary = {
+        "results": [
+            {
+                "suite": "examples/benchmarks/agent-workflow.json",
+                "gate_status": "failed",
+                "checks": {"recall": False},
+            }
+        ]
+    }
+    report_path = tmp_path / ".ai" / "benchmarks" / "corpus-20260901T000000Z.json"
+    write_json(report, report_path)
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    reference = payload["summary"]["results"][0]["evidence_id"]
+
+    expanded = run_explain(tmp_path, reference, tail=20)
+
+    assert expanded.status == "success"
+    assert expanded.summary["source_report"] == str(report_path)
+    assert expanded.summary["evidence"]["gate_status"] == "failed"
+    assert expanded.summary["evidence"]["checks"] == {"recall": False}
 
 
 def test_symbol_explain_is_bounded_qualified_and_project_scoped(tmp_path: Path) -> None:
