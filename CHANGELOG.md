@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add one-shot `ai-dev task` and MCP `prepare_task` workflows that combine a bounded plan,
+  context references, validation preview, per-client acknowledgement state, and a measurable token
+  savings receipt; full file content is now an explicit opt-in on this path.
+- Generate token-efficient Codex, Claude Code, Cursor, and generic client profiles, expose receipt
+  totals in the local dashboard, and optionally require provider-reported tokens in benchmark gates.
 - Make performance snapshot filenames collision-resistant on coarse-resolution clocks so rapid
   measurements remain immutable and compare against the intended baseline.
 - Launch detached runtime supervisors through an isolated absolute-path bootstrap and preserve

@@ -11,6 +11,7 @@ from ai_dev_tools.runners.benchmark import (
     _load_spec,
     _trial_row,
     compare_benchmarks,
+    gate_benchmarks,
     run_benchmark,
 )
 from ai_dev_tools.utils.subprocess import CommandResult
@@ -57,6 +58,23 @@ def test_benchmark_runs_and_compares_equivalent_variants(tmp_path: Path) -> None
     assert compared.summary["valid"] is True
     assert compared.summary["metrics"]["median_estimated_tokens"]["percent_change"] < 0
     assert any(item.kind == "markdown" for item in compared.artifacts)
+
+
+def test_benchmark_labels_client_and_can_require_provider_reported_tokens(tmp_path: Path) -> None:
+    suite = _suite(tmp_path)
+    baseline = run_benchmark(tmp_path, suite, "baseline", trials=1, client="codex")
+    candidate = run_benchmark(tmp_path, suite, "ai-dev", trials=1, client="codex")
+    baseline_path = Path(next(item.path for item in baseline.artifacts if item.kind == "json"))
+    candidate_path = Path(next(item.path for item in candidate.artifacts if item.kind == "json"))
+
+    gated = gate_benchmarks(
+        tmp_path, baseline_path, candidate_path, require_reported_tokens=True
+    )
+
+    assert candidate.summary["client"] == "codex"
+    assert candidate.summary["statistics"]["reported_token_trials"] == 0
+    assert gated.status == "failed"
+    assert gated.summary["checks"]["reported_tokens"] is False
 
 
 def test_benchmark_rejects_invalid_suite_variant_and_trial_count(tmp_path: Path) -> None:

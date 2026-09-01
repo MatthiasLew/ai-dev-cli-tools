@@ -52,6 +52,7 @@ def test_acknowledged_unchanged_context_becomes_receipt(tmp_path: Path) -> None:
     assert summary["context_receipt"]["unchanged"] is True
     assert summary["delta"]["reused"] is True
     assert summary["delta"]["chars_avoided"] >= 0
+    assert summary["delta"]["estimated_tokens_avoided"] >= 0
     assert summary["delta"]["live_context_chars_avoided"] > 0
     assert "selected_files" not in summary
 

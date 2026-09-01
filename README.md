@@ -68,6 +68,7 @@ ai-dev check --mode changed --compare main
 ai-dev check --mode changed --retry-flaky 1
 ai-dev check --mode changed --retry-infra 1
 ai-dev plan --task "implement rate limiting" --mode changed
+ai-dev task --task "implement rate limiting" --client codex --json
 ai-dev index update
 ai-dev index daemon start
 ai-dev index daemon status
@@ -173,6 +174,14 @@ Selective retrieval defaults to `auto`: focused includes or changed files can ab
 
 Install `ai-dev-cli-tools[tokenizers]` to enable exact local `cl100k_base` or `o200k_base` counting. Without that optional extra, accounting uses the explicit UTF-8-bytes/4 estimate and reports a fallback if an exact tokenizer was requested. Repeated `--token-budget category=N` limits source, diffs, tests, logs, maps, history, cached input, or output independently. `--provider-usage <json>` normalizes OpenAI or Anthropic usage fields from a project-local file without network access.
 
+`ai-dev task` is the default one-shot handoff for an AI client. It combines the bounded plan,
+selected context, and check preview while delivering file references instead of full content.
+Use `--include-content` only when the consumer truly needs the bodies. The response includes a
+state fingerprint and a token savings receipt; return that fingerprint with `--ack-state` only
+after consuming the response. Explicit acknowledgements are stored per client under
+`.ai/cache/client-state/`, so Codex, Claude Code, Cursor, and generic consumers never inherit one
+another's assumed context. Receipts remain local under `.ai/token-efficiency/`.
+
 Incremental mode stores the latest schema-versioned manifest plus up to 50 content-addressed
 historical manifests under `.ai/cache/`, and reports changed versus reused files. Pass
 `--since <context-id>` to compare against an explicitly retained context. Default limits are
@@ -263,6 +272,7 @@ git diff --check
 | index status/update/rebuild | implemented |
 | index daemon | implemented |
 | plan / MCP plan_work | implemented |
+| task / MCP prepare_task | implemented with reference-first delivery and token receipts |
 | semantic status/index | implemented with built-in Tree-sitter, LSP, and provider plugins |
 | policy assess / execution enforcement | implemented |
 | sarif | implemented |

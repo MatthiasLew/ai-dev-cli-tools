@@ -44,6 +44,7 @@ The official Codex MCP configuration reference is available in the
 
 | Tool | Purpose | Default behavior | MCP annotation |
 | --- | --- | --- | --- |
+| `prepare_task` | One-call plan, context references, check preview, client state, and token receipt | Reference-first; full content requires `include_content=true`; explicit acknowledgements may be persisted per client | local write |
 | `plan_work` | Scope, risk, dependencies, validation, and policy assessment | Preview-only; writes bounded plan artifacts | local write |
 | `project_status` | Project technology, Git state, cache/index health, and diagnostics | Read-only and does not write reports | read-only |
 | `feedback` | Changes, validation state, failures, timings, bounded context, and session deltas | Plans checks unless `execute_checks=true`; a receipt requires the prior `acknowledged_state`, and `delta=false` forces full output | local write |

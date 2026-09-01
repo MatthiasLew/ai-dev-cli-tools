@@ -25,6 +25,8 @@ border-radius:12px;padding:18px}.value{font-size:28px;font-weight:700;margin:8px
 root.textContent=x.project_root;grid.innerHTML=card('Repository index',x.index.files??0,`updated: ${x.index.updated_at??'never'}`,'ok')+
 card('Semantic symbols',x.semantic.symbols??0,`backend: ${x.semantic.backend??'not built'}`)+
 card('Daemon',x.daemon.status??'stopped',`events: ${x.daemon.events??0} · updates: ${x.daemon.updates??0}`,x.daemon.status==='running'?'ok':'warn')+
+card('Tokens saved',x.token_efficiency.total_saved_tokens??0,`${x.token_efficiency.receipts??0} receipts · latest ${x.token_efficiency.latest_saved_percent??0}%`,'ok')+
+card('Context delivery',x.token_efficiency.latest_delivery??'none',`cache hit: ${x.token_efficiency.latest_cache_hit?'yes':'no'}`)+
 card('Cache',x.cache.files,`${x.cache.bytes} bytes`)+card('Runtime',x.runtime.status??'idle',`pid: ${x.runtime.pid??'-'}`)+
 card('Last errors',x.errors.length,x.errors.join('\n')||'none',x.errors.length?'warn':'ok');}refresh();setInterval(refresh,3000)</script>
 </body></html>"""
@@ -86,6 +88,7 @@ def collect_status(project_root: Path) -> dict[str, Any]:
         [path for path in cache_root.rglob("*") if path.is_file()] if cache_root.exists() else []
     )
     errors = _recent_errors(root / ".ai")
+    token_efficiency = _token_efficiency(root / ".ai" / "token-efficiency")
     return {
         "project_root": str(root),
         "index": {
@@ -102,6 +105,7 @@ def collect_status(project_root: Path) -> dict[str, Any]:
             "bytes": sum(path.stat().st_size for path in cache_files),
         },
         "runtime": {key: runtime.get(key) for key in ("status", "pid")},
+        "token_efficiency": token_efficiency,
         "errors": errors,
     }
 
@@ -137,3 +141,23 @@ def _recent_errors(ai_root: Path) -> list[str]:
                 if isinstance(issue, dict) and issue.get("severity") in {"error", "critical"}:
                     errors.append(str(issue.get("message", "Unknown error")))
     return errors[:8]
+
+
+def _token_efficiency(root: Path) -> dict[str, Any]:
+    receipt_paths = sorted((root / "receipts").glob("*.json")) if root.exists() else []
+    receipts = [_read_json(path) for path in receipt_paths[-100:]]
+    latest = _read_json(root / "latest.json")
+    cache = latest.get("cache", {})
+    delivery = latest.get("delivery", {})
+    return {
+        "receipts": len(receipt_paths),
+        "total_saved_tokens": sum(
+            int(item.get("saved_tokens", 0))
+            for item in receipts
+            if isinstance(item.get("saved_tokens"), int)
+        ),
+        "latest_saved_tokens": latest.get("saved_tokens", 0),
+        "latest_saved_percent": latest.get("saved_percent", 0),
+        "latest_cache_hit": cache.get("hit", False) if isinstance(cache, dict) else False,
+        "latest_delivery": delivery.get("delivery", "none") if isinstance(delivery, dict) else "none",
+    }

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from ai_dev_tools.models.report import Artifact, Issue, Report
+from ai_dev_tools.token_efficiency import client_profile
 
 CLIENTS = ("codex", "claude", "cursor", "generic")
 
@@ -24,8 +25,7 @@ def install_integrations(project_root: Path, client: str = "all", *, force: bool
         path, content = _configuration(root, name)
         if path.exists() and _already_configured(path, name):
             installed.append(path.relative_to(root).as_posix())
-            continue
-        if path.exists() and not force:
+        elif path.exists() and not force:
             skipped.append(path.relative_to(root).as_posix())
             report.issues.append(
                 Issue(
@@ -34,14 +34,34 @@ def install_integrations(project_root: Path, client: str = "all", *, force: bool
                     code="INTEGRATION_CONFIG_EXISTS",
                 )
             )
-            continue
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists() and force:
-            content = _merge_existing(path, content, name)
-        path.write_text(content, encoding="utf-8")
-        installed.append(path.relative_to(root).as_posix())
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists() and force:
+                content = _merge_existing(path, content, name)
+            path.write_text(content, encoding="utf-8")
+            installed.append(path.relative_to(root).as_posix())
+            report.artifacts.append(
+                Artifact(str(path), "integration-config", f"Ready-to-use {name} MCP configuration")
+            )
+        profile_path = root / ".ai-dev" / "clients" / f"{name}.json"
+        if force or not profile_path.exists():
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            profile_path.write_text(
+                json.dumps(
+                    {"schema_version": "1", "client": name, **client_profile(name)},
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        installed.append(profile_path.relative_to(root).as_posix())
         report.artifacts.append(
-            Artifact(str(path), "integration-config", f"Ready-to-use {name} MCP configuration")
+            Artifact(
+                str(profile_path),
+                "client-profile",
+                f"Token-efficient {name} task preparation defaults",
+            )
         )
     report.status = "partial" if skipped else "success"
     report.summary = {
