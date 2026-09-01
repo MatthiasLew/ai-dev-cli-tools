@@ -68,13 +68,13 @@ def test_daemon_refresh_counts_only_changed_repository_fingerprints(tmp_path: Pa
     unchanged = service._refresh_index(tmp_path, state, previous_fingerprint=initial)
 
     assert unchanged == initial
-    assert state["updates"] == 2
+    assert service._state_counter(state, "updates") == 2
 
     (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
     changed = service._refresh_index(tmp_path, state, previous_fingerprint=unchanged)
 
     assert changed != unchanged
-    assert state["updates"] == 3
+    assert service._state_counter(state, "updates") == 3
 
 
 def test_native_daemon_processes_event_and_stops_over_ipc(tmp_path: Path) -> None:
