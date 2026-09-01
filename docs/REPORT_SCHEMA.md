@@ -72,6 +72,8 @@ observation, `current_retained_reasons`, at most 20 compact `referenced` observa
 `superseded_count`, duplicate suppression, avoided-character metrics, and an expansion command.
 Referenced observations have stable `observation:<hash>` evidence IDs and can be retrieved through
 `ai-dev explain` from the local content-addressed evidence archive.
+Benchmark and corpus evidence remains expandable from JSON artifacts under `.ai/benchmarks`,
+including nested comparison reports, without returning those full artifacts by default.
 
 Successful `feedback` reports also include `delta` with `enabled`, `reused`, `reason_code`, current
 and acknowledged state fingerprints, `chars_avoided`, and the expansion command. A client must pass
