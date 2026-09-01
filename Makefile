@@ -1,4 +1,7 @@
-.PHONY: test lint typecheck coverage build
+.PHONY: check test lint typecheck coverage build
+
+check:
+	python scripts/dev.py --check
 
 test:
 	python -m pytest

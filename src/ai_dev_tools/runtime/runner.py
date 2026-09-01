@@ -132,6 +132,8 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             str(paths["request"]),
             "--token",
             token,
+            "--supervisor-cwd",
+            str(settings.project_root),
             "--cwd",
             str(settings.project_root / plan.cwd),
             "--log",

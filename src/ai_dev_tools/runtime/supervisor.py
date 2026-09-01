@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--request", type=Path, required=True)
     parser.add_argument("--token", required=True)
+    parser.add_argument("--supervisor-cwd", type=Path)
     parser.add_argument("--cwd", type=Path, required=True)
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("command", nargs=argparse.REMAINDER)
@@ -85,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
                 _terminate(child)
                 exit_code = child.poll()
             output_thread.join(timeout=1)
-            _release_working_directory(args.cwd)
+            _release_working_directory(args.supervisor_cwd)
             state["status"] = "stopped" if _STOP.is_set() or args.request.exists() else "exited"
             state["exit_code"] = exit_code
             state["finished_at"] = _now()
@@ -126,16 +127,20 @@ def _copy_output(stream: TextIO, log: TextIO) -> None:
         log.flush()
 
 
-def _release_working_directory(cwd: Path, *, current_directory: Path | None = None) -> None:
+def _release_working_directory(
+    expected: Path | None, *, current_directory: Path | None = None
+) -> None:
     """Release the project directory before publishing the terminal state.
 
     A detached Windows process keeps its current directory open. Pytest and
     other callers may otherwise receive ``WinError 5`` while cleaning up a
     successfully stopped temporary project.
     """
-    resolved = cwd.resolve()
+    if expected is None:
+        return
+    resolved = expected.resolve()
     current = (current_directory or Path.cwd()).resolve()
-    if current != resolved and current not in resolved.parents:
+    if current != resolved:
         return
     anchor = current.anchor or os.sep
     with suppress(OSError):

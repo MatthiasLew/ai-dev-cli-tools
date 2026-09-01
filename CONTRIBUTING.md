@@ -2,7 +2,19 @@
 
 Keep changes small, typed, tested, and conservative. Runtime code should avoid platform-specific assumptions and prefer `pathlib` for paths.
 
-Before pushing a larger stage, run:
+From a fresh checkout, one cross-platform command creates or refreshes the locked `.venv` and runs
+every required gate without loading user-site packages:
+
+```bash
+python scripts/dev.py --check
+```
+
+Use `python scripts/dev.py --diagnose` to classify Python, workspace-temp, Git-metadata, and proxy
+problems without installing anything. `DEV_GIT_METADATA` means the host or sandbox must grant write
+access to `.git`; it is distinct from an existing-ref collision. `DEV_WORKSPACE_TEMP` means process
+tests cannot safely use the project-local temp directory in the current execution environment.
+
+The equivalent individual commands, when already inside the locked `.venv`, are:
 
 ```bash
 python -m pip install -c requirements-dev.lock -e ".[dev]"

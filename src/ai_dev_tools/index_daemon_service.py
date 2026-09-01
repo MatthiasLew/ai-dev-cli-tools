@@ -81,15 +81,19 @@ def serve(root: Path, token: str) -> int:
     except ImportError:
         return 2
 
+    root = root.resolve()
     changes: queue.Queue[str] = queue.Queue()
 
     class Handler(FileSystemEventHandler):
         def on_any_event(self, event: FileSystemEvent) -> None:
             source_path = os.fsdecode(event.src_path)
-            if not IGNORED_EVENT_PARTS.intersection(Path(source_path).parts):
+            try:
+                relative_parts = Path(source_path).resolve().relative_to(root).parts
+            except (OSError, ValueError):
+                return
+            if not IGNORED_EVENT_PARTS.intersection(relative_parts):
                 changes.put(source_path)
 
-    root = root.resolve()
     index = update_repository_index(root)
     current_fingerprint = repository_fingerprint(index.get("entries", []))
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -110,10 +114,12 @@ def serve(root: Path, token: str) -> int:
         "ipc": "tcp-localhost",
         "local_only": True,
     }
-    _write_state(state_path, state)
     observer = Observer()
     observer.schedule(Handler(), str(root), recursive=True)
     observer.start()
+    # A published "running" state is a readiness contract: the native
+    # watcher must already be accepting events before clients can observe it.
+    _write_state(state_path, state)
     stopping = False
     pending_paths: set[str] = set()
     last_event_at = 0.0

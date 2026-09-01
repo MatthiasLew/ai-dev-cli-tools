@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from ai_dev_tools.config import load_settings
 from ai_dev_tools.runners.check import (
     build_validation_plan,
@@ -71,6 +73,8 @@ def test_collect_changed_files_uses_nul_separated_git(monkeypatch, tmp_path: Pat
     from ai_dev_tools.runners import check
 
     def fake_run(command: list[str], root: Path, timeout_seconds: int = 300) -> CommandResult:
+        if command[:3] == ["git", "rev-parse", "--show-toplevel"]:
+            return CommandResult(command, 0, str(tmp_path), "", 0.01)
         if command[:2] == ["git", "diff"]:
             return CommandResult(command, 0, "src/a file.py\0src/renamed.py\0", "", 0.01)
         if command[:3] == ["git", "ls-files", "--others"]:
@@ -79,6 +83,26 @@ def test_collect_changed_files_uses_nul_separated_git(monkeypatch, tmp_path: Pat
 
     monkeypatch.setattr(check, "run_command", fake_run)
     assert collect_changed_files(tmp_path) == ["new file.py", "src/a file.py", "src/renamed.py"]
+
+
+def test_collect_changed_files_does_not_escape_nested_project_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from ai_dev_tools.runners import check
+
+    parent = tmp_path / "parent"
+    nested = parent / "fixture"
+    nested.mkdir(parents=True)
+
+    def fake_run(command: list[str], root: Path, timeout_seconds: int = 300) -> CommandResult:
+        del root, timeout_seconds
+        if command[:3] == ["git", "rev-parse", "--show-toplevel"]:
+            return CommandResult(command, 0, str(parent), "", 0.01)
+        raise AssertionError(f"unexpected command after mismatched Git root: {command}")
+
+    monkeypatch.setattr(check, "run_command", fake_run)
+
+    assert collect_changed_files(nested) == []
 
 
 def test_build_validation_plan_detects_node_and_build(tmp_path: Path) -> None:

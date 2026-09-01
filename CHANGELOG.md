@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a cross-platform developer launcher with locked `.venv` bootstrapping, isolated quality gates,
+  workspace-local temp routing, and machine-readable Git/ACL/proxy diagnostics.
 - Bind managed-process startup and stop acknowledgements to the current control token, tolerate
   slow CI startup handshakes, and release Windows project handles before publishing terminal state.
 - Document the repository's required squash-merge workflow and post-merge `main` verification.
