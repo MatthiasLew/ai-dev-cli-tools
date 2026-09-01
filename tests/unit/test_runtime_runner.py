@@ -100,6 +100,14 @@ def test_supervisor_environment_starts_with_absolute_package_root(
     assert entries[1:] == ["relative", "another"]
 
 
+def test_supervisor_python_command_is_isolated_and_uses_absolute_package_root() -> None:
+    command = runner._supervisor_python_command()
+
+    assert command[:3] == [sys.executable, "-I", "-c"]
+    assert "ai_dev_tools.runtime.supervisor" in command[3]
+    assert repr(str(Path(runner.__file__).resolve().parents[2])) in command[3]
+
+
 def test_run_blocks_without_detected_command(tmp_path: Path) -> None:
     report = run_application(tmp_path, RunOptions())
 
