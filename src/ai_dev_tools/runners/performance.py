@@ -4,6 +4,7 @@ import json
 import math
 import platform
 import re
+import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,10 @@ def record_performance(
     runs = directory / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC)
-    path = runs / f"{_safe_name(operation)}-{timestamp.strftime('%Y%m%dT%H%M%S%fZ')}.json"
+    snapshot_id = secrets.token_hex(8)
+    path = runs / (
+        f"{_safe_name(operation)}-{timestamp.strftime('%Y%m%dT%H%M%S%fZ')}-{snapshot_id}.json"
+    )
     payload: dict[str, Any] = {
         "schema_version": PERFORMANCE_SCHEMA_VERSION,
         "tool_version": __version__,

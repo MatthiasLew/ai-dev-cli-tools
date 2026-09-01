@@ -41,6 +41,9 @@ def test_performance_records_budgets_latest_and_comparison(tmp_path: Path) -> No
         _settings(tmp_path),
     )
 
+    assert first_path != second_path
+    assert json.loads(first_path.read_text(encoding="utf-8"))["total_seconds"] == 0.2
+    assert json.loads(second_path.read_text(encoding="utf-8"))["total_seconds"] == 0.09
     assert first.status == "warning"
     assert first.summary["performance"]["budget_violations"]
     assert "invalid" not in first.summary["performance"]["stages_seconds"]
