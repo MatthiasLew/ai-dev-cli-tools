@@ -123,9 +123,7 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
         token = secrets.token_urlsafe(24)
         _remove_stale_request(paths["request"])
         supervisor_command = [
-            sys.executable,
-            "-m",
-            "ai_dev_tools.runtime.supervisor",
+            *_supervisor_python_command(),
             "--metadata",
             str(paths["metadata"]),
             "--request",
@@ -188,6 +186,9 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             "readiness": readiness,
             "startup_attempts": startup_attempts,
             "startup_log": _tail_log(paths["log"], options.startup_log_lines),
+            "supervisor_startup_log": _tail_log(
+                paths["supervisor_log"], options.startup_log_lines
+            ),
             "stale_metadata_recovered": bool(current) and not _heartbeat_is_fresh(current),
         }
         report.artifacts.extend(
@@ -307,18 +308,33 @@ def _spawn_supervisor(command: list[str], cwd: Path) -> subprocess.Popen[bytes]:
             | getattr(subprocess, "DETACHED_PROCESS", 0)
             | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         )
-    return subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=_supervisor_environment(),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        close_fds=True,
-        shell=False,
-        start_new_session=start_new_session,
-        creationflags=flags,
+    supervisor_log = cwd / ".ai" / "logs" / "supervisor-startup.log"
+    supervisor_log.parent.mkdir(parents=True, exist_ok=True)
+    with supervisor_log.open("ab") as output:
+        return subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=_supervisor_environment(),
+            stdin=subprocess.DEVNULL,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            close_fds=True,
+            shell=False,
+            start_new_session=start_new_session,
+            creationflags=flags,
+        )
+
+
+def _supervisor_python_command() -> list[str]:
+    """Build a CWD- and environment-independent supervisor bootstrap."""
+    package_root = str(Path(__file__).resolve().parents[2])
+    bootstrap = (
+        "import sys; "
+        f"sys.path.insert(0, {package_root!r}); "
+        "from ai_dev_tools.runtime.supervisor import main; "
+        "raise SystemExit(main())"
     )
+    return [sys.executable, "-I", "-c", bootstrap]
 
 
 def _supervisor_environment() -> dict[str, str]:
@@ -403,6 +419,7 @@ def _runtime_paths(root: Path) -> dict[str, Path]:
         "metadata": directory / "process.json",
         "request": directory / "stop.request",
         "log": root / ".ai" / "logs" / "run-latest.log",
+        "supervisor_log": root / ".ai" / "logs" / "supervisor-startup.log",
     }
 
 

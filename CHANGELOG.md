@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Launch detached runtime supervisors through an isolated absolute-path bootstrap and preserve
+  bounded supervisor startup diagnostics instead of discarding early process failures.
 - Add a cross-platform developer launcher with locked `.venv` bootstrapping, isolated quality gates,
   workspace-local temp routing, and machine-readable Git/ACL/proxy diagnostics.
 - Give detached runtime supervisors an absolute package import path so changing their working
