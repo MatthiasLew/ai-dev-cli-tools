@@ -48,6 +48,7 @@ and longer-term direction without presenting proposed interfaces as available co
 | 26 | CI-native agent evidence | Implemented | Reports convert deterministically to SARIF and the pinned GitHub Actions workflow publishes a compact plan summary plus code-scanning evidence. |
 | 27 | Adaptive context engine | Implemented | Task intent and local scope signals derive conservative token ceilings, explicit limits win, task-scoped incremental memory prevents cross-task omission, and the release corpus requires a measured token reduction without recall loss. |
 | 28 | Session delta feedback | Implemented | A client-acknowledged identical success is replaced by a fingerprinted validation/context receipt with exact expansion handles; missing acknowledgement, changed content, semantic validation changes, failures, warnings, and explicit opt-out preserve the full live payload. |
+| 29 | Evidence-based token optimizer | Implemented | Bounded p50/p95 attribution proposes token ceilings and cheaper models only after local quality and cost evidence meets explicit thresholds. |
 
 ## Implemented supporting capabilities
 

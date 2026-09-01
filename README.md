@@ -87,6 +87,7 @@ ai-dev integrations install all
 ai-dev dashboard serve --port 8765
 ai-dev telemetry import response.json --client codex --format openai
 ai-dev telemetry status --json
+ai-dev telemetry optimize --min-sessions 5 --json
 ai-dev telemetry gate --json
 ai-dev telemetry pricing import pricing.json --provider openai --version 2026-09-01
 ai-dev telemetry pricing activate openai 2026-09-01
@@ -200,6 +201,14 @@ regressions. `ai-dev telemetry gate` returns a failing report for violations, wh
 `record_usage` immediately returns the active alerts and read-only `usage_status` provides a
 compact pre-flight check.
 
+`telemetry optimize` calculates deterministic p50/p95 usage, cache share, cost, and quality
+attribution by client, model, phase, tool, and task kind. It recommends rolling token ceilings
+with an explicit safety margin. Cheaper-model recommendations appear only when both models have
+enough local quality samples, the candidate meets the configured accuracy target, complete
+same-currency cost evidence proves a saving, and the allowed accuracy drop is respected. It never
+switches a model or overwrites a policy. MCP clients can call the read-only `optimize_usage` tool
+for the same report.
+
 Incremental mode stores the latest schema-versioned manifest plus up to 50 content-addressed
 historical manifests under `.ai/cache/`, and reports changed versus reused files. Pass
 `--since <context-id>` to compare against an explicitly retained context. Default limits are
@@ -305,6 +314,7 @@ git diff --check
 | dashboard status/serve | implemented, loopback-only |
 | telemetry import/status and MCP record_usage | implemented, provider-reported usage only |
 | telemetry gate/pricing snapshots and MCP usage_status | implemented, local and fail-closed |
+| p50/p95 token optimizer and accuracy-first model recommendations | implemented, read-only |
 | performance latest/compare | implemented |
 | capabilities | implemented |
 | git status | implemented |

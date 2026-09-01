@@ -29,6 +29,7 @@ card('Tokens saved',x.token_efficiency.total_saved_tokens??0,`${x.token_efficien
 card('Provider usage',x.provider_usage.input_tokens??0,`${x.provider_usage.sessions??0} sessions · ${x.provider_usage.cached_input_tokens??0} cache read · ${x.provider_usage.cache_write_input_tokens??0} cache write`,'ok')+
 card('Model output',x.provider_usage.output_tokens??0,`reasoning: ${x.provider_usage.reasoning_tokens??0}`)+
 card('Usage policy',x.provider_usage.policy?.passed===false?'alert':'ok',`${x.provider_usage.policy?.violations?.length??0} violations · ${x.provider_usage.policy?.alerts?.length??0} alerts`,x.provider_usage.policy?.passed===false?'warn':'ok')+
+card('Token optimizer',x.provider_usage.optimizer?.budget_recommendations??0,`${x.provider_usage.optimizer?.model_recommendations??0} model routes · ${x.provider_usage.optimizer?.gaps??0} evidence gaps`,x.provider_usage.optimizer?.gaps?'warn':'ok')+
 card('Context delivery',x.token_efficiency.latest_delivery??'none',`cache hit: ${x.token_efficiency.latest_cache_hit?'yes':'no'}`)+
 card('Cache',x.cache.files,`${x.cache.bytes} bytes`)+card('Runtime',x.runtime.status??'idle',`pid: ${x.runtime.pid??'-'}`)+
 card('Last errors',x.errors.length,x.errors.join('\n')||'none',x.errors.length?'warn':'ok');}refresh();setInterval(refresh,3000)</script>
@@ -93,11 +94,13 @@ def collect_status(project_root: Path) -> dict[str, Any]:
     errors = _recent_errors(root / ".ai")
     token_efficiency = _token_efficiency(root / ".ai" / "token-efficiency")
     from ai_dev_tools.telemetry import aggregate_usage
+    from ai_dev_tools.telemetry_optimizer import compact_optimizer_status
     from ai_dev_tools.telemetry_policy import optional_policy_status
 
     provider_usage = {
         **aggregate_usage(root),
         "policy": optional_policy_status(root),
+        "optimizer": compact_optimizer_status(root),
     }
     return {
         "project_root": str(root),

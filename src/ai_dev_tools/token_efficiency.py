@@ -18,6 +18,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "content_default": "references",
         "telemetry_tool": "record_usage",
         "telemetry_status_tool": "usage_status",
+        "telemetry_optimizer_tool": "optimize_usage",
     },
     "claude": {
         "context_profile": "minimal",
@@ -29,6 +30,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "content_default": "references",
         "telemetry_tool": "record_usage",
         "telemetry_status_tool": "usage_status",
+        "telemetry_optimizer_tool": "optimize_usage",
     },
     "cursor": {
         "context_profile": "minimal",
@@ -40,6 +42,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "content_default": "references",
         "telemetry_tool": "record_usage",
         "telemetry_status_tool": "usage_status",
+        "telemetry_optimizer_tool": "optimize_usage",
     },
     "generic": {
         "context_profile": "minimal",
@@ -51,6 +54,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "content_default": "references",
         "telemetry_tool": "record_usage",
         "telemetry_status_tool": "usage_status",
+        "telemetry_optimizer_tool": "optimize_usage",
     },
 }
 

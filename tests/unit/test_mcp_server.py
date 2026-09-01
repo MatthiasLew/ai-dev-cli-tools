@@ -65,6 +65,7 @@ def test_initialize_advertises_tools_and_bounded_instructions(tmp_path: Path) ->
         "coordinate_agents",
         "explain_evidence",
         "feedback",
+        "optimize_usage",
         "plan_work",
         "prepare_task",
         "project_status",
@@ -241,6 +242,34 @@ def test_usage_status_is_compact_and_read_only(tmp_path: Path) -> None:
     assert listed is not None
     descriptor = next(
         tool for tool in listed["result"]["tools"] if tool["name"] == "usage_status"
+    )
+    assert descriptor["annotations"]["readOnlyHint"] is True
+
+
+def test_optimize_usage_is_read_only_and_uses_bounded_evidence(tmp_path: Path) -> None:
+    server = LocalMcpServer(tmp_path)
+    for index in range(2):
+        result = _call(server, "record_usage", {
+            "client": "codex",
+            "input_tokens": 20 + index,
+            "output_tokens": 4,
+            "request_id": f"optimizer-{index}",
+            "phase": "review",
+            "tool_name": "build_context",
+            "task_kind": "review",
+            "quality_passed": True,
+        })
+        assert result["structuredContent"]["summary"]["phase"] == "review"
+
+    optimized = _call(server, "optimize_usage", {"min_sessions": 2})
+
+    assert optimized["isError"] is False
+    summary = optimized["structuredContent"]["summary"]
+    assert summary["budget_recommendations"][0]["automatic_apply"] is False
+    listed = server.handle(_request("tools/list"))
+    assert listed is not None
+    descriptor = next(
+        tool for tool in listed["result"]["tools"] if tool["name"] == "optimize_usage"
     )
     assert descriptor["annotations"]["readOnlyHint"] is True
 

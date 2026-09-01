@@ -110,14 +110,38 @@ def test_telemetry_import_and_status_cli(tmp_path: Path, capsys) -> None:  # typ
         "input_tokens": 30, "cached_input_tokens": 10, "output_tokens": 4,
     }}), encoding="utf-8")
 
-    code = main(["--project", str(tmp_path), "--json", "telemetry", "import",
-                 str(source), "--client", "cursor", "--format", "generic"])
+    code = main([
+        "--project", str(tmp_path), "--json", "telemetry", "import", str(source),
+        "--client", "cursor", "--format", "generic", "--phase", "review",
+        "--tool-name", "build_context", "--task-kind", "review", "--quality-passed",
+    ])
     assert code == 0
-    assert json.loads(capsys.readouterr().out)["summary"]["input_tokens"] == 30
+    imported = json.loads(capsys.readouterr().out)["summary"]
+    assert imported["input_tokens"] == 30
+    assert imported["phase"] == "review"
+    assert imported["quality_passed"] is True
+
+    second = tmp_path / "usage-second.json"
+    second.write_text(json.dumps({"usage": {
+        "input_tokens": 40, "cached_input_tokens": 10, "output_tokens": 5,
+    }}), encoding="utf-8")
+    assert main([
+        "--project", str(tmp_path), "--json", "telemetry", "import", str(second),
+        "--client", "cursor", "--format", "generic", "--task-kind", "review",
+    ]) == 0
+    capsys.readouterr()
 
     code = main(["--project", str(tmp_path), "--json", "telemetry", "status"])
     assert code == 0
-    assert json.loads(capsys.readouterr().out)["summary"]["sessions"] == 1
+    assert json.loads(capsys.readouterr().out)["summary"]["sessions"] == 2
+
+    code = main([
+        "--project", str(tmp_path), "--json", "telemetry", "optimize",
+        "--min-sessions", "2",
+    ])
+    assert code == 0
+    optimized = json.loads(capsys.readouterr().out)["summary"]
+    assert optimized["budget_recommendations"][0]["automatic_apply"] is False
 
 
 def test_telemetry_pricing_and_gate_cli(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]

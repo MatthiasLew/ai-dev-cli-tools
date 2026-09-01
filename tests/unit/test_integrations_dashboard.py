@@ -26,6 +26,7 @@ def test_ready_client_configs_are_generated_without_overwriting(tmp_path: Path) 
     assert profile["delta"] is True
     assert profile["telemetry_tool"] == "record_usage"
     assert profile["telemetry_status_tool"] == "usage_status"
+    assert profile["telemetry_optimizer_tool"] == "optimize_usage"
 
     (tmp_path / ".mcp.json").write_text('{"keep": true}\n', encoding="utf-8")
     second = install_integrations(tmp_path, "claude")
@@ -71,6 +72,8 @@ def test_dashboard_collects_local_index_cache_and_errors(tmp_path: Path) -> None
     assert status["token_efficiency"]["latest_delivery"] == "references"
     assert status["provider_usage"]["sessions"] == 0
     assert status["provider_usage"]["policy"]["configured"] is False
+    assert status["provider_usage"]["optimizer"]["budget_recommendations"] == 0
+    assert status["provider_usage"]["optimizer"]["gaps"] == 2
     assert dashboard_status(tmp_path).summary["semantic"]["symbols"] == 1
 
 

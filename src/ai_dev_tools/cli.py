@@ -288,7 +288,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--format", choices=["auto", "openai", "anthropic", "generic"], default="auto"
     )
     telemetry_import.add_argument("--pricing", type=Path)
+    telemetry_import.add_argument("--phase", default="")
+    telemetry_import.add_argument("--tool-name", default="")
+    telemetry_import.add_argument("--task-kind", default="")
+    telemetry_quality = telemetry_import.add_mutually_exclusive_group()
+    telemetry_quality.add_argument(
+        "--quality-passed", action="store_const", const=True, dest="quality_passed"
+    )
+    telemetry_quality.add_argument(
+        "--quality-failed", action="store_const", const=False, dest="quality_passed"
+    )
+    telemetry_import.set_defaults(quality_passed=None)
     telemetry_sub.add_parser("status")
+    telemetry_optimize = telemetry_sub.add_parser("optimize")
+    telemetry_optimize.add_argument("--min-sessions", type=int, default=5)
+    telemetry_optimize.add_argument("--percentile", type=float, default=95.0)
+    telemetry_optimize.add_argument("--safety-margin-percent", type=float, default=20.0)
+    telemetry_optimize.add_argument("--accuracy-target-percent", type=float, default=95.0)
+    telemetry_optimize.add_argument("--max-accuracy-drop-percent", type=float, default=0.0)
     telemetry_gate = telemetry_sub.add_parser("gate")
     telemetry_gate.add_argument("--policy", type=Path)
     telemetry_pricing = telemetry_sub.add_parser("pricing")
@@ -703,6 +720,17 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
 
         if args.telemetry_command == "status":
             return telemetry_status(project_root)
+        if args.telemetry_command == "optimize":
+            from ai_dev_tools.telemetry_optimizer import optimize_usage
+
+            return optimize_usage(
+                project_root,
+                min_sessions=args.min_sessions,
+                percentile=args.percentile,
+                safety_margin_percent=args.safety_margin_percent,
+                accuracy_target_percent=args.accuracy_target_percent,
+                max_accuracy_drop_percent=args.max_accuracy_drop_percent,
+            )
         if args.telemetry_command == "gate":
             return telemetry_gate(project_root, args.policy)
         if args.telemetry_command == "pricing":
@@ -724,6 +752,10 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             client=args.client,
             format_name=args.format,
             pricing_path=args.pricing,
+            phase=args.phase,
+            tool_name=args.tool_name,
+            task_kind=args.task_kind,
+            quality_passed=args.quality_passed,
         )
     if command == "performance":
         from ai_dev_tools.runners.performance import compare_performance, run_performance_latest
@@ -826,6 +858,7 @@ def _capabilities_report(project_root: Path) -> Report:
         "dashboard serve",
         "telemetry import",
         "telemetry status",
+        "telemetry optimize",
         "telemetry gate",
         "telemetry pricing import",
         "telemetry pricing activate",

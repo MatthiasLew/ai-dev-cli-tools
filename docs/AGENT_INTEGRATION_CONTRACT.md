@@ -30,12 +30,17 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 9. Before handoff, run `ai-dev finish --json` and a complete validation pass.
 10. When the provider exposes numeric usage, call MCP `record_usage` once after the response.
     Send total input, cache read/write, output and reasoning counts, client, and optional
-    model/request ID; never send prompt or response
-    text. Treat `measurement=provider_reported` as the provenance of counts and any
+    model/request ID and optional bounded phase/tool/task-kind labels plus a boolean quality
+    outcome; never send prompt or response text. Treat `measurement=provider_reported` as the
+    provenance of counts and any
     `cost.kind=local_pricing_estimate` as an estimate, not billed cost.
 11. Read `summary.policy` returned by `record_usage`. Stop additional expensive work on active
     violations unless the user explicitly changes the budget. Use read-only `usage_status` before
     a costly phase and `ai-dev telemetry gate --json` in deterministic CI/release gates.
+12. Call read-only `optimize_usage` after enough representative sessions. Treat budget output as
+    a proposal, never permission to overwrite policy. Never switch to a cheaper model unless the
+    recommendation includes sufficient quality samples, meets the accuracy target, proves a
+    same-currency saving, and a human or owning agent approves the change.
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
 metrics.
@@ -59,6 +64,8 @@ text and machine-readable `structuredContent`; consumers should prefer the struc
   separate measurements.
 - Treat `TELEMETRY_REGRESSION_INSUFFICIENT_DATA` as informational. Treat budget, cost-data, and
   regression violations as unresolved until the policy or measured workload changes.
+- Treat every `MODEL_ROUTING_*` gap as evidence that routing must remain unchanged. A
+  `MODEL_ROUTING_RECOMMENDATION` is advisory and never grants permission to mutate client config.
 - Respect MCP annotations and the configured client approval policy.
 
 For repeated `build_context` calls, return the prior `summary.delta.state_fingerprint` as

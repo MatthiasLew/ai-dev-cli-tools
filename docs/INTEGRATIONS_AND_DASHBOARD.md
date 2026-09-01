@@ -32,7 +32,10 @@ The JSON endpoint is `GET /api/status`; no mutation endpoint exists.
 Clients with MCP support should call `record_usage` after a completed model response. The tool
 accepts `client`, total `input_tokens`, `cached_input_tokens` (cache reads),
 `cache_write_input_tokens`, `output_tokens`, `reasoning_tokens`, and optional `model` and
-`request_id`. It deliberately cannot accept prompt or response bodies.
+`request_id`. To enable attribution without recording content, clients may also provide bounded
+`phase`, `tool_name`, and `task_kind` labels plus a boolean `quality_passed` result from an eval,
+test gate, or other application-owned quality check. It deliberately cannot accept prompt or
+response bodies.
 
 Existing JSON or JSONL can be imported from inside the project:
 
@@ -132,3 +135,26 @@ immediately preceding baseline window. Too little history produces an informatio
 cost regression fails closed when any evaluated session lacks a matching currency estimate.
 `record_usage` and `telemetry import` return `partial` with `TELEMETRY_ALERT` after storing valid
 usage that breaches policy, so the next AI step can stop without losing the evidence.
+
+## Token optimizer
+
+```powershell
+ai-dev telemetry optimize --min-sessions 5 --percentile 95 `
+  --safety-margin-percent 20 --accuracy-target-percent 95 --json
+```
+
+The report attributes token usage, cache share, local estimated cost, and quality outcomes by
+client, model, phase, tool, and task kind. Budget suggestions use the nearest-rank percentile of
+per-session total tokens plus the requested safety margin. Nothing is written back to the budget
+policy.
+
+Model routing is deliberately accuracy-first. The most-used model for a task kind is treated as
+the incumbent. A cheaper candidate is suggested only when both models have the minimum number of
+quality-labelled sessions, the incumbent and candidate meet the target, the allowed accuracy drop
+is respected, and every compared sample has a same-currency local cost estimate. Otherwise the
+report returns a stable `MODEL_ROUTING_*` evidence-gap code. This follows the official
+[OpenAI model selection guidance](https://developers.openai.com/api/docs/guides/model-selection):
+establish the accuracy target first, then optimize cost and latency while maintaining it.
+
+Neither CLI nor MCP automatically changes the selected model. Every routing recommendation
+contains `requires_human_approval: true` and `automatic_switch: false`.
