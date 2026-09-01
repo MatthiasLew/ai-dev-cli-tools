@@ -28,6 +28,11 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
 7. Use failure signatures to deduplicate retries and optionally compare a named local baseline.
 8. Treat flaky passes, low confidence, and recall regressions as unresolved evidence.
 9. Before handoff, run `ai-dev finish --json` and a complete validation pass.
+10. When the provider exposes numeric usage, call MCP `record_usage` once after the response.
+    Send total input, cache read/write, output and reasoning counts, client, and optional
+    model/request ID; never send prompt or response
+    text. Treat `measurement=provider_reported` as the provenance of counts and any
+    `cost.kind=local_pricing_estimate` as an estimate, not billed cost.
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
 metrics.
@@ -46,6 +51,9 @@ text and machine-readable `structuredContent`; consumers should prefer the struc
 - Expand one stable ID with `explain_evidence` instead of requesting full logs.
 - Treat tool names and required fields as compatibility contracts.
 - Ignore new optional fields and new tools.
+- Use `record_usage` only with usage returned by the provider. Do not substitute tokenizer or
+  character estimates, because estimated context savings and provider-reported consumption are
+  separate measurements.
 - Respect MCP annotations and the configured client approval policy.
 
 For repeated `build_context` calls, return the prior `summary.delta.state_fingerprint` as

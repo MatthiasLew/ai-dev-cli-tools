@@ -16,6 +16,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "tokenizer": "estimate",
         "delta": True,
         "content_default": "references",
+        "telemetry_tool": "record_usage",
     },
     "claude": {
         "context_profile": "minimal",
@@ -25,6 +26,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "tokenizer": "estimate",
         "delta": True,
         "content_default": "references",
+        "telemetry_tool": "record_usage",
     },
     "cursor": {
         "context_profile": "minimal",
@@ -34,6 +36,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "tokenizer": "estimate",
         "delta": True,
         "content_default": "references",
+        "telemetry_tool": "record_usage",
     },
     "generic": {
         "context_profile": "minimal",
@@ -43,6 +46,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "tokenizer": "estimate",
         "delta": True,
         "content_default": "references",
+        "telemetry_tool": "record_usage",
     },
 }
 

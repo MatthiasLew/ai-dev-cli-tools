@@ -26,6 +26,8 @@ root.textContent=x.project_root;grid.innerHTML=card('Repository index',x.index.f
 card('Semantic symbols',x.semantic.symbols??0,`backend: ${x.semantic.backend??'not built'}`)+
 card('Daemon',x.daemon.status??'stopped',`events: ${x.daemon.events??0} · updates: ${x.daemon.updates??0}`,x.daemon.status==='running'?'ok':'warn')+
 card('Tokens saved',x.token_efficiency.total_saved_tokens??0,`${x.token_efficiency.receipts??0} receipts · latest ${x.token_efficiency.latest_saved_percent??0}%`,'ok')+
+card('Provider usage',x.provider_usage.input_tokens??0,`${x.provider_usage.sessions??0} sessions · ${x.provider_usage.cached_input_tokens??0} cache read · ${x.provider_usage.cache_write_input_tokens??0} cache write`,'ok')+
+card('Model output',x.provider_usage.output_tokens??0,`reasoning: ${x.provider_usage.reasoning_tokens??0}`)+
 card('Context delivery',x.token_efficiency.latest_delivery??'none',`cache hit: ${x.token_efficiency.latest_cache_hit?'yes':'no'}`)+
 card('Cache',x.cache.files,`${x.cache.bytes} bytes`)+card('Runtime',x.runtime.status??'idle',`pid: ${x.runtime.pid??'-'}`)+
 card('Last errors',x.errors.length,x.errors.join('\n')||'none',x.errors.length?'warn':'ok');}refresh();setInterval(refresh,3000)</script>
@@ -89,6 +91,7 @@ def collect_status(project_root: Path) -> dict[str, Any]:
     )
     errors = _recent_errors(root / ".ai")
     token_efficiency = _token_efficiency(root / ".ai" / "token-efficiency")
+    from ai_dev_tools.telemetry import aggregate_usage
     return {
         "project_root": str(root),
         "index": {
@@ -106,6 +109,7 @@ def collect_status(project_root: Path) -> dict[str, Any]:
         },
         "runtime": {key: runtime.get(key) for key in ("status", "pid")},
         "token_efficiency": token_efficiency,
+        "provider_usage": aggregate_usage(root),
         "errors": errors,
     }
 

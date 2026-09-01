@@ -178,6 +178,45 @@ class LocalMcpServer:
                 handler=self._prepare_task,
             ),
             ToolDefinition(
+                name="record_usage",
+                title="Record provider-reported token usage",
+                description=(
+                    "Store numeric provider usage locally after a model response. Never include "
+                    "prompt or response content; model and request ID are optional."
+                ),
+                input_schema=_object_schema(
+                    {
+                        "client": {
+                            "type": "string",
+                            "enum": ["codex", "claude", "cursor", "generic"],
+                        },
+                        "input_tokens": {"type": "integer", "minimum": 0},
+                        "cached_input_tokens": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0,
+                        },
+                        "cache_write_input_tokens": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0,
+                        },
+                        "output_tokens": {"type": "integer", "minimum": 0},
+                        "reasoning_tokens": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 0,
+                        },
+                        "model": {"type": "string", "maxLength": 200},
+                        "request_id": {"type": "string", "maxLength": 200},
+                    },
+                    required=["client", "input_tokens", "output_tokens"],
+                ),
+                output_schema=common_output,
+                annotations=_annotations(read_only=False),
+                handler=self._record_usage,
+            ),
+            ToolDefinition(
                 name="plan_work",
                 title="Plan bounded development work",
                 description=(
@@ -530,6 +569,56 @@ class LocalMcpServer:
                 ),
             )
         )
+
+    def _record_usage(self, arguments: JsonObject) -> JsonObject:
+        _validate_keys(
+            arguments,
+            {
+                "client",
+                "input_tokens",
+                "cached_input_tokens",
+                "cache_write_input_tokens",
+                "output_tokens",
+                "reasoning_tokens",
+                "model",
+                "request_id",
+            },
+        )
+        client = _choice(
+            arguments, "client", "generic", {"codex", "claude", "cursor", "generic"}
+        )
+        _require_project(self.project_root)
+        from ai_dev_tools.telemetry import MAX_TOKENS, record_usage
+
+        stored = record_usage(
+            self.project_root,
+            client=client,
+            input_tokens=_integer(arguments, "input_tokens", 0, 0, MAX_TOKENS),
+            cached_input_tokens=_integer(
+                arguments, "cached_input_tokens", 0, 0, MAX_TOKENS
+            ),
+            cache_write_input_tokens=_integer(
+                arguments, "cache_write_input_tokens", 0, 0, MAX_TOKENS
+            ),
+            output_tokens=_integer(arguments, "output_tokens", 0, 0, MAX_TOKENS),
+            reasoning_tokens=_integer(arguments, "reasoning_tokens", 0, 0, MAX_TOKENS),
+            model=_optional_string(arguments, "model", 200),
+            request_id=_optional_string(arguments, "request_id", 200),
+        )
+        path = Path(stored.pop("path"))
+        return {
+            "command": "telemetry record",
+            "status": "success",
+            "summary": stored,
+            "issues": [],
+            "artifacts": [
+                {
+                    "path": str(path),
+                    "kind": "telemetry",
+                    "description": "Normalized provider-reported usage",
+                }
+            ],
+        }
 
     def _context(self, arguments: JsonObject) -> JsonObject:
         allowed = {

@@ -277,6 +277,19 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard_serve.add_argument("--host", default="127.0.0.1")
     dashboard_serve.add_argument("--port", type=int, default=8765)
 
+    telemetry = sub.add_parser("telemetry")
+    telemetry_sub = telemetry.add_subparsers(dest="telemetry_command", required=True)
+    telemetry_import = telemetry_sub.add_parser("import")
+    telemetry_import.add_argument("input", type=Path)
+    telemetry_import.add_argument(
+        "--client", choices=["codex", "claude", "cursor", "generic"], required=True
+    )
+    telemetry_import.add_argument(
+        "--format", choices=["auto", "openai", "anthropic", "generic"], default="auto"
+    )
+    telemetry_import.add_argument("--pricing", type=Path)
+    telemetry_sub.add_parser("status")
+
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
     plan = sub.add_parser("plan")
@@ -661,6 +674,18 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         from ai_dev_tools.dashboard import dashboard_status
 
         return dashboard_status(project_root)
+    if command == "telemetry":
+        from ai_dev_tools.telemetry import import_usage, telemetry_status
+
+        if args.telemetry_command == "status":
+            return telemetry_status(project_root)
+        return import_usage(
+            project_root,
+            args.input,
+            client=args.client,
+            format_name=args.format,
+            pricing_path=args.pricing,
+        )
     if command == "performance":
         from ai_dev_tools.runners.performance import compare_performance, run_performance_latest
 
@@ -760,6 +785,8 @@ def _capabilities_report(project_root: Path) -> Report:
         "integrations install",
         "dashboard status",
         "dashboard serve",
+        "telemetry import",
+        "telemetry status",
         "performance latest",
         "performance compare",
         "explain",

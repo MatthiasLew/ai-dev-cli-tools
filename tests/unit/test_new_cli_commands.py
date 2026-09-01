@@ -102,3 +102,19 @@ def test_task_cli_returns_reference_first_receipt(tmp_path: Path, capsys) -> Non
     assert payload["summary"]["client"] == "codex"
     assert payload["summary"]["constraints"]["content_default"] == "references"
     assert payload["summary"]["token_savings"]["delivery"]["delivery"] == "references"
+
+
+def test_telemetry_import_and_status_cli(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    source = tmp_path / "usage.json"
+    source.write_text(json.dumps({"usage": {
+        "input_tokens": 30, "cached_input_tokens": 10, "output_tokens": 4,
+    }}), encoding="utf-8")
+
+    code = main(["--project", str(tmp_path), "--json", "telemetry", "import",
+                 str(source), "--client", "cursor", "--format", "generic"])
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["summary"]["input_tokens"] == 30
+
+    code = main(["--project", str(tmp_path), "--json", "telemetry", "status"])
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["summary"]["sessions"] == 1
