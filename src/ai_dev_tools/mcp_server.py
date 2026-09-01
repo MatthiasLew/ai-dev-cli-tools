@@ -14,7 +14,8 @@ MCP_PROTOCOL_VERSION = "2025-06-18"
 SERVER_NAME = "ai-dev-cli-tools"
 SERVER_INSTRUCTIONS = (
     "Use project_status first. Prefer preview-only context and check calls until the user asks "
-    "to execute validation. Expand evidence by stable ID instead of requesting broad output. "
+    "to execute validation. Acknowledge a state fingerprint only after consuming its response. "
+    "Expand evidence by stable ID instead of requesting broad output. "
     "All tools are local to the configured project root; no repository data is transmitted."
 )
 
@@ -234,6 +235,11 @@ class LocalMcpServer:
                         "staged_only": {"type": "boolean", "default": False},
                         "incremental": {"type": "boolean", "default": True},
                         "adaptive": {"type": "boolean", "default": True},
+                        "delta": {"type": "boolean", "default": True},
+                        "acknowledged_state": {
+                            "type": "string",
+                            "maxLength": 64,
+                        },
                         "tokenizer": {
                             "type": "string",
                             "enum": ["estimate", "cl100k_base", "o200k_base"],
@@ -449,6 +455,8 @@ class LocalMcpServer:
             "staged_only",
             "incremental",
             "adaptive",
+            "delta",
+            "acknowledged_state",
             "retrieval",
             "tokenizer",
             "token_budgets",
@@ -469,8 +477,12 @@ class LocalMcpServer:
         write_artifacts = _boolean(arguments, "write_artifacts", False)
         _require_project(self.project_root)
         from ai_dev_tools.context import ContextOptions, build_context
+        from ai_dev_tools.context.mcp_delta import (
+            apply_context_delta,
+            context_state_fingerprint,
+        )
 
-        return _finish_report(
+        payload = _finish_report(
             build_context(
                 self.project_root,
                 ContextOptions(
@@ -514,6 +526,23 @@ class LocalMcpServer:
                     explain=not write_artifacts,
                 ),
             )
+        )
+        summary = payload.get("summary")
+        summary_dict = summary if isinstance(summary, dict) else {}
+        eligible = bool(
+            payload.get("status") == "success"
+            and not payload.get("issues")
+            and not summary_dict.get("latest_errors")
+            and not summary_dict.get("secret_findings")
+        )
+        return apply_context_delta(
+            payload,
+            acknowledged_fingerprint=(
+                _string(arguments, "acknowledged_state", "", 64) or None
+            ),
+            current_fingerprint=context_state_fingerprint(self.project_root, arguments),
+            enabled=_boolean(arguments, "delta", True),
+            eligible=eligible,
         )
 
     def _checks(self, arguments: JsonObject) -> JsonObject:

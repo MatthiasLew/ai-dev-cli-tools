@@ -135,6 +135,11 @@ maps, history, cached input, and output.
 
 `context build` reports include `technologies`, `git_state`, `changed_files`, `changed_symbols`, `symbol_diff_summary`, `related_tests`, `validation_plan`, `selected_files`, `rejected_files`, `diffs`, `latest_errors`, `secret_findings`, `recent_commits`, `retrieval`, `adaptive_context`, and `budget` under `summary`. `adaptive_context` records whether adaptation is enabled, the classified intent and scope, reason codes, non-reversible task fingerprint, input signals, explicit overrides, and resolved limits. Incremental reports include `incremental.context_id`, `base_context_id`, latest and historical manifest paths, and changed/reused counts. Reports created with `--compare` include `baseline_comparison` with readiness, new/resolved failures, status regressions, and a stable reason code. The `retrieval` block records the requested mode, retrieve/abstain decision, confidence, reason code, signals, focused roots, bounded omitted paths, conservative fallback, expansion command, and expected/selected/missed related tests as a false-negative proxy. Each changed symbol includes its path, name, kind, change type, current line range, added/deleted line counts, bounded signature, signature-change flag, risk, related tests, confidence, and reason code.
 
+MCP `build_context` responses add `summary.delta`. Its fingerprint is a non-reversible binding of
+repository contents and request parameters. `reused=true` replaces acknowledged safe, successful,
+unchanged context with `context_receipt`; `chars_avoided` reports net response reduction and
+`live_context_chars_avoided` reports removed live-context size before receipt overhead.
+
 The optional `character_budget` block records original/final summary size, avoided characters,
 omitted file/diff content, metadata compaction, target status, and the evidence expansion command.
 Entries omitted by the global budget retain metadata and use `GLOBAL_CONTEXT_BUDGET`.

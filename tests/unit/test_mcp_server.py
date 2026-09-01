@@ -187,6 +187,54 @@ def test_context_tool_is_preview_only_and_bounded_by_default(tmp_path: Path) -> 
     assert structured["artifacts"] == []
     assert not (tmp_path / ".ai" / "context" / "context-latest.json").exists()
 
+    delta = structured["summary"]["delta"]
+    assert delta["reason_code"] == "ACKNOWLEDGEMENT_REQUIRED"
+    repeated = _call(
+        server,
+        "build_context",
+        {
+            "task": "inspect project docs",
+            "max_chars": 2000,
+            "max_file_chars": 500,
+            "acknowledged_state": delta["state_fingerprint"],
+        },
+    )
+    repeated_summary = repeated["structuredContent"]["summary"]
+    assert repeated_summary["context_receipt"]["unchanged"] is True
+    assert repeated_summary["delta"]["reused"] is True
+    assert repeated_summary["delta"]["chars_avoided"] > 0
+
+    (tmp_path / "README.md").write_text("changed docs\n", encoding="utf-8")
+    changed = _call(
+        server,
+        "build_context",
+        {
+            "task": "inspect project docs",
+            "max_chars": 2000,
+            "max_file_chars": 500,
+            "acknowledged_state": delta["state_fingerprint"],
+        },
+    )
+    changed_summary = changed["structuredContent"]["summary"]
+    assert changed_summary["delta"]["reused"] is False
+    assert changed_summary["delta"]["reason_code"] == "ACKNOWLEDGED_CONTEXT_CHANGED"
+    assert "selected_files" in changed_summary
+
+    forced = _call(
+        server,
+        "build_context",
+        {
+            "task": "inspect project docs",
+            "max_chars": 2000,
+            "max_file_chars": 500,
+            "acknowledged_state": changed_summary["delta"]["state_fingerprint"],
+            "delta": False,
+        },
+    )
+    forced_summary = forced["structuredContent"]["summary"]
+    assert forced_summary["delta"]["reason_code"] == "CONTEXT_DELTA_DISABLED"
+    assert "selected_files" in forced_summary
+
 
 def test_tool_arguments_are_strict_and_bounded(tmp_path: Path) -> None:
     server = LocalMcpServer(tmp_path)

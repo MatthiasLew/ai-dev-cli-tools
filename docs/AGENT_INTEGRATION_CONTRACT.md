@@ -43,6 +43,11 @@ text and machine-readable `structuredContent`; consumers should prefer the struc
 - Treat tool names and required fields as compatibility contracts.
 - Ignore new optional fields and new tools.
 - Respect MCP annotations and the configured client approval policy.
+
+For repeated `build_context` calls, return the prior `summary.delta.state_fingerprint` as
+`acknowledged_state`. A receipt is emitted only when repository contents, request parameters, and
+the safe successful state still match. Changed, partial, warning, error, and secret-bearing states
+return full live context. Set `delta=false` whenever a complete refresh is required.
 - Keep infrastructure retry separate from flaky-test retry; neither may retry code failures.
 
 See `MCP_SERVER.md` for setup and complete safety boundaries.
