@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make index-daemon state writes resilient to transient Windows sharing violations and count
+  repository updates only when the indexed content fingerprint actually changes.
 - Add explicit MCP `build_context` acknowledgements: clients can return `acknowledged_state` to
   receive a compact unchanged-context receipt, while changed, partial, or unsafe states retain
   the full live payload. `delta=false` always requests full context.
