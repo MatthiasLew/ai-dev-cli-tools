@@ -58,6 +58,8 @@ def test_changed_mode_reports_broad_fallback(monkeypatch, tmp_path: Path) -> Non
             return CommandResult(command, 0, "src/app.py\0", "", 0.01)
         if command[:3] == ["git", "ls-files", "--others"]:
             return CommandResult(command, 0, "tests/test_app.py\0", "", 0.01)
+        if command[:3] == ["git", "rev-parse", "--show-toplevel"]:
+            return CommandResult(command, 0, str(tmp_path), "", 0.01)
         if command[:2] == ["git", "rev-parse"]:
             return CommandResult(command, 1, "", "no upstream", 0.01)
         return CommandResult(command, 0, "2 passed, 1 skipped in 0.1s", "", 0.01)

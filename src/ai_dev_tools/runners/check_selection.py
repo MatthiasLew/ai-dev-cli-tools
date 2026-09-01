@@ -90,6 +90,14 @@ def collect_changed_files(
     root: Path,
     command_runner: Callable[[list[str], Path, int], CommandResult] = run_command,
 ) -> list[str]:
+    top_level = command_runner(["git", "rev-parse", "--show-toplevel"], root, 30)
+    if top_level.exit_code != 0 or not top_level.stdout.strip():
+        return []
+    try:
+        if Path(top_level.stdout.strip()).resolve() != root.resolve():
+            return []
+    except OSError:
+        return []
     seen: dict[str, None] = {}
     commands = [
         ["git", "diff", "--name-only", "-z"],

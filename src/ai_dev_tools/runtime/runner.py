@@ -132,6 +132,8 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
             str(paths["request"]),
             "--token",
             token,
+            "--supervisor-cwd",
+            str(settings.project_root),
             "--cwd",
             str(settings.project_root / plan.cwd),
             "--log",
@@ -308,6 +310,7 @@ def _spawn_supervisor(command: list[str], cwd: Path) -> subprocess.Popen[bytes]:
     return subprocess.Popen(
         command,
         cwd=cwd,
+        env=_supervisor_environment(),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -316,6 +319,18 @@ def _spawn_supervisor(command: list[str], cwd: Path) -> subprocess.Popen[bytes]:
         start_new_session=start_new_session,
         creationflags=flags,
     )
+
+
+def _supervisor_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    # The supervisor changes CWD by design. Make its package root absolute so
+    # editable installs and relative PYTHONPATH entries cannot disappear
+    # between the parent test/CLI process and the detached interpreter.
+    package_root = str(Path(__file__).resolve().parents[2])
+    existing = environment.get("PYTHONPATH", "")
+    entries = [package_root, *(item for item in existing.split(os.pathsep) if item)]
+    environment["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(entries))
+    return environment
 
 
 def _readiness_config(options: RunOptions) -> dict[str, object]:

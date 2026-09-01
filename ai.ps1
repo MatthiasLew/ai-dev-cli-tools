@@ -3,5 +3,5 @@ param(
     [string[]]$Args
 )
 
-python -m ai_dev_tools.cli @Args
+python scripts/dev.py @Args
 exit $LASTEXITCODE

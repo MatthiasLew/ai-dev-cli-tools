@@ -33,8 +33,12 @@ and upgrade policy.
 For development:
 
 ```bash
-python -m pip install -c requirements-dev.lock -e ".[dev]"
+python scripts/dev.py --check
 ```
+
+This creates a locked, repository-local `.venv`, disables ambient user-site packages, and routes
+temporary validation files through `.ai/tmp/dev`. Run `python scripts/dev.py --diagnose` for
+machine-readable Git metadata, temp-directory, Python, and proxy diagnostics without installation.
 
 ## Windows
 
