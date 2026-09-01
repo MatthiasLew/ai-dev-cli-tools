@@ -11,7 +11,7 @@ import sys
 import time
 from pathlib import Path
 
-from ai_dev_tools.cache.repository import update_repository_index
+from ai_dev_tools.cache.repository import repository_fingerprint, update_repository_index
 from ai_dev_tools.models.report import Issue, Report
 
 STATE_PATH = Path(".ai/cache/index-daemon.json")
@@ -90,7 +90,8 @@ def serve(root: Path, token: str) -> int:
                 changes.put(source_path)
 
     root = root.resolve()
-    update_repository_index(root)
+    index = update_repository_index(root)
+    current_fingerprint = repository_fingerprint(index.get("entries", []))
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(("127.0.0.1", 0))
     server.listen(4)
@@ -146,14 +147,14 @@ def serve(root: Path, token: str) -> int:
                 pending_paths.update(paths)
                 last_event_at = time.monotonic()
             if pending_paths and time.monotonic() - last_event_at >= 0.25:
-                update_repository_index(root)
-                state["updates"] = _state_counter(state, "updates") + 1
+                current_fingerprint = _refresh_index(
+                    root, state, previous_fingerprint=current_fingerprint
+                )
                 _write_state(state_path, state)
                 pending_paths.clear()
     finally:
         if pending_paths:
-            update_repository_index(root)
-            state["updates"] = _state_counter(state, "updates") + 1
+            _refresh_index(root, state, previous_fingerprint=current_fingerprint)
         observer.stop()
         observer.join(timeout=3)
         server.close()
@@ -195,10 +196,37 @@ def _read_state(path: Path) -> dict[str, object]:
 
 def _write_state(path: Path, state: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.chmod(0o600)
-    os.replace(temporary, path)
+    temporary = path.with_name(
+        f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+    )
+    try:
+        temporary.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        temporary.chmod(0o600)
+        for attempt in range(5):
+            try:
+                os.replace(temporary, path)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _refresh_index(
+    root: Path,
+    state: dict[str, object],
+    *,
+    previous_fingerprint: str,
+) -> str:
+    index = update_repository_index(root)
+    current_fingerprint = repository_fingerprint(index.get("entries", []))
+    if current_fingerprint != previous_fingerprint:
+        state["updates"] = _state_counter(state, "updates") + 1
+    return current_fingerprint
 
 
 def _public(state: dict[str, object]) -> dict[str, object]:

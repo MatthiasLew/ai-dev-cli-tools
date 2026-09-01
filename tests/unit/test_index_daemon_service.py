@@ -39,6 +39,44 @@ def test_daemon_state_file_is_valid_json_and_private(tmp_path: Path) -> None:
         assert path.stat().st_mode & 0o777 == 0o600
 
 
+def test_daemon_state_write_retries_windows_style_sharing_violation(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    path = tmp_path / "state.json"
+    original_replace = os.replace
+    attempts = 0
+
+    def replace_with_one_sharing_violation(source: Path, destination: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise PermissionError("destination is temporarily open")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", replace_with_one_sharing_violation)
+
+    service._write_state(path, {"status": "running"})
+
+    assert attempts == 2
+    assert service._read_state(path)["status"] == "running"
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_daemon_refresh_counts_only_changed_repository_fingerprints(tmp_path: Path) -> None:
+    state: dict[str, object] = {"updates": 1}
+    initial = service._refresh_index(tmp_path, state, previous_fingerprint="")
+    unchanged = service._refresh_index(tmp_path, state, previous_fingerprint=initial)
+
+    assert unchanged == initial
+    assert state["updates"] == 2
+
+    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    changed = service._refresh_index(tmp_path, state, previous_fingerprint=unchanged)
+
+    assert changed != unchanged
+    assert state["updates"] == 3
+
+
 def test_native_daemon_processes_event_and_stops_over_ipc(tmp_path: Path) -> None:
     token = "unit-test-token"
     thread = threading.Thread(target=service.serve, args=(tmp_path, token), daemon=True)
