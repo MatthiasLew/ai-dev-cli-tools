@@ -141,7 +141,7 @@ def run_application(project_root: Path, options: RunOptions) -> Report:
         ]
         state: dict[str, object] = {}
         startup_attempts = 0
-        for attempt in range(1, 3):
+        for attempt in range(1, 4):
             startup_attempts = attempt
             supervisor = _spawn_supervisor(supervisor_command, settings.project_root)
             state = _wait_for_state(

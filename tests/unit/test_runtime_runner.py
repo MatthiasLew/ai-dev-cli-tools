@@ -210,7 +210,7 @@ def test_background_start_never_duplicates_live_supervisor(
     assert len(spawned) == 1
 
 
-def test_background_start_stops_after_two_dead_supervisors(
+def test_background_start_stops_after_three_dead_supervisors(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(
@@ -239,8 +239,8 @@ def test_background_start_stops_after_two_dead_supervisors(
     report = run_application(tmp_path, RunOptions())
 
     assert report.status == "failed"
-    assert report.summary["startup_attempts"] == 2
-    assert len(spawned) == 2
+    assert report.summary["startup_attempts"] == 3
+    assert len(spawned) == 3
 
 
 def test_stop_handles_absent_exited_and_invalid_state(tmp_path: Path) -> None:
