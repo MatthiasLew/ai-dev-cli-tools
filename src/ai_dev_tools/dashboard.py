@@ -20,19 +20,45 @@ grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}.card{background:#151d3
 border-radius:12px;padding:18px}.value{font-size:28px;font-weight:700;margin:8px 0}.ok{color:#67e8a5}
 .warn{color:#ffd166}pre{white-space:pre-wrap;word-break:break-word;color:#b9c9e8;font-size:12px}</style>
 </head><body><h1>ai-dev</h1><div class="sub" id="root"></div><div class="grid" id="grid"></div>
-<script>const card=(t,v,d,c='')=>`<section class="card"><div>${t}</div><div class="value ${c}">${v}</div>
-<pre>${d}</pre></section>`; async function refresh(){const r=await fetch('/api/status');const x=await r.json();
-root.textContent=x.project_root;grid.innerHTML=card('Repository index',x.index.files??0,`updated: ${x.index.updated_at??'never'}`,'ok')+
-card('Semantic symbols',x.semantic.symbols??0,`backend: ${x.semantic.backend??'not built'}`)+
-card('Daemon',x.daemon.status??'stopped',`events: ${x.daemon.events??0} · updates: ${x.daemon.updates??0}`,x.daemon.status==='running'?'ok':'warn')+
-card('Tokens saved',x.token_efficiency.total_saved_tokens??0,`${x.token_efficiency.receipts??0} receipts · latest ${x.token_efficiency.latest_saved_percent??0}%`,'ok')+
-card('Provider usage',x.provider_usage.input_tokens??0,`${x.provider_usage.sessions??0} sessions · ${x.provider_usage.cached_input_tokens??0} cache read · ${x.provider_usage.cache_write_input_tokens??0} cache write`,'ok')+
-card('Model output',x.provider_usage.output_tokens??0,`reasoning: ${x.provider_usage.reasoning_tokens??0}`)+
-card('Usage policy',x.provider_usage.policy?.passed===false?'alert':'ok',`${x.provider_usage.policy?.violations?.length??0} violations · ${x.provider_usage.policy?.alerts?.length??0} alerts`,x.provider_usage.policy?.passed===false?'warn':'ok')+
-card('Token optimizer',x.provider_usage.optimizer?.budget_recommendations??0,`${x.provider_usage.optimizer?.model_recommendations??0} model routes · ${x.provider_usage.optimizer?.gaps??0} evidence gaps`,x.provider_usage.optimizer?.gaps?'warn':'ok')+
-card('Context delivery',x.token_efficiency.latest_delivery??'none',`cache hit: ${x.token_efficiency.latest_cache_hit?'yes':'no'}`)+
-card('Cache',x.cache.files,`${x.cache.bytes} bytes`)+card('Runtime',x.runtime.status??'idle',`pid: ${x.runtime.pid??'-'}`)+
-card('Last errors',x.errors.length,x.errors.join('\n')||'none',x.errors.length?'warn':'ok');}refresh();setInterval(refresh,3000)</script>
+<script>
+const rootElement=document.getElementById('root');
+const gridElement=document.getElementById('grid');
+const card=(title,value,details,className='')=>{
+  const section=document.createElement('section');section.className='card';
+  const heading=document.createElement('div');heading.textContent=String(title);
+  const metric=document.createElement('div');metric.className=`value ${className}`;metric.textContent=String(value);
+  const description=document.createElement('pre');description.textContent=String(details);
+  section.append(heading,metric,description);return section;
+};
+async function refresh(){
+  try{
+    if(!rootElement||!gridElement)throw new Error('Dashboard containers are missing');
+    const response=await fetch('/api/status');
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const x=await response.json();
+    rootElement.textContent=x.project_root??'Unknown project';
+    gridElement.replaceChildren(
+      card('Repository index',x.index?.files??0,`updated: ${x.index?.updated_at??'never'}`,'ok'),
+      card('Semantic symbols',x.semantic?.symbols??0,`backend: ${x.semantic?.backend??'not built'}`),
+      card('Daemon',x.daemon?.status??'stopped',`events: ${x.daemon?.events??0} · updates: ${x.daemon?.updates??0}`,x.daemon?.status==='running'?'ok':'warn'),
+      card('Tokens saved',x.token_efficiency?.total_saved_tokens??0,`${x.token_efficiency?.receipts??0} receipts · latest ${x.token_efficiency?.latest_saved_percent??0}%`,'ok'),
+      card('Provider usage',x.provider_usage?.input_tokens??0,`${x.provider_usage?.sessions??0} sessions · ${x.provider_usage?.cached_input_tokens??0} cache read · ${x.provider_usage?.cache_write_input_tokens??0} cache write`,'ok'),
+      card('Model output',x.provider_usage?.output_tokens??0,`reasoning: ${x.provider_usage?.reasoning_tokens??0}`),
+      card('Usage policy',x.provider_usage?.policy?.passed===false?'alert':'ok',`${x.provider_usage?.policy?.violations?.length??0} violations · ${x.provider_usage?.policy?.alerts?.length??0} alerts`,x.provider_usage?.policy?.passed===false?'warn':'ok'),
+      card('Token optimizer',x.provider_usage?.optimizer?.budget_recommendations??0,`${x.provider_usage?.optimizer?.model_recommendations??0} model routes · ${x.provider_usage?.optimizer?.gaps??0} evidence gaps`,x.provider_usage?.optimizer?.gaps?'warn':'ok'),
+      card('Context delivery',x.token_efficiency?.latest_delivery??'none',`cache hit: ${x.token_efficiency?.latest_cache_hit?'yes':'no'}`),
+      card('Cache',x.cache?.files??0,`${x.cache?.bytes??0} bytes`),
+      card('Runtime',x.runtime?.status??'idle',`pid: ${x.runtime?.pid??'-'}`),
+      card('Last errors',x.errors?.length??0,x.errors?.join('\\n')||'none',x.errors?.length?'warn':'ok')
+    );
+  }catch(error){
+    console.error(error);
+    if(rootElement)rootElement.textContent='Dashboard failed to load';
+    if(gridElement)gridElement.replaceChildren(card('Status unavailable','error',String(error),'warn'));
+  }
+}
+void refresh();setInterval(()=>void refresh(),3000);
+</script>
 </body></html>"""
 
 

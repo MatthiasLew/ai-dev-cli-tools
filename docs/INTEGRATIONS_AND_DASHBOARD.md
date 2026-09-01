@@ -22,6 +22,10 @@ ai-dev dashboard serve --host 127.0.0.1 --port 8765
 ai-dev dashboard status --json
 ```
 
+The page resolves its DOM containers explicitly, renders API data as text, and replaces the cards
+with a visible error state if the status endpoint becomes unavailable. Dynamic project paths and
+error messages are never inserted as HTML.
+
 It shows repository and semantic index size, cache use, daemon and managed-runtime state, recent
 local report errors, total recorded token savings, provider-reported token use by client, the
 latest delivery mode, and cache-hit state.

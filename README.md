@@ -23,7 +23,7 @@ be safe for `ai-dev` to recreate.
 
 ```bash
 python -m pip install --upgrade pipx
-pipx install ai-dev-cli-tools==1.2.0
+pipx install ai-dev-cli-tools==1.2.1
 ai-dev --help
 ```
 

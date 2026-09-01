@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.2.1 - 2026-09-01
+
+- Fix the blank local dashboard by preserving JavaScript newline escapes and resolving dashboard
+  containers explicitly instead of relying on browser-created globals.
+- Show a visible status card when the API request or response fails, tolerate partial status
+  payloads, and render all dynamic dashboard values through safe text nodes.
+
 ## 1.2.0 - 2026-09-01
 
 - Complete the measured optimization loop with bounded latency samples, daily trends, aggregated

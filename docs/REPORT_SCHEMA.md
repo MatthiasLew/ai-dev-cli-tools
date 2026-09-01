@@ -13,7 +13,7 @@ Required fields:
 ```json
 {
   "schema_version": "1.1",
-  "tool_version": "1.2.0",
+  "tool_version": "1.2.1",
   "command": "check",
   "status": "success",
   "exit_code": 0,
