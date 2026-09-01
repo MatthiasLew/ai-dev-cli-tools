@@ -217,6 +217,18 @@ class LocalMcpServer:
                 handler=self._record_usage,
             ),
             ToolDefinition(
+                name="usage_status",
+                title="Check compact token usage and budgets",
+                description=(
+                    "Return provider-reported usage totals, local cost estimates, budget "
+                    "violations, and regression alerts without model input or output content."
+                ),
+                input_schema=_object_schema({}),
+                output_schema=common_output,
+                annotations=_annotations(read_only=True),
+                handler=self._usage_status,
+            ),
+            ToolDefinition(
                 name="plan_work",
                 title="Plan bounded development work",
                 description=(
@@ -606,11 +618,21 @@ class LocalMcpServer:
             request_id=_optional_string(arguments, "request_id", 200),
         )
         path = Path(stored.pop("path"))
+        policy = stored.get("policy")
+        policy_failed = isinstance(policy, dict) and policy.get("passed") is False
         return {
             "command": "telemetry record",
-            "status": "success",
+            "status": "partial" if policy_failed else "success",
             "summary": stored,
-            "issues": [],
+            "issues": (
+                [{
+                    "severity": "warning",
+                    "message": "Telemetry policy has active violations",
+                    "code": "TELEMETRY_ALERT",
+                }]
+                if policy_failed
+                else []
+            ),
             "artifacts": [
                 {
                     "path": str(path),
@@ -619,6 +641,13 @@ class LocalMcpServer:
                 }
             ],
         }
+
+    def _usage_status(self, arguments: JsonObject) -> JsonObject:
+        _validate_keys(arguments, set())
+        _require_project(self.project_root)
+        from ai_dev_tools.telemetry import telemetry_status
+
+        return _finish_report(telemetry_status(self.project_root))
 
     def _context(self, arguments: JsonObject) -> JsonObject:
         allowed = {

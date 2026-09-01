@@ -33,6 +33,9 @@ Integrations must request JSON with `--json` and must not parse Markdown or term
     model/request ID; never send prompt or response
     text. Treat `measurement=provider_reported` as the provenance of counts and any
     `cost.kind=local_pricing_estimate` as an estimate, not billed cost.
+11. Read `summary.policy` returned by `record_usage`. Stop additional expensive work on active
+    violations unless the user explicitly changes the budget. Use read-only `usage_status` before
+    a costly phase and `ai-dev telemetry gate --json` in deterministic CI/release gates.
 
 All acceleration state is local under `.ai/`; no command transmits repository contents or
 metrics.
@@ -54,6 +57,8 @@ text and machine-readable `structuredContent`; consumers should prefer the struc
 - Use `record_usage` only with usage returned by the provider. Do not substitute tokenizer or
   character estimates, because estimated context savings and provider-reported consumption are
   separate measurements.
+- Treat `TELEMETRY_REGRESSION_INSUFFICIENT_DATA` as informational. Treat budget, cost-data, and
+  regression violations as unresolved until the policy or measured workload changes.
 - Respect MCP annotations and the configured client approval policy.
 
 For repeated `build_context` calls, return the prior `summary.delta.state_fingerprint` as

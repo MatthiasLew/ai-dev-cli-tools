@@ -289,6 +289,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     telemetry_import.add_argument("--pricing", type=Path)
     telemetry_sub.add_parser("status")
+    telemetry_gate = telemetry_sub.add_parser("gate")
+    telemetry_gate.add_argument("--policy", type=Path)
+    telemetry_pricing = telemetry_sub.add_parser("pricing")
+    telemetry_pricing_sub = telemetry_pricing.add_subparsers(
+        dest="telemetry_pricing_command", required=True
+    )
+    telemetry_pricing_import = telemetry_pricing_sub.add_parser("import")
+    telemetry_pricing_import.add_argument("input", type=Path)
+    telemetry_pricing_import.add_argument(
+        "--provider", choices=["openai", "anthropic", "generic"], required=True
+    )
+    telemetry_pricing_import.add_argument("--version", required=True)
+    telemetry_pricing_import.add_argument("--source", default="")
+    telemetry_pricing_import.add_argument("--no-activate", action="store_false", dest="activate")
+    telemetry_pricing_activate = telemetry_pricing_sub.add_parser("activate")
+    telemetry_pricing_activate.add_argument(
+        "provider", choices=["openai", "anthropic", "generic"]
+    )
+    telemetry_pricing_activate.add_argument("version")
 
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
@@ -676,9 +695,29 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
         return dashboard_status(project_root)
     if command == "telemetry":
         from ai_dev_tools.telemetry import import_usage, telemetry_status
+        from ai_dev_tools.telemetry_policy import (
+            activate_pricing_snapshot,
+            import_pricing_snapshot,
+            telemetry_gate,
+        )
 
         if args.telemetry_command == "status":
             return telemetry_status(project_root)
+        if args.telemetry_command == "gate":
+            return telemetry_gate(project_root, args.policy)
+        if args.telemetry_command == "pricing":
+            if args.telemetry_pricing_command == "activate":
+                return activate_pricing_snapshot(
+                    project_root, provider=args.provider, version=args.version
+                )
+            return import_pricing_snapshot(
+                project_root,
+                args.input,
+                provider=args.provider,
+                version=args.version,
+                source=args.source,
+                activate=args.activate,
+            )
         return import_usage(
             project_root,
             args.input,
@@ -787,6 +826,9 @@ def _capabilities_report(project_root: Path) -> Report:
         "dashboard serve",
         "telemetry import",
         "telemetry status",
+        "telemetry gate",
+        "telemetry pricing import",
+        "telemetry pricing activate",
         "performance latest",
         "performance compare",
         "explain",

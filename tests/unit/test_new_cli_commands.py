@@ -118,3 +118,44 @@ def test_telemetry_import_and_status_cli(tmp_path: Path, capsys) -> None:  # typ
     code = main(["--project", str(tmp_path), "--json", "telemetry", "status"])
     assert code == 0
     assert json.loads(capsys.readouterr().out)["summary"]["sessions"] == 1
+
+
+def test_telemetry_pricing_and_gate_cli(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    pricing = tmp_path / "pricing.json"
+    pricing.write_text(json.dumps({
+        "models": {"default": {"input_per_million": 1, "output_per_million": 2}}
+    }), encoding="utf-8")
+    code = main([
+        "--project", str(tmp_path), "--json", "telemetry", "pricing", "import",
+        str(pricing), "--provider", "generic", "--version", "v1", "--no-activate",
+    ])
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["summary"]["active"] is False
+
+    code = main([
+        "--project", str(tmp_path), "--json", "telemetry", "pricing", "activate",
+        "generic", "v1",
+    ])
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["summary"]["active"] is True
+
+    policy = tmp_path / ".ai-dev/telemetry-budgets.json"
+    policy.write_text(json.dumps({"limits": {"max_sessions": 0}}), encoding="utf-8")
+    code = main(["--project", str(tmp_path), "--json", "telemetry", "gate"])
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["summary"]["passed"] is True
+
+    source = tmp_path / "usage.json"
+    source.write_text(
+        json.dumps({"usage": {"input_tokens": 1, "output_tokens": 0}}),
+        encoding="utf-8",
+    )
+    code = main([
+        "--project", str(tmp_path), "--json", "telemetry", "import", str(source),
+        "--client", "generic", "--format", "generic",
+    ])
+    assert code == 0
+    capsys.readouterr()
+    code = main(["--project", str(tmp_path), "--json", "telemetry", "gate"])
+    assert code == 1
+    assert json.loads(capsys.readouterr().out)["summary"]["passed"] is False

@@ -17,6 +17,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "delta": True,
         "content_default": "references",
         "telemetry_tool": "record_usage",
+        "telemetry_status_tool": "usage_status",
     },
     "claude": {
         "context_profile": "minimal",
@@ -27,6 +28,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "delta": True,
         "content_default": "references",
         "telemetry_tool": "record_usage",
+        "telemetry_status_tool": "usage_status",
     },
     "cursor": {
         "context_profile": "minimal",
@@ -37,6 +39,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "delta": True,
         "content_default": "references",
         "telemetry_tool": "record_usage",
+        "telemetry_status_tool": "usage_status",
     },
     "generic": {
         "context_profile": "minimal",
@@ -47,6 +50,7 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "delta": True,
         "content_default": "references",
         "telemetry_tool": "record_usage",
+        "telemetry_status_tool": "usage_status",
     },
 }
 

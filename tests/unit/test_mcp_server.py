@@ -70,6 +70,7 @@ def test_initialize_advertises_tools_and_bounded_instructions(tmp_path: Path) ->
         "project_status",
         "record_usage",
         "run_checks",
+        "usage_status",
     ]
     status = next(tool for tool in tools if tool["name"] == "project_status")
     checks = next(tool for tool in tools if tool["name"] == "run_checks")
@@ -222,6 +223,42 @@ def test_record_usage_rejects_cache_larger_than_input(tmp_path: Path) -> None:
     )
 
     assert result["isError"] is True
+
+
+def test_usage_status_is_compact_and_read_only(tmp_path: Path) -> None:
+    server = LocalMcpServer(tmp_path)
+    _call(server, "record_usage", {
+        "client": "cursor", "input_tokens": 20, "output_tokens": 4,
+        "request_id": "usage-status",
+    })
+
+    result = _call(server, "usage_status")
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["summary"]["sessions"] == 1
+    assert result["structuredContent"]["summary"]["policy"]["configured"] is False
+    listed = server.handle(_request("tools/list"))
+    assert listed is not None
+    descriptor = next(
+        tool for tool in listed["result"]["tools"] if tool["name"] == "usage_status"
+    )
+    assert descriptor["annotations"]["readOnlyHint"] is True
+
+
+def test_record_usage_returns_policy_alert_immediately(tmp_path: Path) -> None:
+    policy = tmp_path / ".ai-dev/telemetry-budgets.json"
+    policy.parent.mkdir()
+    policy.write_text(
+        json.dumps({"limits": {"max_total_tokens": 5}}), encoding="utf-8"
+    )
+
+    result = _call(LocalMcpServer(tmp_path), "record_usage", {
+        "client": "codex", "input_tokens": 10, "output_tokens": 1,
+    })
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["status"] == "partial"
+    assert result["structuredContent"]["issues"][0]["code"] == "TELEMETRY_ALERT"
 
 
 def test_context_tool_is_preview_only_and_bounded_by_default(tmp_path: Path) -> None:
