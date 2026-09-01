@@ -49,6 +49,10 @@ Then verify:
 Publishing is an explicit maintainer action. The project must not publish automatically from a
 local development command.
 
+- [ ] Confirm release changes reached `main` through the repository's supported squash-merge
+  strategy; merge commits are disabled.
+- [ ] Verify the CI run attached to the resulting squash commit on `main`, not only the pull
+  request head.
 - [ ] Create and inspect the release tag.
 - [ ] Confirm TestPyPI publication and clean-install verification pass.
 - [ ] Inspect the automatically generated draft GitHub release and its attached wheel/sdist.
