@@ -183,14 +183,21 @@ def test_supervisor_masks_streamed_application_output(tmp_path: Path) -> None:
     assert "MASKED_OPENAI_KEY" in output
 
 
-def _wait_for_metadata(path: Path) -> dict[str, object]:
+def _wait_for_metadata(
+    path: Path, expected_status: str | None = None
+) -> dict[str, object]:
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         try:
-            return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+            state = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+            if expected_status is None or state.get("status") == expected_status:
+                return state
         except (OSError, json.JSONDecodeError):
-            time.sleep(0.02)
-    raise AssertionError(f"supervisor metadata was not created: {path}")
+            pass
+        time.sleep(0.02)
+    raise AssertionError(
+        f"supervisor metadata did not reach {expected_status or 'any state'}: {path}"
+    )
 
 
 def _external_supervisor(tmp_path: Path) -> tuple[subprocess.Popen[str], Path, Path]:
@@ -216,7 +223,7 @@ def _external_supervisor(tmp_path: Path) -> tuple[subprocess.Popen[str], Path, P
         "import time; time.sleep(30)",
     ]
     process = subprocess.Popen(command, text=True)
-    _wait_for_metadata(metadata)
+    _wait_for_metadata(metadata, "running")
     return process, metadata, request
 
 
