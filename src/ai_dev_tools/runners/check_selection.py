@@ -252,7 +252,9 @@ def _commands_for_selected_tests(
     if not selected_tests:
         return commands
     if any(path.endswith(".py") for path in selected_tests):
-        commands.append([sys.executable, "-m", "pytest", *selected_tests])
+        pytest_cmd = next((task.command for task in plan if task.name == "pytest"), None)
+        python_bin = pytest_cmd[0] if pytest_cmd else sys.executable
+        commands.append([python_bin, "-m", "pytest", *selected_tests])
     if any(path.endswith((".js", ".jsx", ".ts", ".tsx")) for path in selected_tests):
         npm_test = next((task.command for task in plan if task.name == "npm test"), ["npm", "test"])
         commands.append(npm_test)

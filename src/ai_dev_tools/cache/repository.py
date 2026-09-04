@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import os
@@ -104,16 +105,45 @@ def repository_fingerprint(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _is_ignored_name(name: str, ignored: set[str]) -> bool:
+    if name in ignored:
+        return True
+    return any(
+        fnmatch.fnmatch(name, pat)
+        or (
+            pat in {".venv", "venv"}
+            and (
+                name.startswith(f"{pat}-")
+                or name.startswith(f"{pat}_")
+                or (len(name) > len(pat) and name.startswith(pat))
+            )
+        )
+        for pat in ignored
+    )
+
+
+def _is_ignored_path(relative: str, ignored: set[str]) -> bool:
+    parts = relative.split("/")
+    if any(_is_ignored_name(part, ignored) for part in parts):
+        return True
+    return any(
+        relative == item
+        or relative.startswith(f"{item}/")
+        or fnmatch.fnmatch(relative, item)
+        or fnmatch.fnmatch(Path(relative).name, item)
+        for item in ignored
+    )
+
+
 def _project_files(root: Path) -> list[Path]:
     ignored = {item.replace(chr(92), "/").strip("/") for item in DEFAULT_IGNORES}
-    ignored_names = {Path(item).name for item in ignored}
     files: list[Path] = []
     for current, directories, names in os.walk(root, followlinks=False):
         current_path = Path(current)
         directories[:] = sorted(
             name
             for name in directories
-            if name not in ignored_names
+            if not _is_ignored_name(name, ignored)
             and not (current_path.name in {"test", "tests"} and name == "fixtures")
         )
         for name in sorted(names):
@@ -121,7 +151,7 @@ def _project_files(root: Path) -> list[Path]:
             if path.is_symlink() or not path.is_file():
                 continue
             relative = path.relative_to(root).as_posix()
-            if any(relative == item or relative.startswith(item + "/") for item in ignored):
+            if _is_ignored_path(relative, ignored):
                 continue
             files.append(path)
     return files

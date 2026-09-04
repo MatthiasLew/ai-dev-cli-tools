@@ -159,6 +159,39 @@ def test_focused_rerun_covers_supported_runner_families() -> None:
     assert focused_rerun(task, {"parser": "cargo", "project_frames": [42]}) is None
 
 
+def test_focused_rerun_does_not_suggest_pytest_for_lint_or_typecheck() -> None:
+    ruff_task = CheckTask(
+        "ruff", "lint", ["python", "-m", "ruff", "check", "."], "fast", "detected"
+    )
+    parsed_ruff: dict[str, object] = {
+        "tool": "ruff",
+        "parser": "ruff",
+        "project_frames": [{"file": "packages/ai_cost/estimator.py"}],
+    }
+    rerun_ruff = focused_rerun(ruff_task, parsed_ruff)
+    assert rerun_ruff == ["python", "-m", "ruff", "check", "packages/ai_cost/estimator.py"]
+
+    mypy_task = CheckTask(
+        "mypy", "typecheck", ["python", "-m", "mypy", "src", "tests"], "medium", "detected"
+    )
+    parsed_mypy: dict[str, object] = {
+        "tool": "mypy",
+        "parser": "mypy",
+        "project_frames": [{"file": "packages/intake/risk.py"}],
+    }
+    rerun_mypy = focused_rerun(mypy_task, parsed_mypy)
+    assert rerun_mypy == ["python", "-m", "mypy", "packages/intake/risk.py"]
+
+    eslint_task = CheckTask("npm lint", "lint", ["npm", "run", "lint"], "medium", "detected")
+    parsed_eslint: dict[str, object] = {
+        "tool": "eslint",
+        "parser": "eslint",
+        "project_frames": [{"file": "src/app.ts"}],
+    }
+    assert focused_rerun(eslint_task, parsed_eslint) is None
+
+
+
 def test_session_status_rejects_unsupported_schema(tmp_path: Path) -> None:
     path = tmp_path / ".ai" / "cache" / "session.json"
     path.parent.mkdir(parents=True)

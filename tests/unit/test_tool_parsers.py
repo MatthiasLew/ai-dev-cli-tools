@@ -137,3 +137,12 @@ def test_parser_reports_warnings_multiple_failures_localized_frames_and_new_vers
     assert localized["first_project_frame"] == "src/main/java/App.java:12:3"
     assert modern["passed"] == 3
     assert modern["skipped"] == 1
+
+
+def test_ruff_not_misclassified_as_pytest_when_output_mentions_tests() -> None:
+    output = "tests/test_auth.py:4:1: F401 'pytest' imported but unused\nFound 1 error."
+    parsed = parse_tool_output("python -m ruff check .", output, exit_code=1)
+    assert parsed["parser"] == "ruff"
+    assert parsed["tool"] == "ruff"
+    assert parsed["status"] == "failed"
+

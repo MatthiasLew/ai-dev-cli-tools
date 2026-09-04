@@ -14,11 +14,13 @@ DEFAULT_IGNORES = {
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
+    ".venv*",
     "__pycache__",
     "build",
     "dist",
     "node_modules",
     "venv",
+    "venv*",
 }
 
 

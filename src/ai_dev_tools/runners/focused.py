@@ -10,8 +10,26 @@ def focused_rerun(task: CheckTask, parsed: dict[str, object]) -> list[str] | Non
     path = _first_project_file(parsed)
     if not path:
         return None
+    python_bin = (
+        task.command[0]
+        if task.command
+        and ("python" in task.command[0].lower() or task.command[0].endswith(".exe"))
+        else sys.executable
+    )
+    if task.category in {"lint", "typecheck", "format", "build"}:
+        if task.name == "ruff" or "ruff" in parser:
+            if "check" in task.command:
+                idx = task.command.index("check")
+                return [*task.command[: idx + 1], path]
+            return [python_bin, "-m", "ruff", "check", path]
+        if task.name == "mypy" or "mypy" in parser:
+            if "-m" in task.command and "mypy" in task.command:
+                idx = task.command.index("mypy")
+                return [*task.command[: idx + 1], path]
+            return [python_bin, "-m", "mypy", path]
+        return None
     if "pytest" in parser or path.endswith(".py"):
-        return [sys.executable, "-m", "pytest", path]
+        return [python_bin, "-m", "pytest", path]
     if any(name in parser for name in ("jest", "vitest")) or path.endswith(
         (".js", ".jsx", ".ts", ".tsx")
     ):

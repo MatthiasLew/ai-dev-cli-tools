@@ -40,3 +40,21 @@ def test_map_reports_truncation_and_large_files(tmp_path: Path) -> None:
     report = map_repository(tmp_path, max_files=2, max_depth=3)
     assert report.summary["truncated"] is True
     assert "large.txt" in report.summary["large_files"]
+
+
+def test_map_omits_named_venvs(tmp_path: Path) -> None:
+    venv_audit = tmp_path / ".venv-audit" / "lib"
+    venv_audit.mkdir(parents=True)
+    (venv_audit / "module.py").write_text("dummy", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("print('hello')", encoding="utf-8")
+    report = map_repository(tmp_path)
+    all_dirs = report.summary["directories"]
+    all_files = (
+        report.summary["important_files"]
+        + report.summary["tests"]
+        + report.summary["documentation"]
+    )
+    assert not any(".venv-audit" in d for d in all_dirs)
+    assert not any(".venv-audit" in f for f in all_files)
+

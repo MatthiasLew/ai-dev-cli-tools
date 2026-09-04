@@ -113,6 +113,16 @@ def _ignored(rel: Path, patterns: set[str]) -> bool:
         or text.startswith(f"{pattern}/")
         or fnmatch.fnmatch(text, pattern)
         or fnmatch.fnmatch(rel.name, pattern)
+        or any(fnmatch.fnmatch(part, pattern) for part in parts)
+        or any(
+            pattern in {".venv", "venv"}
+            and (
+                part.startswith(f"{pattern}-")
+                or part.startswith(f"{pattern}_")
+                or (len(part) > len(pattern) and part.startswith(pattern))
+            )
+            for part in parts
+        )
         for pattern in normalized_patterns
     )
 

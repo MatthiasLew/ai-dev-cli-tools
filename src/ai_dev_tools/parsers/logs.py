@@ -96,6 +96,44 @@ class ToolOutputParser(Protocol):
     def parse(self, command: CommandResult) -> ParsedToolResult: ...
 
 
+KNOWN_TOOL_IDENTIFIERS: set[str] = {
+    "pytest",
+    "ruff",
+    "mypy",
+    "black",
+    "coverage",
+    "eslint",
+    "tsc",
+    "vitest",
+    "jest",
+    "phpunit",
+    "phpstan",
+    "php-cs-fixer",
+    "cargo-test",
+    "cargo-clippy",
+    "cargo-fmt",
+}
+
+
+def _extract_command_tool(command: CommandResult) -> str | None:
+    if not command.command:
+        return None
+    args = [arg.strip() for arg in command.command if arg.strip()]
+    if not args:
+        return None
+    for idx, arg in enumerate(args[:-1]):
+        if arg == "-m":
+            return args[idx + 1].lower()
+    first = Path(args[0]).name.lower()
+    if first.endswith(".exe"):
+        first = first[:-4]
+    if first == "cargo" and len(args) > 1:
+        sub = args[1].lower()
+        if sub in ("test", "clippy", "fmt"):
+            return f"cargo-{sub}"
+    return first
+
+
 @dataclass(frozen=True, slots=True)
 class RegexToolParser:
     tool_name: str
@@ -103,6 +141,9 @@ class RegexToolParser:
     confidence: str = "medium"
 
     def can_parse(self, command: CommandResult) -> bool:
+        explicit_tool = _extract_command_tool(command)
+        if explicit_tool in KNOWN_TOOL_IDENTIFIERS:
+            return explicit_tool == self.tool_name
         text = f"{' '.join(command.command)}\n{command.combined_output}".lower()
         return any(marker in text for marker in self.markers)
 
@@ -121,9 +162,9 @@ class GenericParser:
 
 
 BUILTIN_PARSERS: tuple[ToolOutputParser, ...] = (
-    RegexToolParser("pytest", ("pytest", "failed tests/", "= short test summary info ="), "high"),
     RegexToolParser("ruff", ("ruff", "would reformat"), "high"),
     RegexToolParser("mypy", ("mypy", "success: no issues found", "checked 1 source file"), "high"),
+    RegexToolParser("pytest", ("pytest", "failed tests/", "= short test summary info ="), "high"),
     RegexToolParser("coverage", ("coverage", "fail_under", "cover"), "medium"),
     RegexToolParser("jest", ("jest", "test suites:", "fail src/"), "high"),
     RegexToolParser("vitest", ("vitest", "test files", "duration"), "high"),

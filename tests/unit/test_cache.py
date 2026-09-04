@@ -65,6 +65,20 @@ def test_repository_index_reports_removed_files(tmp_path: Path) -> None:
     }
 
 
+def test_repository_index_ignores_named_virtualenvs(tmp_path: Path) -> None:
+    venv_dir = tmp_path / ".venv-release" / "lib"
+    venv_dir.mkdir(parents=True)
+    (venv_dir / "pkg.py").write_text("code\n", encoding="utf-8")
+    source = tmp_path / "main.py"
+    source.write_text("print(1)\n", encoding="utf-8")
+    result = update_repository_index(tmp_path)
+    entries = cast(list[dict[str, object]], result["entries"])
+    paths = [entry["path"] for entry in entries]
+    assert "main.py" in paths
+    assert not any(".venv-release" in str(p) for p in paths)
+
+
+
 def test_validation_cache_requires_exact_key_and_only_stores_success(tmp_path: Path) -> None:
     index = update_repository_index(tmp_path)
     command = ["python", "--version"]

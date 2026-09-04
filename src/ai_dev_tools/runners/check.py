@@ -262,12 +262,23 @@ def run_check(
     return report
 
 
+def _project_python(root: Path) -> str:
+    win_python = root / ".venv" / "Scripts" / "python.exe"
+    if win_python.is_file():
+        return str(win_python)
+    posix_python = root / ".venv" / "bin" / "python"
+    if posix_python.is_file():
+        return str(posix_python)
+    return sys.executable
+
+
 def build_validation_plan(
     settings: Settings, *, include_workspaces: bool = True
 ) -> list[CheckTask]:
     if settings.commands:
         return _configured_plan(settings.commands)
     root = settings.project_root
+    python_bin = _project_python(root)
     tasks: list[CheckTask] = []
     if (root / "pyproject.toml").exists() or (root / "requirements.txt").exists():
         text = (
@@ -278,7 +289,7 @@ def build_validation_plan(
         if "ruff" in text:
             tasks.append(
                 CheckTask(
-                    "ruff", "lint", [sys.executable, "-m", "ruff", "check", "."], "fast", "detected"
+                    "ruff", "lint", [python_bin, "-m", "ruff", "check", "."], "fast", "detected"
                 )
             )
         if "mypy" in text:
@@ -286,7 +297,7 @@ def build_validation_plan(
                 CheckTask(
                     "mypy",
                     "typecheck",
-                    [sys.executable, "-m", "mypy", "src", "tests"],
+                    [python_bin, "-m", "mypy", "src", "tests"],
                     "medium",
                     "detected",
                 )
@@ -296,7 +307,7 @@ def build_validation_plan(
                 CheckTask(
                     "black",
                     "format",
-                    [sys.executable, "-m", "black", "--check", "."],
+                    [python_bin, "-m", "black", "--check", "."],
                     "fast",
                     "detected",
                 )
@@ -304,7 +315,7 @@ def build_validation_plan(
         if (root / "tests").exists():
             tasks.append(
                 CheckTask(
-                    "pytest", "unit_tests", [sys.executable, "-m", "pytest"], "medium", "detected"
+                    "pytest", "unit_tests", [python_bin, "-m", "pytest"], "medium", "detected"
                 )
             )
     if (root / "package.json").exists():

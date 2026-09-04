@@ -23,6 +23,25 @@ def test_build_validation_plan_detects_python_tools(tmp_path: Path) -> None:
     assert {task.name for task in plan} == {"black", "ruff", "mypy", "pytest"}
 
 
+def test_build_validation_plan_prefers_local_venv_python(tmp_path: Path) -> None:
+    import os
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='demo'\n[project.optional-dependencies]\ndev=['ruff','mypy']\n",
+        encoding="utf-8",
+    )
+    if os.name == "nt":
+        venv_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    else:
+        venv_python = tmp_path / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("", encoding="utf-8")
+
+    plan = build_validation_plan(load_settings(tmp_path))
+    assert plan[0].command[0] == str(venv_python)
+
+
+
 def test_infer_python_test_candidates_and_importers(tmp_path: Path) -> None:
     source = tmp_path / "src" / "pkg"
     source.mkdir(parents=True)
