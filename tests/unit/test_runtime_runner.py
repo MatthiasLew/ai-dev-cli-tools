@@ -378,6 +378,33 @@ def test_wait_for_state_accepts_complete_atomic_pending_state(tmp_path: Path) ->
     assert state["status"] == "stopped"
 
 
+def test_stop_accepts_running_atomic_pending_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime = tmp_path / ".ai" / "runtime"
+    runtime.mkdir(parents=True)
+    metadata = runtime / "process.json"
+    metadata.write_text('{"status": "starting", "token": "current"}', encoding="utf-8")
+    metadata.with_suffix(".json.tmp").write_text(
+        '{"status": "running", "token": "current", "child_pid": 10}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        runner,
+        "_wait_for_state",
+        lambda path, statuses, timeout, **kwargs: {
+            "status": "stopped",
+            "token": kwargs["expected_token"],
+        },
+    )
+
+    stopped = stop_application(tmp_path)
+
+    assert stopped.status == "success"
+    assert stopped.summary["status"] == "stopped"
+    assert (runtime / "stop.request").read_text(encoding="utf-8") == "current"
+
+
 def test_wait_for_state_ignores_stale_launch_metadata(tmp_path: Path) -> None:
     metadata = tmp_path / "process.json"
     metadata.write_text(

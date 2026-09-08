@@ -11,6 +11,8 @@
   project virtual-environment interpreter, and keep Ruff failures out of pytest-focused reruns.
 - Add CodeQL analysis, Dependabot update configuration, and a complete security reporting and
   supported-version policy.
+- Make managed-process stop observe in-flight atomic supervisor state, closing a rare start/stop
+  race exposed by the expanded Python CI matrix.
 
 ## 1.2.1 - 2026-09-01
 
