@@ -21,6 +21,8 @@ def test_ready_client_configs_are_generated_without_overwriting(tmp_path: Path) 
     assert '"-m", "ai_dev_tools"' in codex
     cursor = json.loads((tmp_path / ".cursor/mcp.json").read_text())
     assert "ai-dev-tools" in cursor["mcpServers"]
+    gemini = json.loads((tmp_path / ".gemini/settings.json").read_text())
+    assert "ai-dev-tools" in gemini["mcpServers"]
     profile = json.loads((tmp_path / ".ai-dev/clients/codex.json").read_text())
     assert profile["content_default"] == "references"
     assert profile["delta"] is True
@@ -122,6 +124,25 @@ def test_force_merge_preserves_existing_client_configuration(tmp_path: Path) -> 
     assert report.status == "success"
     assert payload["keep"] is True
     assert set(payload["mcpServers"]) == {"other", "ai-dev-tools"}
+
+
+def test_gemini_integration_preserves_workspace_settings(tmp_path: Path) -> None:
+    path = tmp_path / ".gemini" / "settings.json"
+    path.parent.mkdir()
+    path.write_text(
+        json.dumps({"general": {"vimMode": True}, "mcpServers": {"other": {}}}),
+        encoding="utf-8",
+    )
+
+    report = install_integrations(tmp_path, "gemini", force=True)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert report.status == "success"
+    assert payload["general"] == {"vimMode": True}
+    assert set(payload["mcpServers"]) == {"other", "ai-dev-tools"}
+    profile = json.loads((tmp_path / ".ai-dev/clients/gemini.json").read_text())
+    assert profile["client"] == "gemini"
+    assert profile["content_default"] == "references"
 
 
 def test_unknown_integration_client_fails_closed(tmp_path: Path) -> None:

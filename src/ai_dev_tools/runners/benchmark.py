@@ -34,7 +34,7 @@ def run_benchmark(
         command=f"benchmark run --variant {variant} --client {client}",
         project_root=project_root,
     )
-    if client not in {"codex", "claude", "cursor", "generic"}:
+    if client not in {"codex", "claude", "cursor", "gemini", "generic"}:
         report.status = "invalid_configuration"
         report.summary = {"reason_code": "UNKNOWN_BENCHMARK_CLIENT", "client": client}
         return report.finish()

@@ -20,6 +20,49 @@ def test_integrations_and_dashboard_status_cli(tmp_path: Path, capsys) -> None: 
     assert payload["summary"]["project_root"] == str(tmp_path.resolve())
 
 
+def test_gemini_integration_and_telemetry_cli_choices(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    code = main(
+        ["--project", str(tmp_path), "--json", "integrations", "install", "gemini"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["summary"]["clients"] == ["gemini"]
+    assert (tmp_path / ".gemini" / "settings.json").is_file()
+
+    source = tmp_path / "gemini-usage.json"
+    source.write_text(
+        json.dumps(
+            {
+                "responseId": "cli-gemini",
+                "usageMetadata": {
+                    "promptTokenCount": 30,
+                    "candidatesTokenCount": 4,
+                    "thoughtsTokenCount": 2,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    code = main(
+        [
+            "--project",
+            str(tmp_path),
+            "--json",
+            "telemetry",
+            "import",
+            str(source),
+            "--client",
+            "gemini",
+            "--format",
+            "gemini",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["summary"]["input_tokens"] == 30
+    assert payload["summary"]["output_tokens"] == 6
+
+
 def test_daemon_and_benchmark_gate_cli_paths(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     code = main(["--project", str(tmp_path), "--json", "index", "daemon", "status"])
     assert code == 0

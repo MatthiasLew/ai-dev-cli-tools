@@ -72,7 +72,7 @@ For repeated `build_context` calls, return the prior `summary.delta.state_finger
 `acknowledged_state`. A receipt is emitted only when repository contents, request parameters, and
 the safe successful state still match. Changed, partial, warning, error, and secret-bearing states
 return full live context. Set `delta=false` whenever a complete refresh is required.
-- `prepare_task` accepts `client=codex|claude|cursor|generic`. Persisted acknowledgement state is
+- `prepare_task` accepts `client=codex|claude|cursor|gemini|generic`. Persisted acknowledgement state is
   updated only when the caller explicitly supplies `acknowledged_state` with `persist_ack=true`.
 - Keep infrastructure retry separate from flaky-test retry; neither may retry code failures.
 

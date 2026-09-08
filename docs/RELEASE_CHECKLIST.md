@@ -69,7 +69,7 @@ local development command.
 ## Latest cross-platform evidence
 
 - GitHub Actions CI run 33323925088 passed on 2026-08-30 for Linux, Windows, and macOS across
-  Python 3.11-3.13, including real Python, Node, Rust, Maven, Gradle, and Composer fixture
+  Python 3.11-3.14, including real Python, Node, Rust, Maven, Gradle, and Composer fixture
   toolchains, for commit `a86da2c`.
 - Docs run 33323925074 passed for the same commit.
 

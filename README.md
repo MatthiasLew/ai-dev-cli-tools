@@ -23,7 +23,7 @@ be safe for `ai-dev` to recreate.
 
 ```bash
 python -m pip install --upgrade pipx
-pipx install ai-dev-cli-tools==1.2.1
+pipx install ai-dev-cli-tools==1.2.2
 ai-dev --help
 ```
 
@@ -84,8 +84,10 @@ ai-dev baseline compare main
 ai-dev benchmark run --suite examples/benchmarks/output-budget-smoke.json --variant baseline
 ai-dev benchmark corpus --manifest examples/benchmarks/agent-corpus.json --trials 3
 ai-dev integrations install all
+ai-dev integrations install gemini
 ai-dev dashboard serve --port 8765
 ai-dev telemetry import response.json --client codex --format openai
+ai-dev telemetry import gemini-response.json --client gemini --format gemini
 ai-dev telemetry status --json
 ai-dev telemetry optimize --min-sessions 5 --json
 ai-dev telemetry export --format csv --output .ai/telemetry-exports/usage.csv --json
@@ -119,7 +121,7 @@ All commands support `--project`, `--json`, `--quiet`, `--help`, and `--version`
 ## Local MCP server
 
 `ai-dev mcp serve` exposes project status, implementation planning, compact feedback, bounded context, validation,
-and progressive evidence as local structured tools for Codex-compatible MCP clients. The STDIO
+and progressive evidence as local structured tools for clients including Gemini CLI. The STDIO
 server is dependency-free, has no network listener, fixes all calls to one project root, and
 defaults validation to preview-only. After consuming a successful `build_context` response, a
 client can return its `summary.delta.state_fingerprint` as `acknowledged_state`; an identical safe
@@ -179,14 +181,14 @@ Artifacts are written to `.ai/context/context-latest.md` and `.ai/context/contex
 
 Selective retrieval defaults to `auto`: focused includes or changed files can abstain from broad cross-file retrieval, while missing focus, broad configuration changes, and broad task scopes fall back to the full candidate set. Use `--retrieval always` to expand or `--retrieval never` to keep only focused roots and inferred related tests. The JSON and Markdown reports explain the decision and expose a related-test false-negative proxy.
 
-Install `ai-dev-cli-tools[tokenizers]` to enable exact local `cl100k_base` or `o200k_base` counting. Without that optional extra, accounting uses the explicit UTF-8-bytes/4 estimate and reports a fallback if an exact tokenizer was requested. Repeated `--token-budget category=N` limits source, diffs, tests, logs, maps, history, cached input, or output independently. `--provider-usage <json>` normalizes OpenAI or Anthropic usage fields from a project-local file without network access.
+Install `ai-dev-cli-tools[tokenizers]` to enable exact local `cl100k_base` or `o200k_base` counting. Without that optional extra, accounting uses the explicit UTF-8-bytes/4 estimate and reports a fallback if an exact tokenizer was requested. Repeated `--token-budget category=N` limits source, diffs, tests, logs, maps, history, cached input, or output independently. `--provider-usage <json>` normalizes OpenAI, Anthropic, or Gemini usage fields from a project-local file without network access.
 
 `ai-dev task` is the default one-shot handoff for an AI client. It combines the bounded plan,
 selected context, and check preview while delivering file references instead of full content.
 Use `--include-content` only when the consumer truly needs the bodies. The response includes a
 state fingerprint and a token savings receipt; return that fingerprint with `--ack-state` only
 after consuming the response. Explicit acknowledgements are stored per client under
-`.ai/cache/client-state/`, so Codex, Claude Code, Cursor, and generic consumers never inherit one
+`.ai/cache/client-state/`, so Codex, Claude Code, Cursor, Gemini CLI, and generic consumers never inherit one
 another's assumed context. Receipts remain local under `.ai/token-efficiency/`.
 
 Provider-reported usage can be recorded through MCP `record_usage` or imported from a bounded,
@@ -314,7 +316,7 @@ git diff --check
 | mcp serve | implemented |
 | watch | implemented |
 | benchmark run/compare/gate/corpus | implemented |
-| integrations install | implemented for Codex, Claude Code, Cursor, and generic MCP |
+| integrations install | implemented for Codex, Claude Code, Cursor, Gemini CLI, and generic MCP |
 | dashboard status/serve | implemented, loopback-only |
 | telemetry import/status and MCP record_usage | implemented, provider-reported usage only |
 | telemetry gate/pricing snapshots and MCP usage_status | implemented, local and fail-closed |

@@ -165,7 +165,7 @@ class LocalMcpServer:
                         },
                         "client": {
                             "type": "string",
-                            "enum": ["codex", "claude", "cursor", "generic"],
+                            "enum": ["codex", "claude", "cursor", "gemini", "generic"],
                             "default": "generic",
                         },
                         "acknowledged_state": {"type": "string", "maxLength": 64},
@@ -189,7 +189,7 @@ class LocalMcpServer:
                     {
                         "client": {
                             "type": "string",
-                            "enum": ["codex", "claude", "cursor", "generic"],
+                            "enum": ["codex", "claude", "cursor", "gemini", "generic"],
                         },
                         "input_tokens": {"type": "integer", "minimum": 0},
                         "cached_input_tokens": {
@@ -579,7 +579,10 @@ class LocalMcpServer:
             {"default", "minimal", "debug", "review", "implement", "docs", "full"},
         )
         client = _choice(
-            arguments, "client", "generic", {"codex", "claude", "cursor", "generic"}
+            arguments,
+            "client",
+            "generic",
+            {"codex", "claude", "cursor", "gemini", "generic"},
         )
         _require_project(self.project_root)
         from ai_dev_tools.runners.task import TaskOptions, run_prepare_task
@@ -647,7 +650,10 @@ class LocalMcpServer:
             },
         )
         client = _choice(
-            arguments, "client", "generic", {"codex", "claude", "cursor", "generic"}
+            arguments,
+            "client",
+            "generic",
+            {"codex", "claude", "cursor", "gemini", "generic"},
         )
         _require_project(self.project_root)
         from ai_dev_tools.telemetry import (

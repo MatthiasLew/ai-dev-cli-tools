@@ -72,7 +72,7 @@ agent-visible bytes. Missing or invalid metrics safely fall back to generic meas
 never presented as exact model-token counts. `selection_metric_trials` is zero when precision and
 recall were not reported; their zero medians must not be interpreted as measured selection quality.
 
-Use `--client codex|claude|cursor|generic` to label runs from a real client adapter. A real adapter
+Use `--client codex|claude|cursor|gemini|generic` to label runs from a real client adapter. A real adapter
 should emit `input_tokens` or `output_tokens` in its private metrics line. The
 `--require-reported-tokens` gate fails unless every candidate trial contains provider-reported
 usage; this prevents estimated character counts from being presented as real client token data.

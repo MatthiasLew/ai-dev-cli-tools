@@ -7,10 +7,12 @@ ai-dev integrations install all
 ai-dev integrations install codex
 ai-dev integrations install claude
 ai-dev integrations install cursor
+ai-dev integrations install gemini
 ```
 
-The generated files are `.codex/config.toml`, `.mcp.json`, `.cursor/mcp.json`, and
-`mcp.ai-dev.json`. Matching reference-first task profiles are written to `.ai-dev/clients/`.
+The generated files are `.codex/config.toml`, `.mcp.json`, `.cursor/mcp.json`,
+`.gemini/settings.json`, and `mcp.ai-dev.json`. Matching reference-first task profiles are written
+to `.ai-dev/clients/`.
 Existing files are preserved unless `--force` is explicitly supplied. Each
 configuration launches the same Python environment as the installer via stdio and pins the
 project root, which avoids working-directory ambiguity.
@@ -47,6 +49,7 @@ Existing JSON or JSONL can be imported from inside the project:
 ai-dev telemetry import response.json --client codex --format openai --json
 ai-dev telemetry import anthropic.json --client claude --format anthropic --json
 ai-dev telemetry import cursor-usage.jsonl --client cursor --format generic --json
+ai-dev telemetry import gemini-response.json --client gemini --format gemini --json
 ai-dev telemetry status --json
 ```
 
@@ -81,6 +84,11 @@ official `usage.input_tokens`, `usage.input_tokens_details.cached_tokens`,
 For Anthropic, total normalized input is the sum of uncached input, cache creation, and cache read
 fields as specified by the
 [Anthropic pricing and usage documentation](https://docs.anthropic.com/en/docs/about-claude/pricing).
+The Gemini adapter reads `usageMetadata` from the REST response or `usage_metadata` from the SDK.
+It treats prompt plus tool-use prompt tokens as total input, cached content as an input subset, and
+candidate plus thought tokens as output, with thoughts also reported separately. The field
+definitions come from the
+[Gemini GenerateContent UsageMetadata reference](https://ai.google.dev/api/generate-content#UsageMetadata).
 
 ## Versioned pricing snapshots
 

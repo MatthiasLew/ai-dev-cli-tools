@@ -7,7 +7,7 @@ from pathlib import Path
 from ai_dev_tools.models.report import Artifact, Issue, Report
 from ai_dev_tools.token_efficiency import client_profile
 
-CLIENTS = ("codex", "claude", "cursor", "generic")
+CLIENTS = ("codex", "claude", "cursor", "gemini", "generic")
 
 
 def install_integrations(project_root: Path, client: str = "all", *, force: bool = False) -> Report:
@@ -97,6 +97,7 @@ def _configuration(root: Path, client: str) -> tuple[Path, str]:
     paths = {
         "claude": root / ".mcp.json",
         "cursor": root / ".cursor" / "mcp.json",
+        "gemini": root / ".gemini" / "settings.json",
         "generic": root / "mcp.ai-dev.json",
     }
     return paths[client], json.dumps(payload, indent=2) + "\n"

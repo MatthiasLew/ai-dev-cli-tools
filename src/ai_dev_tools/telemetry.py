@@ -9,8 +9,8 @@ from typing import Any
 
 from ai_dev_tools.models.report import Artifact, Issue, Report
 
-CLIENTS = {"codex", "claude", "cursor", "generic"}
-FORMATS = {"auto", "openai", "anthropic", "generic"}
+CLIENTS = {"codex", "claude", "cursor", "gemini", "generic"}
+FORMATS = {"auto", "openai", "anthropic", "gemini", "generic"}
 MAX_IMPORT_BYTES = 5_000_000
 MAX_TOKENS = 10_000_000_000
 MAX_DURATION_SECONDS = 604_800.0
@@ -287,6 +287,8 @@ def _normalize_one(payload: dict[str, Any], format_name: str) -> dict[str, Any] 
     if isinstance(container.get("body"), dict):
         container = container["body"]
     usage = container.get("usage")
+    if format_name == "gemini":
+        usage = container.get("usageMetadata", container.get("usage_metadata"))
     if not isinstance(usage, dict):
         return None
     if format_name == "anthropic":
@@ -301,22 +303,57 @@ def _normalize_one(payload: dict[str, Any], format_name: str) -> dict[str, Any] 
             _safe_int(details.get("cache_write_tokens")) if isinstance(details, dict) else 0
         )
         input_tokens = _token(usage.get("input_tokens", 0), "input_tokens")
+    elif format_name == "gemini":
+        cached = _safe_int(
+            usage.get("cachedContentTokenCount", usage.get("cached_content_token_count"))
+        )
+        cache_write = 0
+        prompt = usage.get("promptTokenCount", usage.get("prompt_token_count", 0))
+        tool_prompt = usage.get(
+            "toolUsePromptTokenCount", usage.get("tool_use_prompt_token_count", 0)
+        )
+        input_tokens = _token(prompt, "promptTokenCount") + _token(
+            tool_prompt, "toolUsePromptTokenCount"
+        )
     else:
         cached = _safe_int(usage.get("cached_input_tokens"))
         cache_write = _safe_int(usage.get("cache_write_input_tokens"))
         input_tokens = _token(usage.get("input_tokens", 0), "input_tokens")
     output_details = usage.get("output_tokens_details", {})
     reasoning = _safe_int(usage.get("reasoning_tokens"))
+    output_tokens = usage.get("output_tokens", 0)
+    if format_name == "gemini":
+        reasoning = _safe_int(
+            usage.get("thoughtsTokenCount", usage.get("thoughts_token_count"))
+        )
+        candidates = usage.get(
+            "candidatesTokenCount", usage.get("candidates_token_count", 0)
+        )
+        output_tokens = _token(candidates, "candidatesTokenCount") + reasoning
     if isinstance(output_details, dict) and "reasoning_tokens" in output_details:
         reasoning = _safe_int(output_details.get("reasoning_tokens"))
     result: dict[str, Any] = {
         "input_tokens": _token(input_tokens, "input_tokens"),
         "cached_input_tokens": _token(cached, "cached_input_tokens"),
         "cache_write_input_tokens": _token(cache_write, "cache_write_input_tokens"),
-        "output_tokens": _token(usage.get("output_tokens", 0), "output_tokens"),
+        "output_tokens": _token(output_tokens, "output_tokens"),
         "reasoning_tokens": _token(reasoning, "reasoning_tokens"),
-        "model": str(container.get("model", payload.get("model", "")))[:200],
-        "request_id": str(container.get("id", payload.get("request_id", "")))[:200],
+        "model": str(
+            container.get(
+                "model",
+                container.get(
+                    "modelVersion", container.get("model_version", payload.get("model", ""))
+                ),
+            )
+        )[:200],
+        "request_id": str(
+            container.get(
+                "id",
+                container.get(
+                    "responseId", container.get("response_id", payload.get("request_id", ""))
+                ),
+            )
+        )[:200],
     }
     if result["cached_input_tokens"] + result["cache_write_input_tokens"] > result["input_tokens"]:
         raise ValueError("cached and cache-write input exceed input tokens")
@@ -325,6 +362,8 @@ def _normalize_one(payload: dict[str, Any], format_name: str) -> dict[str, Any] 
 
 def _detect_format(records: list[dict[str, Any]]) -> str:
     encoded = json.dumps(records[:20], sort_keys=True)
+    if "usageMetadata" in encoded or "usage_metadata" in encoded:
+        return "gemini"
     if "input_tokens_details" in encoded:
         return "openai"
     if "cache_read_input_tokens" in encoded or "cache_creation_input_tokens" in encoded:

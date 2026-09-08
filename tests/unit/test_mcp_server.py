@@ -75,9 +75,13 @@ def test_initialize_advertises_tools_and_bounded_instructions(tmp_path: Path) ->
     ]
     status = next(tool for tool in tools if tool["name"] == "project_status")
     checks = next(tool for tool in tools if tool["name"] == "run_checks")
+    prepare = next(tool for tool in tools if tool["name"] == "prepare_task")
+    usage = next(tool for tool in tools if tool["name"] == "record_usage")
     assert status["annotations"]["readOnlyHint"] is True
     assert checks["annotations"]["readOnlyHint"] is False
     assert checks["inputSchema"]["additionalProperties"] is False
+    assert "gemini" in prepare["inputSchema"]["properties"]["client"]["enum"]
+    assert "gemini" in usage["inputSchema"]["properties"]["client"]["enum"]
 
 
 def test_stdio_transport_returns_json_lines_and_ignores_notifications(tmp_path: Path) -> None:
