@@ -8,7 +8,11 @@ from pathlib import Path
 
 from ai_dev_tools.cache.graph import related_tests as graph_related_tests
 from ai_dev_tools.cache.graph import shortest_reason_paths
-from ai_dev_tools.cache.repository import read_repository_index, update_repository_index
+from ai_dev_tools.cache.repository import (
+    is_ignored_path,
+    read_repository_index,
+    update_repository_index,
+)
 from ai_dev_tools.config import Settings
 from ai_dev_tools.runners.check_models import ChangedSelection, ChangedStrategy, CheckTask
 from ai_dev_tools.utils.subprocess import CommandResult, run_command
@@ -19,7 +23,11 @@ def select_changed_checks(
     plan: list[CheckTask],
     collector: Callable[[Path], list[str]] | None = None,
 ) -> ChangedSelection:
-    changed_files = (collector or collect_changed_files)(settings.project_root)
+    changed_files = [
+        path
+        for path in (collector or collect_changed_files)(settings.project_root)
+        if not _is_ignored_changed_path(path, settings.ignore_paths)
+    ]
     if not changed_files:
         return ChangedSelection("no_changes", "high", [], [], [], "No changed files detected.")
     config_reason = _configuration_change_reason(changed_files)
@@ -279,6 +287,14 @@ def _is_test_path(path: Path) -> bool:
         or ".test." in text
         or ".spec." in text
         or path.name.startswith("test_")
+    )
+
+
+def _is_ignored_changed_path(relative: str, ignored: set[str]) -> bool:
+    """Apply repository ignore rules before selecting focused validation targets."""
+    normalized = relative.replace("\\", "/").strip("/")
+    return Path(normalized).suffix.lower() in {".pyc", ".pyo"} or is_ignored_path(
+        normalized, ignored
     )
 
 
