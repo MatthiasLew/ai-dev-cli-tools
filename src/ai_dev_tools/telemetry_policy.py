@@ -13,7 +13,7 @@ from ai_dev_tools.telemetry import load_session_rows
 
 MAX_POLICY_BYTES = 250_000
 VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-PROVIDERS = {"openai", "anthropic", "generic"}
+PROVIDERS = {"openai", "anthropic", "gemini", "generic"}
 TOKEN_METRICS = ("input_tokens", "output_tokens", "total_tokens", "reasoning_tokens")
 LIMIT_KEYS = {f"max_{metric}" for metric in TOKEN_METRICS} | {
     "max_sessions",

@@ -8,7 +8,7 @@ DOCS = ROOT / ".github" / "workflows" / "docs.yml"
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 PUBLISH = ROOT / ".github" / "workflows" / "publish-pypi.yml"
 REQUIRED_OS = ["ubuntu-latest", "windows-latest", "macos-latest"]
-REQUIRED_PYTHON = ['"3.11"', '"3.12"', '"3.13"']
+REQUIRED_PYTHON = ['"3.11"', '"3.12"', '"3.13"', '"3.14"']
 REQUIRED_TESTPYPI_RELEASE_TOKENS = [
     'tags:',
     '- "v*"',

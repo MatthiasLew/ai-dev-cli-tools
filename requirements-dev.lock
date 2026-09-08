@@ -1,4 +1,4 @@
-# Reproducible development-tool baseline for the 1.0 release line.
+# Reproducible development-tool baseline for the 1.2 release line.
 # Install with: python -m pip install -c requirements-dev.lock -e ".[dev]"
 build==1.6.0
 coverage==7.15.1

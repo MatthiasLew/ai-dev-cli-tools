@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.2.2 - 2026-09-08
+
+- Add a native Gemini CLI MCP integration, reference-first client profile, provider-reported
+  `usageMetadata` import, and Gemini pricing snapshot support.
+- Add Python 3.14 to the supported classifiers and cross-platform CI matrix.
+- Ignore named virtual environments and bytecode during changed-check selection, prefer the
+  project virtual-environment interpreter, and keep Ruff failures out of pytest-focused reruns.
+- Add CodeQL analysis, Dependabot update configuration, and a complete security reporting and
+  supported-version policy.
+
 ## 1.2.1 - 2026-09-01
 
 - Fix the blank local dashboard by preserving JavaScript newline escapes and resolving dashboard

@@ -224,7 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_run.add_argument("--cache-state", choices=["cold", "warm"], default="cold")
     benchmark_run.add_argument("--timeout", type=int, default=300)
     benchmark_run.add_argument(
-        "--client", choices=["codex", "claude", "cursor", "generic"], default="generic"
+        "--client", choices=["codex", "claude", "cursor", "gemini", "generic"], default="generic"
     )
     benchmark_compare = benchmark_sub.add_parser("compare")
     benchmark_compare.add_argument("baseline", type=Path)
@@ -266,7 +266,10 @@ def build_parser() -> argparse.ArgumentParser:
     integrations_sub = integrations.add_subparsers(dest="integrations_command", required=True)
     integrations_install = integrations_sub.add_parser("install")
     integrations_install.add_argument(
-        "client", nargs="?", choices=["all", "codex", "claude", "cursor", "generic"], default="all"
+        "client",
+        nargs="?",
+        choices=["all", "codex", "claude", "cursor", "gemini", "generic"],
+        default="all",
     )
     integrations_install.add_argument("--force", action="store_true")
 
@@ -282,10 +285,10 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_import = telemetry_sub.add_parser("import")
     telemetry_import.add_argument("input", type=Path)
     telemetry_import.add_argument(
-        "--client", choices=["codex", "claude", "cursor", "generic"], required=True
+        "--client", choices=["codex", "claude", "cursor", "gemini", "generic"], required=True
     )
     telemetry_import.add_argument(
-        "--format", choices=["auto", "openai", "anthropic", "generic"], default="auto"
+        "--format", choices=["auto", "openai", "anthropic", "gemini", "generic"], default="auto"
     )
     telemetry_import.add_argument("--pricing", type=Path)
     telemetry_import.add_argument("--phase", default="")
@@ -319,14 +322,14 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_pricing_import = telemetry_pricing_sub.add_parser("import")
     telemetry_pricing_import.add_argument("input", type=Path)
     telemetry_pricing_import.add_argument(
-        "--provider", choices=["openai", "anthropic", "generic"], required=True
+        "--provider", choices=["openai", "anthropic", "gemini", "generic"], required=True
     )
     telemetry_pricing_import.add_argument("--version", required=True)
     telemetry_pricing_import.add_argument("--source", default="")
     telemetry_pricing_import.add_argument("--no-activate", action="store_false", dest="activate")
     telemetry_pricing_activate = telemetry_pricing_sub.add_parser("activate")
     telemetry_pricing_activate.add_argument(
-        "provider", choices=["openai", "anthropic", "generic"]
+        "provider", choices=["openai", "anthropic", "gemini", "generic"]
     )
     telemetry_pricing_activate.add_argument("version")
 
@@ -344,7 +347,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="minimal",
     )
     task.add_argument(
-        "--client", choices=["codex", "claude", "cursor", "generic"], default="generic"
+        "--client", choices=["codex", "claude", "cursor", "gemini", "generic"], default="generic"
     )
     task.add_argument("--ack-state")
     task.add_argument("--no-persist-ack", action="store_false", dest="persist_ack")

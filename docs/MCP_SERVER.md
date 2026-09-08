@@ -40,6 +40,18 @@ tool_timeout_sec = 300
 The official Codex MCP configuration reference is available in the
 [Codex MCP documentation](https://developers.openai.com/codex/mcp/).
 
+## Connect Gemini CLI
+
+Generate a project-scoped Gemini CLI configuration:
+
+```bash
+ai-dev integrations install gemini
+```
+
+This creates or safely merges `.gemini/settings.json` with an `ai-dev-tools` entry under
+`mcpServers` and pins the project root and installer Python environment. Restart Gemini CLI after
+changing the file. Gemini CLI prefixes discovered MCP tool names with the configured server alias.
+
 ## Tools
 
 | Tool | Purpose | Default behavior | MCP annotation |

@@ -44,6 +44,18 @@ CLIENT_PROFILES: dict[str, dict[str, object]] = {
         "telemetry_status_tool": "usage_status",
         "telemetry_optimizer_tool": "optimize_usage",
     },
+    "gemini": {
+        "context_profile": "minimal",
+        "max_chars": 20_000,
+        "max_files": 20,
+        "max_file_chars": 4_000,
+        "tokenizer": "estimate",
+        "delta": True,
+        "content_default": "references",
+        "telemetry_tool": "record_usage",
+        "telemetry_status_tool": "usage_status",
+        "telemetry_optimizer_tool": "optimize_usage",
+    },
     "generic": {
         "context_profile": "minimal",
         "max_chars": 20_000,

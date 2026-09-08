@@ -51,6 +51,61 @@ def test_anthropic_and_generic_usage_are_normalized() -> None:
     assert generic["reasoning_tokens"] == 2
 
 
+def test_gemini_usage_metadata_is_auto_detected_and_normalized() -> None:
+    gemini = normalize_records(
+        [
+            {
+                "responseId": "gemini-response-1",
+                "modelVersion": "gemini-test",
+                "usageMetadata": {
+                    "promptTokenCount": 1_000,
+                    "cachedContentTokenCount": 600,
+                    "toolUsePromptTokenCount": 100,
+                    "candidatesTokenCount": 200,
+                    "thoughtsTokenCount": 80,
+                    "totalTokenCount": 1_380,
+                },
+            }
+        ],
+        client="gemini",
+        format_name="auto",
+    )
+
+    assert gemini == {
+        "input_tokens": 1_100,
+        "cached_input_tokens": 600,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 280,
+        "reasoning_tokens": 80,
+        "model": "gemini-test",
+        "request_id": "gemini-response-1",
+    }
+
+
+def test_gemini_snake_case_sdk_usage_is_supported() -> None:
+    gemini = normalize_records(
+        [
+            {
+                "response_id": "sdk-response",
+                "model_version": "gemini-sdk-test",
+                "usage_metadata": {
+                    "prompt_token_count": 20,
+                    "cached_content_token_count": 5,
+                    "candidates_token_count": 4,
+                    "thoughts_token_count": 2,
+                },
+            }
+        ],
+        client="gemini",
+        format_name="gemini",
+    )
+
+    assert gemini["input_tokens"] == 20
+    assert gemini["cached_input_tokens"] == 5
+    assert gemini["output_tokens"] == 6
+    assert gemini["reasoning_tokens"] == 2
+
+
 def test_jsonl_deduplicates_provider_response_ids(tmp_path: Path) -> None:
     source = tmp_path / "events.jsonl"
     event = {"type": "response.completed", "response": {"id": "resp_1", "usage": {
