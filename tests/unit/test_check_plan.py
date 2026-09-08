@@ -9,6 +9,7 @@ from ai_dev_tools.runners.check import (
     infer_tests_for_changed_files,
     select_changed_checks,
 )
+from ai_dev_tools.runners.check_selection import select_changed_checks as select_changed_checks_impl
 from ai_dev_tools.utils.subprocess import CommandResult
 
 
@@ -122,6 +123,41 @@ def test_collect_changed_files_does_not_escape_nested_project_root(
     monkeypatch.setattr(check, "run_command", fake_run)
 
     assert collect_changed_files(nested) == []
+
+
+def test_changed_selection_excludes_ignored_directories_and_bytecode(tmp_path: Path) -> None:
+    settings = load_settings(tmp_path)
+    plan = build_validation_plan(settings)
+
+    selection = select_changed_checks_impl(
+        settings,
+        plan,
+        collector=lambda _root: [
+            "src/app.py",
+            "tests/__pycache__/test_app.cpython-312.pyc",
+            "tests/test_stale.pyo",
+            ".venv/lib/python/site-packages/test_vendor.py",
+        ],
+    )
+
+    assert selection.strategy == "broad_fallback"
+    assert selection.changed_files == ["src/app.py"]
+
+
+def test_changed_selection_honors_custom_ignore_patterns(tmp_path: Path) -> None:
+    (tmp_path / ".ai-dev-tools.toml").write_text(
+        "[ignore]\npaths=['generated/**']\n", encoding="utf-8"
+    )
+    settings = load_settings(tmp_path)
+
+    selection = select_changed_checks_impl(
+        settings,
+        build_validation_plan(settings),
+        collector=lambda _root: ["generated/tests/test_code.py"],
+    )
+
+    assert selection.strategy == "no_changes"
+    assert selection.changed_files == []
 
 
 def test_build_validation_plan_detects_node_and_build(tmp_path: Path) -> None:

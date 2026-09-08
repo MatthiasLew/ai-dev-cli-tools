@@ -122,7 +122,7 @@ def _is_ignored_name(name: str, ignored: set[str]) -> bool:
     )
 
 
-def _is_ignored_path(relative: str, ignored: set[str]) -> bool:
+def is_ignored_path(relative: str, ignored: set[str]) -> bool:
     parts = relative.split("/")
     if any(_is_ignored_name(part, ignored) for part in parts):
         return True
@@ -151,7 +151,7 @@ def _project_files(root: Path) -> list[Path]:
             if path.is_symlink() or not path.is_file():
                 continue
             relative = path.relative_to(root).as_posix()
-            if _is_ignored_path(relative, ignored):
+            if is_ignored_path(relative, ignored):
                 continue
             files.append(path)
     return files
