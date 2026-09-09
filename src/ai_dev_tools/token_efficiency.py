@@ -146,7 +146,7 @@ def compact_context(
             ),
         ),
         "budget": _selected_fields(
-            summary.get("budget"), ("max_chars", "used_chars", "truncated")
+            summary.get("budget"), ("scope", "max_chars", "used_chars", "json_chars", "truncated")
         ),
         "character_budget": _selected_fields(
             summary.get("character_budget"),

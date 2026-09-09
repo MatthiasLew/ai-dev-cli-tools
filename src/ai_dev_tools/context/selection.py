@@ -88,7 +88,7 @@ def _add_candidate(
     if blocked:
         rejected.append(RejectedFile(rel, blocked, _rejection_reason_code(blocked)))
         return
-    candidates[resolved] = reason
+    candidates.setdefault(resolved, reason)
 
 
 def _blocked_reason(path: Path, rel: str, excludes: tuple[str, ...]) -> str | None:

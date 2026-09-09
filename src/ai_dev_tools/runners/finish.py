@@ -71,6 +71,8 @@ def _blocking_reasons(
             reasons.append(f"{checks_failed} check(s) failed")
         else:
             reasons.append("required checks failed")
+    elif check_report.status not in {"success", "warning"}:
+        reasons.append("required checks incomplete")
     if findings:
         reasons.append(f"{len(findings)} potential secret(s) detected")
     return reasons
@@ -83,6 +85,8 @@ def _blocking_reason_code(reason: str) -> str:
         return "MERGE_CONFLICTS"
     if reason.startswith("repository state is "):
         return f"UNSAFE_REPOSITORY_{reason.rsplit(' ', 1)[-1]}"
+    if reason == "required checks incomplete":
+        return "CHECKS_INCOMPLETE"
     if "check" in reason and "failed" in reason:
         return "CHECKS_FAILED"
     if "secret" in reason:

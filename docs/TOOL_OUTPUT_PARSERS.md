@@ -31,3 +31,7 @@ unregister_parser("my-tool")
 ```
 
 Names are unique by default. Pass `replace=True` only when intentionally overriding an existing parser. Custom parsers are prepended so the generic fallback cannot shadow them. `parser_names()` exposes deterministic selection order for diagnostics and tests.
+Node's built-in test runner is recognized from anchored spec (`ℹ`) or TAP (`#`) summary
+lines for tests/pass/fail, even through `npm test`. Cancelled tests count as errors and TODO
+entries as skipped. Subprocess nonzero exit codes remain failures. Generic summary `errors`
+is numeric; diagnostic lines are available separately as `error_lines`.
