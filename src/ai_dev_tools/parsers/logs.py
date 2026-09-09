@@ -36,6 +36,12 @@ PHPUNIT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+NODE_SUMMARY_PATTERN = re.compile(
+    r"^[ \t]*(?:ℹ|#)[ \t]+(?P<kind>tests|pass|fail|cancelled|skipped|todo)"
+    r"[ \t]+(?P<count>\d+)[ \t]*$",
+    re.MULTILINE,
+)
+
 TEST_KINDS = {
     "passed": "passed",
     "failed": "failed",
@@ -151,6 +157,23 @@ class RegexToolParser:
         return _parsed_from_output(self.tool_name, self.tool_name, self.confidence, command)
 
 
+class NodeTestParser:
+    tool_name = "node-test"
+
+    def can_parse(self, command: CommandResult) -> bool:
+        explicit = _extract_command_tool(command)
+        if explicit in KNOWN_TOOL_IDENTIFIERS:
+            return False
+        summary = dict(
+            (match.group("kind"), int(match.group("count")))
+            for match in NODE_SUMMARY_PATTERN.finditer(clean_output(command.combined_output))
+        )
+        return {"tests", "pass", "fail"} <= summary.keys()
+
+    def parse(self, command: CommandResult) -> ParsedToolResult:
+        return _parsed_from_output(self.tool_name, self.tool_name, "high", command)
+
+
 class GenericParser:
     tool_name = "generic"
 
@@ -165,7 +188,8 @@ BUILTIN_PARSERS: tuple[ToolOutputParser, ...] = (
     RegexToolParser("ruff", ("ruff", "would reformat"), "high"),
     RegexToolParser("mypy", ("mypy", "success: no issues found", "checked 1 source file"), "high"),
     RegexToolParser("pytest", ("pytest", "failed tests/", "= short test summary info ="), "high"),
-    RegexToolParser("coverage", ("coverage", "fail_under", "cover"), "medium"),
+    NodeTestParser(),
+    RegexToolParser("coverage", ("coverage", "fail_under"), "medium"),
     RegexToolParser("jest", ("jest", "test suites:", "fail src/"), "high"),
     RegexToolParser("vitest", ("vitest", "test files", "duration"), "high"),
     RegexToolParser("eslint", ("eslint", "problems", "no-unused-vars"), "high"),
@@ -228,6 +252,18 @@ def parse_test_counts(output: str) -> dict[str, int]:
         kind = match.group("kind").lower()
         if kind in TEST_KINDS:
             counts[TEST_KINDS[kind]] += int(match.group("count"))
+    node = {
+        match.group("kind"): int(match.group("count"))
+        for match in NODE_SUMMARY_PATTERN.finditer(output)
+    }
+    if {"tests", "pass", "fail"} <= node.keys():
+        counts.update(
+            passed=node["pass"],
+            failed=node["fail"],
+            errors=node.get("cancelled", 0),
+            skipped=node.get("skipped", 0) + node.get("todo", 0),
+        )
+        return counts
     cargo = CARGO_PATTERN.search(output)
     if cargo:
         counts["passed"] = max(counts["passed"], int(cargo.group("passed")))
@@ -351,7 +387,7 @@ def _summary_parts(output: str) -> dict[str, object]:
         "grouped_repeated_messages": [
             f"{line} x {count}" for line, count in grouped.items() if count > 1
         ][:20],
-        "errors": errors[:20],
+        "error_lines": errors[:20],
     }
 
 

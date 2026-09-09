@@ -188,7 +188,7 @@ def _candidate_tests_for_source(path: Path) -> list[str]:
             relative_parts[-1] = f"test_{stem}.py"
             candidates.append(str(Path("tests", *relative_parts)))
         candidates.append(str(Path("tests", f"test_{stem}.py")))
-    if suffix in {".js", ".jsx", ".ts", ".tsx"}:
+    if suffix in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}:
         candidates.extend(
             [
                 str(path.with_name(f"{stem}.test{suffix}")),
@@ -259,11 +259,18 @@ def _commands_for_selected_tests(
     commands: list[list[str]] = []
     if not selected_tests:
         return commands
+    supported = {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".java", ".php"}
+    if any(Path(path).suffix.lower() not in supported for path in selected_tests):
+        return [task.command for task in plan if task.category == "unit_tests"]
     if any(path.endswith(".py") for path in selected_tests):
         pytest_cmd = next((task.command for task in plan if task.name == "pytest"), None)
         python_bin = pytest_cmd[0] if pytest_cmd else sys.executable
-        commands.append([python_bin, "-m", "pytest", *selected_tests])
-    if any(path.endswith((".js", ".jsx", ".ts", ".tsx")) for path in selected_tests):
+        commands.append(
+            [python_bin, "-m", "pytest", *(path for path in selected_tests if path.endswith(".py"))]
+        )
+    if any(
+        path.endswith((".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")) for path in selected_tests
+    ):
         npm_test = next((task.command for task in plan if task.name == "npm test"), ["npm", "test"])
         commands.append(npm_test)
     if any(path.endswith(".java") for path in selected_tests):

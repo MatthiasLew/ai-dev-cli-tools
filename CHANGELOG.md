@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Fix #78: recognize Node spec/TAP summaries without matching `recoverable` as coverage.
+- Fix #79: execute selected `.mjs`/`.cjs` tests, retain broad fallback commands, and fail
+  explicitly when selected tests have no runnable validation plan.
+- Fix #80: preserve source prefixes under small content budgets, document content-only
+  `max_chars`, measure actual artifact sizes, and distinguish receipt/content truncation.
+- Preserve numeric parser error counts and restrict pytest arguments to Python selections.
+- Prevent `finish` from approving incomplete, blocked or invalid validation.
+- Drain cancellable subprocess pipes while waiting and preserve output captured before timeout.
+- Add regression coverage and a repository audit with prioritized follow-up recommendations.
+
+## Unreleased
+
 ## 1.2.2 - 2026-09-08
 
 - Add a native Gemini CLI MCP integration, reference-first client profile, provider-reported
