@@ -158,3 +158,35 @@ def test_checkpoint_rejects_invalid_and_stale_entries(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert load_resume_keys(tmp_path, {"current"}) == {"current"}
+
+
+def test_scheduler_shares_single_executor_across_waves(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from concurrent.futures import ThreadPoolExecutor
+
+    executor_instances: list[ThreadPoolExecutor] = []
+    real_init = ThreadPoolExecutor.__init__
+
+    def spy_init(self: ThreadPoolExecutor, *args, **kwargs):  # type: ignore[no-untyped-def]
+        executor_instances.append(self)
+        real_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(ThreadPoolExecutor, "__init__", spy_init)
+
+    # Create tasks spanning multiple costs/waves
+    tasks = [
+        CheckTask("lint", "lint", ["lint"], "fast", "configured"),
+        CheckTask("unit", "unit_tests", ["test"], "medium", "configured"),
+        CheckTask("slow", "integration_tests", ["slow"], "slow", "configured"),
+    ]
+
+    result = schedule_checks(
+        tasks,
+        jobs=4,
+        policy="feedback-first",
+        execute=lambda task: _result(task, 0),
+    )
+
+    assert len(result.tasks) == 3
+    # Exactly 1 ThreadPoolExecutor should be created across all 3 waves
+    assert len(executor_instances) == 1
+

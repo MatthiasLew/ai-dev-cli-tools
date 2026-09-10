@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from threading import Event
@@ -58,6 +59,23 @@ def test_windows_batch_command_wrapper() -> None:
         assert wrapped[1:3] == ["/d", "/c"]
     else:
         assert wrapped == ["npm.CMD", "--version"]
+
+
+def test_resolve_executable_caching() -> None:
+    from ai_dev_tools.utils.subprocess import _resolve_executable, _windows_batch_command
+
+    _resolve_executable.cache_clear()
+    info_before = _resolve_executable.cache_info()
+    assert info_before.hits == 0
+
+    res1 = _windows_batch_command(["python", "--version"])
+    res2 = _windows_batch_command(["python", "--version"])
+    assert res1 == res2
+
+    if os.name == "nt":
+        info_after = _resolve_executable.cache_info()
+        assert info_after.hits >= 1
+
 
 
 def test_validate_ci_script() -> None:

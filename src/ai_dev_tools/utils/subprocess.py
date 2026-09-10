@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from threading import Event
 
@@ -140,10 +141,15 @@ def _timeout_text(value: str | bytes | None) -> str:
     return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
 
 
+@lru_cache(maxsize=256)
+def _resolve_executable(command_name: str) -> str:
+    return shutil.which(command_name) or command_name
+
+
 def _windows_batch_command(command: list[str]) -> list[str]:
     if os.name != "nt" or not command:
         return command
-    resolved = shutil.which(command[0]) or command[0]
+    resolved = _resolve_executable(command[0])
     executable = resolved.lower()
     if executable.endswith((".cmd", ".bat")):
         comspec = os.environ.get("COMSPEC", "cmd.exe")

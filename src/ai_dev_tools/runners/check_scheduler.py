@@ -25,6 +25,20 @@ def schedule_checks(
     policy: str,
     execute: Callable[[CheckTask], CommandResult],
 ) -> ScheduleResult:
+    limit = max(1, jobs)
+    if limit > 1:
+        with ThreadPoolExecutor(max_workers=limit) as executor:
+            return _run_schedule(tasks, jobs, policy, execute, executor)
+    return _run_schedule(tasks, jobs, policy, execute, None)
+
+
+def _run_schedule(
+    tasks: list[CheckTask],
+    jobs: int,
+    policy: str,
+    execute: Callable[[CheckTask], CommandResult],
+    executor: ThreadPoolExecutor | None,
+) -> ScheduleResult:
     started = monotonic()
     completed_tasks: list[CheckTask] = []
     results: list[CommandResult] = []
@@ -46,7 +60,7 @@ def schedule_checks(
             if not ready:
                 cancelled.extend(remaining)
                 break
-            wave_results = _execute_group(ready, jobs, execute)
+            wave_results = _execute_group(ready, jobs, execute, executor=executor)
             completed_tasks.extend(ready)
             results.extend(wave_results)
             remaining = [task for task in remaining if task not in ready]
@@ -111,6 +125,8 @@ def _execute_group(
     tasks: list[CheckTask],
     jobs: int,
     execute: Callable[[CheckTask], CommandResult],
+    *,
+    executor: ThreadPoolExecutor | None = None,
 ) -> list[CommandResult]:
     if not tasks:
         return []
@@ -120,9 +136,11 @@ def _execute_group(
         workers = min(limit, len(batch))
         if workers == 1:
             batch_results = [execute(batch[0])]
+        elif executor is not None:
+            batch_results = list(executor.map(execute, batch))
         else:
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                batch_results = list(executor.map(execute, batch))
+            with ThreadPoolExecutor(max_workers=workers) as local_executor:
+                batch_results = list(local_executor.map(execute, batch))
         completed.update(
             (id(task), result) for task, result in zip(batch, batch_results, strict=True)
         )
