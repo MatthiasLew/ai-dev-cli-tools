@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 from ai_dev_tools.config import load_settings
 from ai_dev_tools.git.symbol_diff import analyze_symbol_diff
@@ -20,33 +21,37 @@ def inspect_git(
     report = Report(
         command="git inspect" if detailed else "git status", project_root=settings.project_root
     )
-    inside = run_command(["git", "rev-parse", "--is-inside-work-tree"], settings.project_root, 20)
-    if inside.exit_code != 0:
+    status_cmd = run_command(
+        ["git", "status", "--porcelain=v2", "--branch", "-z"],
+        settings.project_root,
+        30,
+    )
+    if status_cmd.exit_code != 0:
         report.status = "warning"
         report.summary = {"state": "NOT_A_GIT_REPOSITORY"}
         return report
 
-    branch = _text(["git", "branch", "--show-current"], settings.project_root) or None
-    upstream = _upstream(settings.project_root)
-    porcelain = _text(["git", "status", "--porcelain=v1", "--branch"], settings.project_root)
-    ahead_count, behind_count = _ahead_behind_counts(porcelain)
-    staged_entries = _name_status(
-        ["git", "diff", "--cached", "--name-status", "-z"], settings.project_root
-    )
-    unstaged_entries = _name_status(["git", "diff", "--name-status", "-z"], settings.project_root)
-    untracked_files = _nul_output(
-        ["git", "ls-files", "--others", "--exclude-standard", "-z"], settings.project_root
-    )
-    conflicted_files = _conflicted_files(porcelain)
+    parsed = _parse_porcelain_v2(status_cmd.stdout)
+    branch = parsed["branch"]
+    upstream = parsed["upstream"]
+    ahead_count: int = parsed["ahead"]
+    behind_count: int = parsed["behind"]
+    staged_entries: list[dict[str, str]] = parsed["staged_entries"]
+    unstaged_entries: list[dict[str, str]] = parsed["unstaged_entries"]
+    untracked_files: list[str] = parsed["untracked_files"]
+    conflicted_files: list[str] = parsed["conflicted_files"]
+
     staged_files = _entry_paths(staged_entries)
     unstaged_files = _entry_paths(unstaged_entries)
     changed = sorted({*staged_files, *unstaged_files, *untracked_files, *conflicted_files})
     states = _states(
-        porcelain=porcelain,
+        porcelain="",
         upstream=upstream,
         detached=branch is None,
         has_changes=bool(changed),
         has_conflicts=bool(conflicted_files),
+        ahead_count=ahead_count,
+        behind_count=behind_count,
     )
     deleted_files = [
         entry["path"]
@@ -74,18 +79,12 @@ def inspect_git(
             if entry["status"].startswith("R")
         ],
         "deleted_files": deleted_files,
-        "stash_count": len(
-            [
-                line
-                for line in _text(["git", "stash", "list"], settings.project_root).splitlines()
-                if line
-            ]
-        ),
+        "stash_count": _stash_count(settings.project_root),
     }
     if detailed:
         upstream_diff_bytes = (
             _diff_bytes(settings.project_root, ["git", "diff", upstream + "...HEAD"])
-            if upstream
+            if (upstream and ahead_count > 0)
             else 0
         )
         scan_paths = [settings.project_root / item for item in changed]
@@ -96,6 +95,16 @@ def inspect_git(
             deleted_files=deleted_files,
         )
         unstaged_diff_bytes = _diff_bytes(settings.project_root, ["git", "diff"])
+        diff_stat = (
+            _text(["git", "diff", "--stat"], settings.project_root)
+            if unstaged_diff_bytes > 0
+            else ""
+        )
+        staged_diff_bytes = (
+            _diff_bytes(settings.project_root, ["git", "diff", "--cached"])
+            if staged_files
+            else 0
+        )
         summary.update(
             {
                 "changed_symbols": symbol_diff["symbols"],
@@ -104,12 +113,10 @@ def inspect_git(
                 "recent_commits": _text(
                     ["git", "log", "--oneline", "-5"], settings.project_root
                 ).splitlines(),
-                "diff_stat": _text(["git", "diff", "--stat"], settings.project_root),
+                "diff_stat": diff_stat,
                 "diff_size_bytes": unstaged_diff_bytes,
                 "unstaged_diff_bytes": unstaged_diff_bytes,
-                "staged_diff_bytes": _diff_bytes(
-                    settings.project_root, ["git", "diff", "--cached"]
-                ),
+                "staged_diff_bytes": staged_diff_bytes,
                 "upstream_diff_bytes": upstream_diff_bytes,
                 "large_changed_files": _large_files(settings.project_root, changed),
                 "secret_findings": [
@@ -130,6 +137,97 @@ def inspect_git(
         write_markdown(report, settings.reports_directory / f"git-{suffix}.md")
         write_json(report, settings.reports_directory / f"git-{suffix}.json")
     return report
+
+
+def _parse_porcelain_v2(output: str) -> dict[str, Any]:
+    branch: str | None = None
+    upstream: str | None = None
+    ahead_count: int = 0
+    behind_count: int = 0
+    staged_entries: list[dict[str, str]] = []
+    unstaged_entries: list[dict[str, str]] = []
+    untracked_files: list[str] = []
+    conflicted_files: list[str] = []
+
+    tokens = output.split("\0")
+    i = 0
+    total = len(tokens)
+    while i < total:
+        tok = tokens[i]
+        i += 1
+        if not tok:
+            continue
+        if tok.startswith("# branch.head "):
+            head = tok[14:]
+            branch = None if head == "(detached)" else head
+        elif tok.startswith("# branch.upstream "):
+            upstream = tok[18:]
+        elif tok.startswith("# branch.ab "):
+            match = re.search(r"\+(\d+)\s+-(\d+)", tok[12:])
+            if match:
+                ahead_count = int(match.group(1))
+                behind_count = int(match.group(2))
+        elif tok.startswith("1 "):
+            parts = tok.split(" ", 8)
+            if len(parts) == 9:
+                xy = parts[1]
+                path = parts[8]
+                x, y = xy[0], xy[1]
+                if x != ".":
+                    staged_entries.append({"status": x, "path": path})
+                if y != ".":
+                    unstaged_entries.append({"status": y, "path": path})
+        elif tok.startswith("2 "):
+            parts = tok.split(" ", 9)
+            orig_path = tokens[i] if i < total else ""
+            i += 1
+            if len(parts) == 10:
+                xy = parts[1]
+                score = parts[8]
+                path = parts[9]
+                x, y = xy[0], xy[1]
+                if x != ".":
+                    staged_entries.append({"status": score, "path": path, "old_path": orig_path})
+                if y != ".":
+                    unstaged_entries.append({"status": y, "path": path})
+        elif tok.startswith("u "):
+            parts = tok.split(" ", 10)
+            if len(parts) == 11:
+                path = parts[10]
+                conflicted_files.append(path)
+                staged_entries.append({"status": "U", "path": path})
+                unstaged_entries.append({"status": "U", "path": path})
+        elif tok.startswith("? "):
+            untracked_files.append(tok[2:])
+
+    return {
+        "branch": branch,
+        "upstream": upstream,
+        "ahead": ahead_count,
+        "behind": behind_count,
+        "staged_entries": staged_entries,
+        "unstaged_entries": unstaged_entries,
+        "untracked_files": sorted(untracked_files),
+        "conflicted_files": sorted(conflicted_files),
+    }
+
+
+def _stash_count(root: Path) -> int:
+    git_dir = root / ".git"
+    if git_dir.is_file():
+        try:
+            content = git_dir.read_text(encoding="utf-8").strip()
+            if content.startswith("gitdir:"):
+                target = (root / content[7:].strip()).resolve()
+                if not (target / "logs" / "refs" / "stash").is_file():
+                    return 0
+        except OSError:
+            pass
+    elif git_dir.is_dir() and not (git_dir / "logs" / "refs" / "stash").is_file():
+        return 0
+
+    stash_lines = _text(["git", "stash", "list"], root).splitlines()
+    return len([line for line in stash_lines if line])
 
 
 def _upstream(root: Path) -> str | None:
@@ -189,13 +287,17 @@ def _states(
     detached: bool,
     has_changes: bool,
     has_conflicts: bool,
+    *,
+    ahead_count: int | None = None,
+    behind_count: int | None = None,
 ) -> list[str]:
     states: list[str] = []
     if detached:
         states.append("DETACHED_HEAD")
     if upstream is None:
         states.append("NO_UPSTREAM")
-    ahead_count, behind_count = _ahead_behind_counts(porcelain)
+    if ahead_count is None or behind_count is None:
+        ahead_count, behind_count = _ahead_behind_counts(porcelain)
     if ahead_count and behind_count:
         states.append("DIVERGED")
     elif ahead_count:
