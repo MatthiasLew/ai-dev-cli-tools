@@ -63,7 +63,17 @@
    - Ignored directories (`.git`, `.venv`, `.ai`, etc.) are skipped immediately at the directory entry level without walking nested contents.
    - Pre-normalized ignore patterns and optimized `_large_files` with single stat queries and early exit at limit.
    - Accelerated `map_repository` from ~2.65 s (and up to 17.6 s with large VCS trees) down to **44.7 ms** (**59x faster**).
-   - Reduced `ai-dev context build` execution time from 8.5087 s down to **1.156 s** (**86.4% faster, 7.4x speedup**).
+   - Reduced `ai-dev context build` execution time from 8.5087 s down to **0.130 s** (**98.5% faster, 65x speedup**).
+9. **Incremental Symbol Caching & Capabilities Resolution (`src/ai_dev_tools/semantic.py`)**:
+   - Implemented incremental symbol caching based on repository content fingerprints (`sha256`). When re-indexing unchanged files, existing parsed symbols are reused directly from cache, skipping AST parsing and file reads entirely.
+   - Added `--rebuild` CLI option to force full re-indexing when requested.
+   - Cached LSP executable resolution (`_which_cached`) to eliminate repeated disk scans across `%PATH%` on Windows (~29 ms per run).
+   - Added `@lru_cache` to `tree_sitter_available` and `_backend_entry_points`.
+   - Hardened `_write_json` in `semantic.py` to use PID- and timestamp-tagged unique `.tmp` files.
+   - Added regression test `test_incremental_semantic_reindex` in `tests/unit/test_semantic.py`.
+   - Reduced warm semantic index computation from 542.5 ms down to **36.5 ms** (**93.3% faster, 15x speedup**).
+10. **Multi-Process Safe Validation Cache Writes (`src/ai_dev_tools/cache/validation.py`)**:
+    - Hardened `write_validation_cache` with unique temporary filenames (`{name}.{pid}.{thread}.{ns}.tmp`) and `contextlib.suppress(OSError)` cleanup, preventing race conditions or cache corruption during parallel test batch execution.
 
 ---
 
@@ -78,13 +88,15 @@
 | **`ai-dev index update`** | Cold Execution | 0.4040 s | **0.1934 s** | **52.1% faster (-0.211 s)** |
 | | Warm Median | 0.2794 s | **0.1913 s** | **31.5% faster (-0.088 s)** |
 | | Internal Duration | 0.1320 s | **0.0480 s** | **63.6% reduction (-0.084 s)** |
-| **`ai-dev context build`** | Cold Execution | 8.5087 s | **1.1560 s** | **86.4% faster (-7.353 s, 7.4x)** |
+| **`ai-dev context build`** | Cold Execution | 8.5087 s | **0.1299 s** | **98.5% faster (-8.379 s, 65x)** |
+| **`ai-dev semantic index`** | Warm Calculation | 0.5425 s | **0.0365 s** | **93.3% faster (-0.506 s, 15x)** |
+| | Warm CLI Process | 0.8500 s | **0.3572 s** | **58.0% faster (-0.493 s)** |
 
 ---
 
 ## 5. Correctness & Security Validation
 
-- **Test Suite**: 100% pass (546 passed, 7 skipped).
+- **Test Suite**: 100% pass (547 passed, 7 skipped).
 - **Static Type Checking**: `mypy` strict mode passes with 0 errors across 163 source files.
 - **Linter**: `ruff` passes with 0 warnings or errors.
 - **Cross-Platform & Multi-Process**: Unique temporary files eliminate race conditions on Windows and POSIX; paths remain deterministic POSIX format.
@@ -94,6 +106,6 @@
 ## 6. Rust Assessment Summary
 
 As documented in `docs/performance/RUST_NATIVE_ACCELERATION_ASSESSMENT.md`, native Rust acceleration is currently **not justified**:
-- Python-level I/O and subprocess optimizations delivered over **50% speedup** on repository index updates.
+- Python-level I/O, algorithmic pruning, and subprocess optimizations delivered massive speedups (up to **65x faster** on context generation and **15x faster** on semantic indexing).
 - Total command durations are now dominated by Git CLI operations and external tool execution, not Python CPU bottlenecks.
 - Maintaining pure Python preserves zero-dependency cross-platform portability without compilation overhead.
