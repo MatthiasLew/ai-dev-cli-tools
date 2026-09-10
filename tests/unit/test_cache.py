@@ -298,3 +298,39 @@ def test_write_json_uses_unique_temp_file(tmp_path: Path, monkeypatch) -> None: 
     assert target_path.is_file()
 
 
+def test_parallel_hashing_preserves_deterministic_order_and_content(tmp_path: Path) -> None:
+    import hashlib
+
+    expected_digests: dict[str, str] = {}
+    for i in range(12):
+        name = f"file_{i:02d}.txt"
+        content = f"content for {i} with some extra padding to test hashing"
+        (tmp_path / name).write_text(content, encoding="utf-8")
+        expected_digests[name] = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    result = update_repository_index(tmp_path, rebuild=True)
+    summary = result["summary"]
+    assert isinstance(summary, dict)
+    assert summary["hashed"] == 12
+    assert summary["reused"] == 0
+
+    entries = result["entries"]
+    assert isinstance(entries, list)
+    assert len(entries) == 12
+
+    paths = [e["path"] for e in entries]
+    assert paths == sorted(paths)
+
+    for entry in entries:
+        assert entry["sha256"] == expected_digests[entry["path"]]
+
+    # Warm run should reuse all precomputed digests
+    warm_result = update_repository_index(tmp_path, rebuild=False)
+    warm_summary = warm_result["summary"]
+    assert isinstance(warm_summary, dict)
+    assert warm_summary["hashed"] == 0
+    assert warm_summary["reused"] == 12
+    assert warm_result["entries"] == entries
+
+
+

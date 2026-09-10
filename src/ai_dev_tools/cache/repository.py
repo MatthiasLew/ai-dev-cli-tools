@@ -6,6 +6,7 @@ import json
 import os
 import posixpath
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
@@ -29,33 +30,63 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
     index_path = resolved_root / INDEX_RELATIVE_PATH
     previous = {} if rebuild else read_repository_index(resolved_root)
     previous_entries = _entry_map(previous.get("entries"))
-    entries: list[IndexEntry] = []
     reused = 0
-    hashed = 0
     reused_paths: set[str] = set()
     ignored = {item.replace(chr(92), "/").strip("/") for item in DEFAULT_IGNORES}
 
-    for path, relative, stat in _project_file_entries(resolved_root, ignored):
+    file_entries = list(_project_file_entries(resolved_root, ignored))
+    entries: list[IndexEntry | None] = [None] * len(file_entries)
+    to_hash: list[tuple[int, Path, str, os.stat_result]] = []
+
+    for idx, (path, relative, stat) in enumerate(file_entries):
         old = previous_entries.get(relative)
         if old is not None and old["size"] == stat.st_size and old["mtime_ns"] == stat.st_mtime_ns:
-            digest = old["sha256"]
-            reused += 1
-            reused_paths.add(relative)
-        else:
-            digest = _sha256(path)
-            hashed += 1
-        entries.append(
-            {
+            entries[idx] = {
                 "path": relative,
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
-                "sha256": digest,
+                "sha256": old["sha256"],
             }
-        )
+            reused += 1
+            reused_paths.add(relative)
+        else:
+            to_hash.append((idx, path, relative, stat))
+
+    hashed = len(to_hash)
+    if hashed == 1:
+        idx, path, relative, stat = to_hash[0]
+        entries[idx] = {
+            "path": relative,
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+            "sha256": _sha256(path),
+        }
+    elif hashed > 1:
+        workers = min(hashed, min(8, os.cpu_count() or 4))
+        if workers > 1:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                digests = list(executor.map(_sha256, [item[1] for item in to_hash]))
+            for (idx, _path, relative, stat), digest in zip(to_hash, digests, strict=True):
+                entries[idx] = {
+                    "path": relative,
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "sha256": digest,
+                }
+        else:
+            for idx, path, relative, stat in to_hash:
+                entries[idx] = {
+                    "path": relative,
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "sha256": _sha256(path),
+                }
+
+    final_entries: list[IndexEntry] = [item for item in entries if item is not None]
 
     graph = build_impact_graph(
         resolved_root,
-        {item["path"] for item in entries},
+        {item["path"] for item in final_entries},
         reused_paths=reused_paths,
         previous_edges=previous.get("graph"),
     )
@@ -64,13 +95,13 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
         "schema_version": INDEX_SCHEMA_VERSION,
         "project_root": str(resolved_root),
         "generated_at": datetime.now(UTC).isoformat(),
-        "entries": entries,
+        "entries": final_entries,
         "graph": graph,
         "summary": {
-            "files": len(entries),
+            "files": len(final_entries),
             "hashed": hashed,
             "reused": reused,
-            "removed": len(set(previous_entries) - {item["path"] for item in entries}),
+            "removed": len(set(previous_entries) - {item["path"] for item in final_entries}),
             "graph_edges": len(graph),
         },
     }
