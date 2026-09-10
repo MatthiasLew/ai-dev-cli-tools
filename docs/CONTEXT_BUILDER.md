@@ -38,11 +38,22 @@ Defaults:
 - `--max-file-chars 8000`
 - `--max-diff-chars 15000`
 
-The report records truncation and reasons for selected or rejected files.
-Before JSON or MCP serialization, the global character budget removes content from the
-lowest-priority selected entries while retaining their path, reason, fingerprinted evidence, and
-expansion command. If metadata alone is large, duplicated Git state and bounded candidate lists are
-compacted deterministically. The `character_budget` block reports exactly what was avoided.
+`--max-chars` limits the sum of emitted `selected_files[].content` and `diffs[].content`
+(Python Unicode characters), **not** the complete JSON/Markdown report. Files are allocated in
+selection priority order, before diffs; a file that only partly fits retains its prefix. Metadata
+cannot evict that prefix. Per-file and token-category budgets may reduce content further.
+
+`budget.scope` is `source_and_diff_content`, and `budget.used_chars` measures that content after
+all budgets. `budget.json_chars` and `budget.markdown_chars` measure the actual compact JSON and
+Markdown artifacts, including metadata. `metadata_overhead_chars` is the larger serialized size
+minus content characters (including formatting, escaping and repeated structured evidence).
+CLI pretty-printing and MCP transport wrappers add their own formatting overhead. These numbers
+are character measurements, not provider token usage or proof of session-level token savings.
+
+The `character_budget` block reports original/final content sizes and omitted entries. Truncated
+entries retain a concrete `ai-dev explain <evidence-id> --tail 100` command, including at a zero
+content budget. Markdown places source before detailed metadata. Selection receipts distinguish
+`list_truncated` (receipt row limit) from `content_truncated`; `truncated` is true for either.
 
 ### Adaptive budget
 

@@ -219,7 +219,7 @@ def stop_application(
     settings = load_settings(project_root)
     report = Report(command="stop", project_root=settings.project_root)
     paths = _runtime_paths(settings.project_root)
-    state = _read_json(paths["metadata"])
+    state = _read_control_state(paths["metadata"])
     public_state = _public_state(state)
     if not state:
         report.status = "partial"
@@ -462,6 +462,29 @@ def _read_json(path: Path) -> dict[str, object]:
         return value if isinstance(value, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def _read_control_state(path: Path) -> dict[str, object]:
+    """Read a stoppable state without losing an in-flight atomic update.
+
+    ``_wait_for_state`` may observe a complete ``.tmp`` file immediately before
+    the supervisor replaces the main metadata file.  A caller that requests a
+    stop in that narrow window must use the same view of the state.
+    """
+    state = _read_json(path)
+    pending = _read_json(path.with_suffix(path.suffix + ".tmp"))
+    pending_token = pending.get("token")
+    state_token = state.get("token")
+    if (
+        pending.get("status") in {"running", "stopping"}
+        and isinstance(pending_token, str)
+        and (
+            not isinstance(state_token, str)
+            or secrets.compare_digest(state_token, pending_token)
+        )
+    ):
+        return pending
+    return state
 
 
 def _heartbeat_is_fresh(state: dict[str, object]) -> bool:

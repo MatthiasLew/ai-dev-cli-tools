@@ -83,6 +83,21 @@ def run_check(
     timings["selection"] = _elapsed(stage_started)
     command = f"check --mode {mode}" + (" --explain" if explain else "")
     report = Report(command=command, project_root=settings.project_root)
+    if (
+        changed_selection is not None
+        and changed_selection.selected_tests
+        and not any(task.category == "unit_tests" for task in tasks)
+    ):
+        report.status = "failed"
+        report.summary = {
+            "reason_code": "SELECTED_TESTS_NOT_RUNNABLE",
+            "message": "Selected tests have no runnable command or broader unit-test plan.",
+            "changed_analysis": changed_selection.to_dict(),
+            "plan": [task.to_dict() for task in plan],
+        }
+        report.finish()
+        _write_check_reports(report, mode)
+        return report
     if not 0 <= retry_flaky <= 3:
         report.status = "invalid_configuration"
         report.summary = {
@@ -246,9 +261,7 @@ def run_check(
         "retry_flaky": retry_flaky,
         "retry_infra": retry_infra,
         "retry_attempts": sum(max(0, result.attempts - 1) for result in results),
-        "infrastructure_retry_attempts": sum(
-            result.infrastructure_attempts for result in results
-        ),
+        "infrastructure_retry_attempts": sum(result.infrastructure_attempts for result in results),
         "infrastructure_recoveries": len(recovered_results),
         "flaky_passes": len(flaky_results),
         "index": index_summary,
@@ -403,7 +416,7 @@ def _tasks_for_mode(
             task for task in plan if task.category in {"format", "lint", "typecheck", "unit_tests"}
         ]
     relevant_plan = _tasks_for_changed_workspaces(plan, changed.changed_files)
-    if changed.strategy == "broad_fallback":
+    if changed.strategy == "broad_fallback" or not changed.selected_commands:
         return [
             task
             for task in relevant_plan

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Fix #78: recognize Node spec/TAP summaries without matching `recoverable` as coverage.
+- Fix #79: execute selected `.mjs`/`.cjs` tests, retain broad fallback commands, and fail
+  explicitly when selected tests have no runnable validation plan.
+- Fix #80: preserve source prefixes under small content budgets, document content-only
+  `max_chars`, measure actual artifact sizes, and distinguish receipt/content truncation.
+- Preserve numeric parser error counts and restrict pytest arguments to Python selections.
+- Prevent `finish` from approving incomplete, blocked or invalid validation.
+- Drain cancellable subprocess pipes while waiting and preserve output captured before timeout.
+- Add regression coverage and a repository audit with prioritized follow-up recommendations.
+
+## Unreleased
+
 ## 1.2.2 - 2026-09-08
 
 - Add a native Gemini CLI MCP integration, reference-first client profile, provider-reported
@@ -11,6 +23,8 @@
   project virtual-environment interpreter, and keep Ruff failures out of pytest-focused reruns.
 - Add CodeQL analysis, Dependabot update configuration, and a complete security reporting and
   supported-version policy.
+- Make managed-process stop observe in-flight atomic supervisor state, closing a rare start/stop
+  race exposed by the expanded Python CI matrix.
 
 ## 1.2.1 - 2026-09-01
 

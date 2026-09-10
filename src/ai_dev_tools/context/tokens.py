@@ -84,9 +84,7 @@ def apply_token_accounting(
         "original_input_tokens": original_input_tokens,
         "saved_tokens": saved_tokens,
         "saved_percent": (
-            round(saved_tokens / original_input_tokens * 100, 2)
-            if original_input_tokens
-            else 0.0
+            round(saved_tokens / original_input_tokens * 100, 2) if original_input_tokens else 0.0
         ),
         "cache": {
             "hit": _integer(provider.get("cached_input_tokens")) > 0,
@@ -98,7 +96,19 @@ def apply_token_accounting(
             "rejected_count": len(rejected_rows),
             "included": [_selection_row(item) for item in selected_rows[:20]],
             "rejected": [_selection_row(item) for item in rejected_rows[:20]],
-            "truncated": len(selected_rows) > 20 or len(rejected_rows) > 20,
+            "truncated": len(selected_rows) > 20
+            or len(rejected_rows) > 20
+            or any(
+                item.get("truncated") or item.get("omitted_content")
+                for item in selected_rows
+                if isinstance(item, dict)
+            ),
+            "list_truncated": len(selected_rows) > 20 or len(rejected_rows) > 20,
+            "content_truncated": any(
+                item.get("truncated") or item.get("omitted_content")
+                for item in selected_rows
+                if isinstance(item, dict)
+            ),
         },
         "expansion_command": "ai-dev explain <evidence-id> --tail 100",
     }
