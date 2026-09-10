@@ -58,6 +58,12 @@
    - Replaced repeated creation and destruction of `ThreadPoolExecutor` instances per task batch with a single shared pool scoped to the entire `schedule_checks` execution.
    - Preserved thread worker reuse across check waves, reducing thread allocation latency and lowering time-to-first-failure.
    - Added regression test `test_scheduler_shares_single_executor_across_waves` in `tests/unit/test_check_scheduler.py`.
+8. **Directory-Pruned Traversal in Repository Mapping (`src/ai_dev_tools/detectors/repository_map.py`)**:
+   - Replaced unpruned `rglob("*")` traversal (which evaluated millions of `fnmatch` calls on `.git` and `.venv` internals) with recursive `os.scandir` pruning.
+   - Ignored directories (`.git`, `.venv`, `.ai`, etc.) are skipped immediately at the directory entry level without walking nested contents.
+   - Pre-normalized ignore patterns and optimized `_large_files` with single stat queries and early exit at limit.
+   - Accelerated `map_repository` from ~2.65 s (and up to 17.6 s with large VCS trees) down to **44.7 ms** (**59x faster**).
+   - Reduced `ai-dev context build` execution time from 8.5087 s down to **1.156 s** (**86.4% faster, 7.4x speedup**).
 
 ---
 
@@ -72,7 +78,7 @@
 | **`ai-dev index update`** | Cold Execution | 0.4040 s | **0.1934 s** | **52.1% faster (-0.211 s)** |
 | | Warm Median | 0.2794 s | **0.1913 s** | **31.5% faster (-0.088 s)** |
 | | Internal Duration | 0.1320 s | **0.0480 s** | **63.6% reduction (-0.084 s)** |
-| **`ai-dev context build`** | Cold Execution | 8.5087 s | **4.7895 s** | **43.7% faster (-3.719 s)** |
+| **`ai-dev context build`** | Cold Execution | 8.5087 s | **1.1560 s** | **86.4% faster (-7.353 s, 7.4x)** |
 
 ---
 
