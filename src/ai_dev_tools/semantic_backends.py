@@ -5,6 +5,7 @@ import queue
 import shutil
 import subprocess
 import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import BinaryIO
 
@@ -44,6 +45,7 @@ LSP_COMMANDS: dict[str, list[tuple[list[str], str]]] = {
 }
 
 
+@lru_cache(maxsize=1)
 def tree_sitter_available() -> bool:
     try:
         import tree_sitter_language_pack  # noqa: F401

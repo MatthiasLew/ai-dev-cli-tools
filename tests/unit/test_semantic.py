@@ -86,3 +86,57 @@ def test_auto_tree_sitter_failure_uses_structural_fallback(monkeypatch, tmp_path
     assert report.status == "partial"
     assert report.summary["backend"] == "structural"
     assert report.issues[0].code == "TREE_SITTER_FALLBACK"
+
+
+def test_incremental_semantic_reindex(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools import semantic
+
+    file_a = tmp_path / "file_a.py"
+    file_b = tmp_path / "file_b.py"
+    file_a.write_text("def func_a():\n    pass\n", encoding="utf-8")
+    file_b.write_text("def func_b():\n    pass\n", encoding="utf-8")
+
+    indexed_batches: list[list[str]] = []
+    original_structural = semantic._structural_index
+
+    def tracked_structural(root: Path, paths: list[Path]) -> list[dict[str, object]]:
+        indexed_batches.append([p.name for p in paths])
+        return original_structural(root, paths)
+
+    monkeypatch.setattr(semantic, "_structural_index", tracked_structural)
+
+    # 1. Cold index
+    rep1 = run_semantic(tmp_path, "index", "structural")
+    assert rep1.status == "success"
+    assert rep1.summary["symbol_count"] == 2
+    assert len(indexed_batches) == 1
+    assert set(indexed_batches[0]) == {"file_a.py", "file_b.py"}
+
+    # 2. Warm index with zero changes
+    indexed_batches.clear()
+    rep2 = run_semantic(tmp_path, "index", "structural")
+    assert rep2.status == "success"
+    assert rep2.summary["symbol_count"] == 2
+    assert len(indexed_batches) == 0  # no files needed re-indexing!
+
+    # 3. Modify only file_b.py
+    file_b.write_text("def func_b():\n    pass\n\ndef func_b2():\n    pass\n", encoding="utf-8")
+    indexed_batches.clear()
+    rep3 = run_semantic(tmp_path, "index", "structural")
+    assert rep3.status == "success"
+    assert rep3.summary["symbol_count"] == 3
+    assert len(indexed_batches) == 1
+    assert indexed_batches[0] == ["file_b.py"]  # ONLY file_b.py was re-indexed!
+
+    index_payload = json.loads((tmp_path / ".ai/cache/semantic-index.json").read_text())
+    names = [s["name"] for s in index_payload["symbols"]]
+    assert set(names) == {"func_a", "func_b", "func_b2"}
+
+    # 4. Force rebuild
+    indexed_batches.clear()
+    rep4 = run_semantic(tmp_path, "index", "structural", rebuild=True)
+    assert rep4.status == "success"
+    assert rep4.summary["symbol_count"] == 3
+    assert len(indexed_batches) == 1
+    assert set(indexed_batches[0]) == {"file_a.py", "file_b.py"}
+

@@ -94,6 +94,9 @@ def build_parser() -> argparse.ArgumentParser:
     semantic_sub.add_parser("status")
     semantic_index = semantic_sub.add_parser("index")
     semantic_index.add_argument("--backend", default="auto")
+    semantic_index.add_argument(
+        "--rebuild", action="store_true", help="Force full rebuild of semantic index"
+    )
 
     policy_parser = sub.add_parser("policy")
     policy_sub = policy_parser.add_subparsers(dest="policy_command", required=True)
@@ -609,6 +612,7 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             project_root,
             args.semantic_command,
             backend=getattr(args, "backend", "auto"),
+            rebuild=getattr(args, "rebuild", False),
         )
     if command == "policy" and args.policy_command == "assess":
         from ai_dev_tools.runners.policy import run_policy_assess
