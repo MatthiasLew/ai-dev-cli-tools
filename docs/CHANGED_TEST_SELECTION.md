@@ -19,3 +19,8 @@ Example:
 ai-dev check --mode changed --explain
 ai-dev check --mode changed
 ```
+Node `.mjs` and `.cjs` source/test paths use the configured npm test command, as `.js` does.
+Mixed Python/Node selections send only Python paths to pytest. Unknown test extensions retain
+the configured broad unit-test plan; empty selected commands also fall back to that plan.
+If selected tests have no runnable command or broader plan, validation fails explicitly with
+`SELECTED_TESTS_NOT_RUNNABLE` instead of certifying a lint/typecheck-only result.

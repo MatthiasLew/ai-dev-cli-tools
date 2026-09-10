@@ -87,7 +87,9 @@ def _efficiency_metrics(root: Path) -> dict[str, int]:
                 size = entry.get("size")
                 reused_bytes += size if isinstance(size, int) else 0
     budget = summary.get("budget", {}) if isinstance(summary, dict) else {}
-    used_chars = budget.get("used_chars", 0) if isinstance(budget, dict) else 0
+    used_chars = (
+        budget.get("json_chars", budget.get("used_chars", 0)) if isinstance(budget, dict) else 0
+    )
     chars = used_chars if isinstance(used_chars, int) else 0
     return {
         "latest_context_chars": chars,

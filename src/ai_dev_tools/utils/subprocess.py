@@ -74,8 +74,8 @@ def run_command(
     except FileNotFoundError as exc:
         return CommandResult(command, 127, "", str(exc), round(time.monotonic() - started, 3))
     except subprocess.TimeoutExpired as exc:
-        stdout = exc.stdout if isinstance(exc.stdout, str) else ""
-        stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+        stdout = _timeout_text(exc.stdout)
+        stderr = _timeout_text(exc.stderr)
         return CommandResult(
             command, 124, stdout, stderr, round(time.monotonic() - started, 3), True
         )
@@ -103,27 +103,30 @@ def _run_cancellable(
     except FileNotFoundError as exc:
         return CommandResult(command, 127, "", str(exc), round(time.monotonic() - started, 3))
     deadline = started + max(timeout_seconds, 0)
-    while process.poll() is None:
-        cancelled = cancel_event.wait(0.05)
+    while True:
+        cancelled = cancel_event.is_set()
         timed_out = time.monotonic() >= deadline
-        if not cancelled and not timed_out:
-            continue
-        process.terminate()
+        if cancelled or timed_out:
+            process.terminate()
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+            return CommandResult(
+                command,
+                130 if cancelled else 124,
+                stdout,
+                stderr,
+                round(time.monotonic() - started, 3),
+                timed_out=timed_out,
+                cancelled=cancelled,
+            )
         try:
-            stdout, stderr = process.communicate(timeout=2)
+            stdout, stderr = process.communicate(timeout=min(0.05, deadline - time.monotonic()))
+            break
         except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate()
-        return CommandResult(
-            command,
-            130 if cancelled else 124,
-            stdout,
-            stderr,
-            round(time.monotonic() - started, 3),
-            timed_out=timed_out,
-            cancelled=cancelled,
-        )
-    stdout, stderr = process.communicate()
+            continue
     return CommandResult(
         command,
         process.returncode,
@@ -131,6 +134,10 @@ def _run_cancellable(
         stderr,
         round(time.monotonic() - started, 3),
     )
+
+
+def _timeout_text(value: str | bytes | None) -> str:
+    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
 
 
 def _windows_batch_command(command: list[str]) -> list[str]:

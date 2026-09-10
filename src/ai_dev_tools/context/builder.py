@@ -43,6 +43,7 @@ from ai_dev_tools.detectors.project import scan_project
 from ai_dev_tools.detectors.repository_map import map_repository
 from ai_dev_tools.git.inspect import inspect_git
 from ai_dev_tools.models.report import Artifact, Issue, Report
+from ai_dev_tools.reporters.progressive import add_progressive_metadata
 from ai_dev_tools.runners.baseline import apply_baseline_comparison
 from ai_dev_tools.runners.check import (
     ChangedSelection,
@@ -232,6 +233,7 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         }
     )
 
+    add_progressive_metadata({"summary": summary})
     summary["compression"] = apply_safe_compression(summary, options.compression)
     character_budget = _apply_context_character_budget(summary, options.max_chars)
     summary["character_budget"] = character_budget
@@ -273,30 +275,20 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
         apply_baseline_comparison(report, root, options.compare)
     comparison = summary.get("baseline_comparison")
     baseline_failed = isinstance(comparison, dict) and comparison.get("ready") is False
-    markdown = _render_markdown(report, summary)
-    markdown, markdown_truncated = _truncate_text(markdown, options.max_chars)
-    json_payload = _context_payload(report, summary, markdown_truncated, len(markdown))
-    json_payload, json_truncated = _cap_json_payload(json_payload, options.max_chars)
+    summary["truncated"] = any(item.truncated for item in selected) or accounting_partial
     summary["budget"] = _budget_summary(
-        options,
-        max(len(markdown), len(json.dumps(json_payload, ensure_ascii=False))),
-        markdown_truncated or json_truncated,
+        options, _content_chars(summary), bool(summary["truncated"])
     )
-    if markdown_truncated or json_truncated:
-        summary["truncated"] = True
+    if summary["truncated"]:
         if not baseline_failed:
             report.status = "partial"
         report.issues.append(
             Issue(
                 severity="warning",
-                message="Context pack was truncated to respect configured character budget.",
+                message="Source/diff content was truncated; report metadata is outside max_chars.",
                 code="CONTEXT_BUDGET_TRUNCATED",
             )
         )
-    else:
-        summary["truncated"] = any(item.truncated for item in selected) or accounting_partial
-        if not baseline_failed:
-            report.status = "partial" if summary["truncated"] else "success"
     timings["report_generation"] = _elapsed(stage_started)
     summary["performance"] = {"stages_seconds": timings}
     stage_started = time.monotonic()
@@ -330,17 +322,25 @@ def build_context(project_root: Path, options: ContextOptions) -> Report:
     if options.format in {"json", "both"}:
         report.artifacts.append(Artifact(str(json_path), "json", "Bounded AI context package"))
     report.artifacts.extend(manifest_artifacts)
-    if options.format in {"markdown", "both"}:
-        md_path.write_text(mask_text(_render_markdown(report, report.summary)), encoding="utf-8")
-    if options.format in {"json", "both"}:
-        json_text = mask_text(
-            json.dumps(
-                report.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")
-            )
-        )
-        json_path.write_text(json_text, encoding="utf-8")
     timings["output_write"] = _elapsed(stage_started)
     summary["performance"] = {"stages_seconds": timings}
+    # Measure the actual serialized artifacts, including these size fields themselves.
+    budget = summary["budget"]
+    assert isinstance(budget, dict)
+    for _ in range(10):
+        markdown = mask_text(_render_markdown(report, summary))
+        json_text = mask_text(
+            json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
+        sizes = {"markdown_chars": len(markdown), "json_chars": len(json_text)}
+        sizes["metadata_overhead_chars"] = max(sizes.values()) - _content_chars(summary)
+        if all(budget.get(key) == value for key, value in sizes.items()):
+            break
+        budget.update(sizes)
+    if options.format in {"markdown", "both"}:
+        md_path.write_text(markdown, encoding="utf-8")
+    if options.format in {"json", "both"}:
+        json_path.write_text(json_text, encoding="utf-8")
     return report
 
 
@@ -558,6 +558,7 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
                 f"Selection: {item.get('selection_strategy', 'file-prefix')}",
                 f"Omitted content: {item.get('omitted_content', False)}",
                 f"Truncated: {item.get('truncated')}",
+                f"Expand: ai-dev explain {item.get('evidence_id')} --tail 100",
                 "```text",
                 str(item.get("content", "")),
                 "```",
@@ -572,44 +573,16 @@ def _render_markdown(report: Report, summary: dict[str, object]) -> str:
                 f"Selection: {item.get('selection_strategy', 'file-prefix')}",
                 f"Omitted content: {item.get('omitted_content', False)}",
                 f"Truncated: {item.get('truncated')}",
+                f"Expand: ai-dev explain {item.get('evidence_id')} --tail 100",
                 "```diff",
                 str(item.get("content", item.get("error", ""))),
                 "```",
             ]
         )
     lines.extend(["", "## Rejected Files", _json_block(summary.get("rejected_files", []))])
+    selected_start = lines.index("## Selected Files")
+    lines = lines[:10] + [""] + lines[selected_start:] + [""] + lines[10:selected_start]
     return "\n".join(lines).strip() + "\n"
-
-
-def _context_payload(
-    report: Report, summary: dict[str, object], truncated: bool, markdown_chars: int
-) -> dict[str, object]:
-    return {
-        "schema_version": report.schema_version,
-        "tool_version": report.tool_version,
-        "command": report.command,
-        "status": report.status,
-        "project_root": str(report.project_root),
-        "summary": summary,
-        "budget": {"markdown_chars": markdown_chars, "truncated": truncated},
-    }
-
-
-def _cap_json_payload(payload: dict[str, object], max_chars: int) -> tuple[dict[str, object], bool]:
-    text = json.dumps(payload, ensure_ascii=False)
-    if len(text) <= max_chars:
-        return payload, False
-    capped = dict(payload)
-    summary = capped.get("summary")
-    if isinstance(summary, dict):
-        capped_summary = dict(summary)
-        capped_summary["selected_files"] = []
-        capped_summary["diffs"] = []
-        capped_summary["json_payload_note"] = (
-            "Large snippets and diffs omitted from JSON budget. See markdown artifact when enabled."
-        )
-        capped["summary"] = capped_summary
-    return capped, True
 
 
 def _changed_files(git_report: Report | None, staged_only: bool) -> list[str]:
@@ -691,12 +664,12 @@ def _related_tests(changed_analysis: ChangedSelection | None) -> list[str]:
 
 def _candidate_sort_key(path: Path, reason: str) -> tuple[int, str]:
     priority = 50
-    if "changed" in reason:
+    if "included" in reason:
+        priority = -1
+    elif "changed" in reason:
         priority = 0
     elif "related" in reason:
         priority = 5
-    elif "included" in reason:
-        priority = 10
     elif "entrypoint" in reason:
         priority = 20
     elif "important" in reason:
@@ -708,6 +681,7 @@ def _candidate_sort_key(path: Path, reason: str) -> tuple[int, str]:
 
 def _budget_summary(options: ContextOptions, used_chars: int, truncated: bool) -> dict[str, object]:
     return {
+        "scope": "source_and_diff_content",
         "max_chars": options.max_chars,
         "max_files": options.max_files,
         "max_file_chars": options.max_file_chars,
@@ -720,52 +694,58 @@ def _budget_summary(options: ContextOptions, used_chars: int, truncated: bool) -
 def _apply_context_character_budget(
     summary: dict[str, object], max_chars: int
 ) -> dict[str, object]:
-    target = max(1_000, int(max(max_chars, 0) * 0.65))
-    original_chars = len(json.dumps(summary, ensure_ascii=False, default=str))
+    target = max(max_chars, 0)
+    original_chars = _content_chars(summary)
     omitted_files: list[str] = []
     omitted_diffs: list[str] = []
-    current_chars = original_chars
+    metadata_compacted = _compact_context_metadata(summary) if original_chars > target else False
+    remaining = target
     for key, omitted in (("selected_files", omitted_files), ("diffs", omitted_diffs)):
         values = summary.get(key)
         if not isinstance(values, list):
             continue
-        for item in reversed(values):
-            if current_chars <= target or not isinstance(item, dict):
-                break
-            content = item.get("content")
-            if not isinstance(content, str) or len(content) <= 256:
+        for item in values:
+            if not isinstance(item, dict):
                 continue
-            item["original_chars"] = len(content)
-            item["omitted_content_sha256"] = hashlib.sha256(
-                content.encode("utf-8")
-            ).hexdigest()
-            snippets = item.get("snippets")
-            if isinstance(snippets, list) and snippets:
-                item["original_snippet_count"] = len(snippets)
-                item["snippets"] = []
-            item["content"] = ""
-            item["chars"] = 0
+            content = item.get("content")
+            if not isinstance(content, str):
+                continue
+            kept = content[:remaining]
+            remaining -= len(kept)
+            if kept == content:
+                continue
+            item.setdefault("original_chars", len(content))
+            item["omitted_content_sha256"] = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            item["content"] = kept
+            item["chars"] = len(kept)
+            item["snippets"] = []
             item["omitted_content"] = True
+            item["truncated"] = True
             item["budget_reason_code"] = "GLOBAL_CONTEXT_BUDGET"
+            item["expansion_command"] = f"ai-dev explain {item.get('evidence_id')} --tail 100"
             omitted.append(str(item.get("path") or item.get("name") or "unknown"))
-            current_chars = len(json.dumps(summary, ensure_ascii=False, default=str))
-    metadata_compacted = False
-    if current_chars > target:
-        metadata_compacted = _compact_context_metadata(summary)
-        current_chars = len(json.dumps(summary, ensure_ascii=False, default=str))
+    current_chars = _content_chars(summary)
     return {
+        "scope": "source_and_diff_content",
         "max_chars": max_chars,
-        "summary_target_chars": target,
-        "original_summary_chars": original_chars,
-        "final_summary_chars": current_chars,
+        "original_content_chars": original_chars,
+        "final_content_chars": current_chars,
         "chars_avoided": max(original_chars - current_chars, 0),
         "content_omitted": bool(omitted_files or omitted_diffs),
         "omitted_files": omitted_files,
         "omitted_diffs": omitted_diffs,
-        "target_exceeded": current_chars > max(max_chars, 0),
+        "target_exceeded": current_chars > target,
         "metadata_compacted": metadata_compacted,
         "expansion_command": "ai-dev explain <evidence-id> --tail 100",
     }
+
+
+def _content_chars(summary: dict[str, object]) -> int:
+    return sum(
+        len(str(item.get("content", "")))
+        for key in ("selected_files", "diffs")
+        for item in _dict_list(summary.get(key, []))
+    )
 
 
 def _compact_git_state(value: dict[str, object] | None) -> dict[str, object] | None:
