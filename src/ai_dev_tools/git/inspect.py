@@ -95,6 +95,7 @@ def inspect_git(
             untracked_files=untracked_files,
             deleted_files=deleted_files,
         )
+        unstaged_diff_bytes = _diff_bytes(settings.project_root, ["git", "diff"])
         summary.update(
             {
                 "changed_symbols": symbol_diff["symbols"],
@@ -104,8 +105,8 @@ def inspect_git(
                     ["git", "log", "--oneline", "-5"], settings.project_root
                 ).splitlines(),
                 "diff_stat": _text(["git", "diff", "--stat"], settings.project_root),
-                "diff_size_bytes": _diff_bytes(settings.project_root, ["git", "diff"]),
-                "unstaged_diff_bytes": _diff_bytes(settings.project_root, ["git", "diff"]),
+                "diff_size_bytes": unstaged_diff_bytes,
+                "unstaged_diff_bytes": unstaged_diff_bytes,
                 "staged_diff_bytes": _diff_bytes(
                     settings.project_root, ["git", "diff", "--cached"]
                 ),
@@ -224,10 +225,13 @@ def _diff_bytes(root: Path, command: list[str]) -> int:
 
 
 def _large_files(root: Path, files: list[str]) -> list[str]:
-    return [
-        item
-        for item in files
-        if (root / item).exists()
-        and (root / item).is_file()
-        and (root / item).stat().st_size > 1_000_000
-    ]
+    large: list[str] = []
+    for item in files:
+        target = root / item
+        try:
+            stat = target.stat()
+            if stat.st_size > 1_000_000:
+                large.append(item)
+        except OSError:
+            continue
+    return large

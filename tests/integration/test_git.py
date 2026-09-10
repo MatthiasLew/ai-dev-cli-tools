@@ -74,3 +74,25 @@ def test_git_inspect_includes_symbol_level_diff(tmp_path: Path) -> None:
     assert report.summary["changed_symbols"][0]["name"] == "calculate"
     assert report.summary["changed_symbols"][0]["risk"] == "high"
     assert report.summary["symbol_diff_summary"]["symbols_changed"] == 1
+
+
+def test_git_inspect_avoids_duplicate_diff_calls(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.git import inspect as git_inspect
+    from ai_dev_tools.utils.subprocess import run_command as real_run_command
+
+    run_command(["git", "init", "-b", "main"], tmp_path, 30)
+    (tmp_path / "file.txt").write_text("hello", encoding="utf-8")
+
+    diff_commands: list[list[str]] = []
+
+    def spy_run(command: list[str], root: Path, timeout_seconds: int = 300):  # type: ignore[no-untyped-def]
+        if command == ["git", "diff"]:
+            diff_commands.append(command)
+        return real_run_command(command, root, timeout_seconds)
+
+    monkeypatch.setattr(git_inspect, "run_command", spy_run)
+    report = inspect_git(tmp_path, detailed=True, write_reports=False)
+
+    assert len(diff_commands) == 1
+    assert report.summary["diff_size_bytes"] == report.summary["unstaged_diff_bytes"]
+

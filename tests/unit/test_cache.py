@@ -247,3 +247,54 @@ def test_impact_graph_tracks_configuration_generated_code_and_reverse_dependents
     assert ("schema.proto", "src/generated.py", "generated") in edges
     assert by_target["src/generated.py"]["reason_code"] == "GENERATED_RELATIONSHIP"
     assert by_target["src/consumer.py"]["reason_code"] == "DEPENDENT_FILE"
+
+
+def test_impact_graph_reads_each_source_file_once(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.cache.graph import build_impact_graph
+
+    app_py = tmp_path / "src" / "app.py"
+    app_py.parent.mkdir(parents=True, exist_ok=True)
+    app_py.write_text("# source: ../schema.json\nimport os\n", encoding="utf-8")
+
+    schema_json = tmp_path / "schema.json"
+    schema_json.write_text("{}", encoding="utf-8")
+
+    real_read_text = Path.read_text
+    read_counts: dict[str, int] = {}
+
+    def spy_read_text(self: Path, *args, **kwargs) -> str:  # type: ignore[no-untyped-def]
+        key = self.name
+        read_counts[key] = read_counts.get(key, 0) + 1
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+    files = {"src/app.py", "schema.json"}
+    graph = build_impact_graph(tmp_path, files)
+
+    assert read_counts.get("app.py") == 1
+    assert any(edge["from"] == "schema.json" and edge["to"] == "src/app.py" for edge in graph)
+
+
+def test_write_json_uses_unique_temp_file(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.cache import repository as repo_mod
+
+    created_temp_files: list[str] = []
+    real_write_text = Path.write_text
+
+    def spy_write_text(self: Path, *args, **kwargs) -> int:  # type: ignore[no-untyped-def]
+        if ".tmp" in self.name:
+            created_temp_files.append(self.name)
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", spy_write_text)
+
+    target_path = tmp_path / "cache.json"
+    repo_mod._write_json(target_path, {"key": "val1"})
+    repo_mod._write_json(target_path, {"key": "val2"})
+
+    assert len(created_temp_files) == 2
+    # Ensure temporary filenames are distinct (PID and timestamp)
+    assert created_temp_files[0] != created_temp_files[1]
+    assert target_path.is_file()
+
+

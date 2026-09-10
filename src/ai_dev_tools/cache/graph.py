@@ -21,12 +21,22 @@ def build_impact_graph(
             edges.update(old_by_source[relative])
             continue
         source = root / relative
-        for target, kind in _references(source, relative, paths):
-            edges.add((relative, target, kind))
+        suffix = source.suffix.lower()
+        file_text: str | None = None
+        if suffix in {".py", ".js", ".jsx", ".ts", ".tsx", ".rs", ".java", ".php"}:
+            try:
+                file_text = source.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                file_text = None
+
+        if file_text is not None:
+            for target, kind in _references(source, relative, paths, text=file_text):
+                edges.add((relative, target, kind))
         for target in _candidate_tests(relative, paths):
             edges.add((relative, target, "test"))
         edges.update(_configuration_relationships(relative, paths))
-        edges.update(_generated_relationships(source, relative, paths))
+        if file_text is not None:
+            edges.update(_generated_relationships(source, relative, paths, text=file_text))
     return [{"from": source, "to": target, "kind": kind} for source, target, kind in sorted(edges)]
 
 
@@ -142,13 +152,16 @@ def _adjacency(graph: object) -> dict[str, list[tuple[str, str]]]:
     return result
 
 
-def _references(source: Path, relative: str, paths: set[str]) -> list[tuple[str, str]]:
+def _references(
+    source: Path, relative: str, paths: set[str], *, text: str | None = None
+) -> list[tuple[str, str]]:
     if source.suffix.lower() not in {".py", ".js", ".jsx", ".ts", ".tsx", ".rs"}:
         return []
-    try:
-        text = source.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+    if text is None:
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
     if source.suffix.lower() == ".py":
         return _python_references(relative, text, paths)
     if source.suffix.lower() in {".js", ".jsx", ".ts", ".tsx"}:
@@ -250,14 +263,17 @@ def _configuration_relationships(
 
 
 def _generated_relationships(
-    source: Path, relative: str, paths: set[str]
+    source: Path, relative: str, paths: set[str], *, text: str | None = None
 ) -> set[tuple[str, str, str]]:
     if source.suffix.lower() not in {".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".rs", ".php"}:
         return set()
-    try:
-        header = source.read_text(encoding="utf-8", errors="replace")[:4_000]
-    except OSError:
-        return set()
+    if text is None:
+        try:
+            header = source.read_text(encoding="utf-8", errors="replace")[:4_000]
+        except OSError:
+            return set()
+    else:
+        header = text[:4_000]
     matches = re.findall(
         r"(?im)(?:generated\s+(?:from|by)|source)\s*[:=]?\s*[`'\"]?([\w./\\-]+)",
         header,

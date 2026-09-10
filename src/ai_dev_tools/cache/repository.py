@@ -4,6 +4,8 @@ import fnmatch
 import hashlib
 import json
 import os
+import posixpath
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
@@ -31,10 +33,9 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
     reused = 0
     hashed = 0
     reused_paths: set[str] = set()
+    ignored = {item.replace(chr(92), "/").strip("/") for item in DEFAULT_IGNORES}
 
-    for path in _project_files(resolved_root):
-        relative = path.relative_to(resolved_root).as_posix()
-        stat = path.stat()
+    for path, relative, stat in _project_file_entries(resolved_root, ignored):
         old = previous_entries.get(relative)
         if old is not None and old["size"] == stat.st_size and old["mtime_ns"] == stat.st_mtime_ns:
             digest = old["sha256"]
@@ -108,53 +109,92 @@ def repository_fingerprint(
 def _is_ignored_name(name: str, ignored: set[str]) -> bool:
     if name in ignored:
         return True
-    return any(
-        fnmatch.fnmatch(name, pat)
-        or (
-            pat in {".venv", "venv"}
-            and (
-                name.startswith(f"{pat}-")
-                or name.startswith(f"{pat}_")
-                or (len(name) > len(pat) and name.startswith(pat))
-            )
-        )
-        for pat in ignored
-    )
+    if name.startswith((".venv-", ".venv_", "venv-", "venv_")):
+        return True
+    if name.startswith(".venv") or (len(name) > 4 and name.startswith("venv")):
+        return True
+    return any(("*" in pat or "?" in pat) and fnmatch.fnmatch(name, pat) for pat in ignored)
 
 
 def is_ignored_path(relative: str, ignored: set[str]) -> bool:
     parts = relative.split("/")
     if any(_is_ignored_name(part, ignored) for part in parts):
         return True
-    return any(
-        relative == item
-        or relative.startswith(f"{item}/")
-        or fnmatch.fnmatch(relative, item)
-        or fnmatch.fnmatch(Path(relative).name, item)
-        for item in ignored
-    )
+    if relative in ignored:
+        return True
+    for item in ignored:
+        if relative.startswith(f"{item}/"):
+            return True
+        if ("*" in item or "?" in item) and (
+            fnmatch.fnmatch(relative, item) or fnmatch.fnmatch(posixpath.basename(relative), item)
+        ):
+            return True
+    return False
+
+
+def _project_file_entries(root: Path, ignored: set[str]) -> list[tuple[Path, str, os.stat_result]]:
+    entries: list[tuple[Path, str, os.stat_result]] = []
+
+    def _walk(current_dir: str, rel_prefix: str, parent_name: str) -> None:
+        try:
+            with os.scandir(current_dir) as iterator:
+                dir_entries = list(iterator)
+        except OSError:
+            return
+
+        dir_entries.sort(key=lambda e: e.name)
+        subdirs: list[os.DirEntry[str]] = []
+
+        for entry in dir_entries:
+            try:
+                if entry.is_symlink():
+                    continue
+            except OSError:
+                continue
+
+            name = entry.name
+            rel_path = f"{rel_prefix}/{name}" if rel_prefix else name
+
+            try:
+                is_dir = entry.is_dir(follow_symlinks=False)
+            except OSError:
+                continue
+
+            if is_dir:
+                if _is_ignored_name(name, ignored):
+                    continue
+                if parent_name in {"test", "tests"} and name == "fixtures":
+                    continue
+                if is_ignored_path(rel_path, ignored):
+                    continue
+                subdirs.append(entry)
+            else:
+                try:
+                    if not entry.is_file(follow_symlinks=False):
+                        continue
+                except OSError:
+                    continue
+                if _is_ignored_name(name, ignored):
+                    continue
+                if is_ignored_path(rel_path, ignored):
+                    continue
+                try:
+                    stat = entry.stat(follow_symlinks=False)
+                except OSError:
+                    continue
+                entries.append((Path(entry.path), rel_path, stat))
+
+        for subdir in subdirs:
+            sub_rel = f"{rel_prefix}/{subdir.name}" if rel_prefix else subdir.name
+            _walk(subdir.path, sub_rel, subdir.name)
+
+    _walk(str(root), "", root.name)
+    return entries
 
 
 def _project_files(root: Path) -> list[Path]:
     ignored = {item.replace(chr(92), "/").strip("/") for item in DEFAULT_IGNORES}
-    files: list[Path] = []
-    for current, directories, names in os.walk(root, followlinks=False):
-        current_path = Path(current)
-        directories[:] = sorted(
-            name
-            for name in directories
-            if not _is_ignored_name(name, ignored)
-            and not (current_path.name in {"test", "tests"} and name == "fixtures")
-        )
-        for name in sorted(names):
-            path = current_path / name
-            if path.is_symlink() or not path.is_file():
-                continue
-            relative = path.relative_to(root).as_posix()
-            if is_ignored_path(relative, ignored):
-                continue
-            files.append(path)
-    return files
+    return [path for path, _, _ in _project_file_entries(root, ignored)]
 
 
 def _entry_map(value: object) -> dict[str, IndexEntry]:
@@ -194,6 +234,6 @@ def _sha256(path: Path) -> str:
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temporary, path)
