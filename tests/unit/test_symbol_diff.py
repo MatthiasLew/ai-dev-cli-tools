@@ -110,3 +110,25 @@ def test_symbol_diff_preserves_module_level_changes_next_to_symbol_changes(tmp_p
     assert by_name["run"]["change_type"] == "modified"
     assert by_name["<module>"]["added_lines"] == 1
     assert by_name["<module>"]["deleted_lines"] == 1
+
+
+def test_symbol_diff_oversized_source_and_base_parse_fallback(tmp_path: Path) -> None:
+    # 1. Base parse fallback (corrupted base revision in git)
+    _repository(tmp_path, {"syntax_err.py": "def invalid(:\n"})
+    (tmp_path / "syntax_err.py").write_text("def valid(): pass\n", encoding="utf-8")
+    result_base_fail = analyze_symbol_diff(tmp_path, ["syntax_err.py"])
+    assert any(
+        f["reason_code"] == "BASE_SYMBOL_PARSE_FALLBACK" for f in result_base_fail["fallbacks"]
+    )
+
+    # 2. Oversized source file
+    big = tmp_path / "huge.py"
+    big.write_text("a = 1\n", encoding="utf-8")
+    run_command(["git", "add", "huge.py"], tmp_path, 30)
+    run_command(["git", "commit", "-m", "add huge"], tmp_path, 30)
+
+    # Make huge.py exceed _MAX_SOURCE_BYTES (2MB)
+    big.write_bytes(b"# big\n" + b"x = 1\n" * 300_000)
+    result_huge = analyze_symbol_diff(tmp_path, ["huge.py"])
+    assert any(f["reason_code"] == "SOURCE_TOO_LARGE" for f in result_huge["fallbacks"])
+

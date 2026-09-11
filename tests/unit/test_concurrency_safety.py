@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from ai_dev_tools.cache import repository
 from ai_dev_tools.cache.repository import _sha256, read_repository_index, update_repository_index
@@ -56,39 +59,43 @@ def test_optimistic_concurrency_merging(tmp_path: Path) -> None:
     (tmp_path / "mod_b.py").write_text("b = 1\n", encoding="utf-8")
 
     idx1 = update_repository_index(tmp_path)
-    assert len(idx1["entries"]) == 2
+    entries1 = idx1.get("entries")
+    assert isinstance(entries1, list)
+    assert len(entries1) == 2
 
     (tmp_path / "mod_b.py").write_text("b = 2; c = 3\n", encoding="utf-8")
     idx2 = update_repository_index(tmp_path)
-    b_hash_newer = [e["sha256"] for e in idx2["entries"] if e["path"] == "mod_b.py"][0]
+    entries2 = idx2.get("entries")
+    assert isinstance(entries2, list)
+    b_hash_newer = [e["sha256"] for e in entries2 if e["path"] == "mod_b.py"][0]
 
     (tmp_path / "mod_a.py").write_text("a = 99\n", encoding="utf-8")
     idx3 = update_repository_index(tmp_path)
-    b_hash_final = [e["sha256"] for e in idx3["entries"] if e["path"] == "mod_b.py"][0]
+    entries3 = idx3.get("entries")
+    assert isinstance(entries3, list)
+    b_hash_final = [e["sha256"] for e in entries3 if e["path"] == "mod_b.py"][0]
 
     assert b_hash_final == b_hash_newer, "Optimistic concurrency must preserve newer file hash"
 
 
-def test_optimistic_concurrency_stale_write_interleaving(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    import threading
-    import time
-
-    from ai_dev_tools.cache import repository
-    from ai_dev_tools.cache.repository import _sha256, read_repository_index
-
+def test_optimistic_concurrency_stale_write_interleaving(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
     # Setup initial files and index
     (tmp_path / "mod_a.py").write_text("a = 10\n", encoding="utf-8")
     (tmp_path / "mod_b.py").write_text("b = 20\n", encoding="utf-8")
     (tmp_path / "mod_del.py").write_text("del_me = 1\n", encoding="utf-8")
     initial_idx = update_repository_index(tmp_path)
-    assert len(initial_idx["entries"]) == 3
+    initial_entries = initial_idx.get("entries")
+    assert isinstance(initial_entries, list)
+    assert len(initial_entries) == 3
 
     event_a_scanned = threading.Event()
     event_b_finished = threading.Event()
 
     original_build_graph = repository.build_impact_graph
 
-    def controlled_build_graph(root: Path, paths: set[str], **kwargs):  # type: ignore[no-untyped-def]
+    def controlled_build_graph(root: Path, paths: set[str], **kwargs: Any) -> Any:
         if threading.current_thread().name == "worker_a":
             # Signal that Thread A has read previous index and scanned/hashed files
             event_a_scanned.set()
@@ -121,7 +128,9 @@ def test_optimistic_concurrency_stale_write_interleaving(monkeypatch, tmp_path: 
     (tmp_path / "mod_del.py").unlink()
 
     idx_b = update_repository_index(tmp_path)
-    b_entries = {e["path"]: e for e in idx_b["entries"]}  # type: ignore[union-attr]
+    raw_b_entries = idx_b.get("entries")
+    assert isinstance(raw_b_entries, list)
+    b_entries = {e["path"]: e for e in raw_b_entries}
     assert "mod_b.py" in b_entries
     assert "mod_c.py" in b_entries
     assert "mod_del.py" not in b_entries
@@ -136,7 +145,9 @@ def test_optimistic_concurrency_stale_write_interleaving(monkeypatch, tmp_path: 
     # Verify on-disk repository-index.json after Thread A's lagging write
     final_on_disk = read_repository_index(tmp_path)
     assert final_on_disk, "Final index must exist on disk"
-    final_entries = {e["path"]: e for e in final_on_disk["entries"]}  # type: ignore[union-attr]
+    raw_final_entries = final_on_disk.get("entries")
+    assert isinstance(raw_final_entries, list)
+    final_entries = {e["path"]: e for e in raw_final_entries}
 
     # Thread B's update to mod_b must NOT have been overwritten by Thread A's stale state
     assert final_entries["mod_b.py"]["sha256"] == expected_b_hash
@@ -147,32 +158,40 @@ def test_optimistic_concurrency_stale_write_interleaving(monkeypatch, tmp_path: 
     # mod_del.py deleted by Thread B must NOT be resurrected
     assert "mod_del.py" not in final_entries
 
-    summary = final_on_disk.get("summary", {})  # type: ignore[union-attr]
+    summary = final_on_disk.get("summary")
+    assert isinstance(summary, dict)
     assert summary.get("files") == 3
     assert len(final_entries) == 3
 
 
-def test_optimistic_concurrency_three_way_commit_race(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    # Setup initial files
-    (tmp_path / "mod_a.py").write_text("a = 1\n", encoding="utf-8")
-    (tmp_path / "mod_b.py").write_text("b = 1\n", encoding="utf-8")
-    (tmp_path / "mod_c.py").write_text("c = 1\n", encoding="utf-8")
+def test_optimistic_concurrency_three_way_commit_race(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    # Setup initial files at T0
+    (tmp_path / "mod_a.py").write_text("a = 10\n", encoding="utf-8")
+    (tmp_path / "mod_b.py").write_text("b = 20\n", encoding="utf-8")
+    (tmp_path / "mod_c.py").write_text("c = 30\n", encoding="utf-8")
+    (tmp_path / "mod_del.py").write_text("del_me = 40\n", encoding="utf-8")
     update_repository_index(tmp_path)
 
-    event_a_ready = threading.Event()
-    event_bc_finished = threading.Event()
+    event_a_ready_to_commit = threading.Event()
+    event_bc_done = threading.Event()
 
-    orig_read_repo = repository.read_repository_index
+    orig_commit_lock = repository._commit_lock
 
-    # Synchronization hook for Thread A during commit
-    def sync_read_repo(root: Path) -> dict[str, object]:
+    # Hook _commit_lock: Thread A scans and prepares its candidate at T0,
+    # and then pauses right at the threshold of the commit lock section!
+    @contextmanager
+    def hooked_commit_lock(
+        index_path: Path, timeout: float = repository._COMMIT_LOCK_TIMEOUT_SECONDS
+    ) -> Any:
         if threading.current_thread().name == "Thread-A":
-            event_a_ready.set()
-            # Wait until both Thread B and Thread C have written newer versions
-            assert event_bc_finished.wait(timeout=5.0)
-        return orig_read_repo(root)
+            event_a_ready_to_commit.set()
+            assert event_bc_done.wait(timeout=5.0), "Thread B and C did not finish in time"
+        with orig_commit_lock(index_path, timeout=timeout):
+            yield
 
-    monkeypatch.setattr(repository, "read_repository_index", sync_read_repo)
+    monkeypatch.setattr(repository, "_commit_lock", hooked_commit_lock)
 
     def worker_a() -> None:
         (tmp_path / "mod_a.py").write_text("a = 999\n", encoding="utf-8")
@@ -181,33 +200,63 @@ def test_optimistic_concurrency_three_way_commit_race(monkeypatch, tmp_path: Pat
     thread_a = threading.Thread(target=worker_a, name="Thread-A")
     thread_a.start()
 
-    assert event_a_ready.wait(timeout=5.0)
+    # Wait until Thread A has scanned T0 and arrived at the commit lock
+    assert event_a_ready_to_commit.wait(timeout=5.0)
 
-    # Thread B writes newer state
+    # Thread B writes newer state for mod_b at T1
     (tmp_path / "mod_b.py").write_text("b = 888\n", encoding="utf-8")
     update_repository_index(tmp_path)
     hash_b = _sha256(tmp_path / "mod_b.py")
 
-    # Thread C writes newest state
+    # Thread C writes newer state for mod_c, adds mod_new, deletes mod_del at T2
     (tmp_path / "mod_c.py").write_text("c = 777\n", encoding="utf-8")
+    (tmp_path / "mod_new.py").write_text("new_item = 555\n", encoding="utf-8")
+    (tmp_path / "mod_del.py").unlink()
     update_repository_index(tmp_path)
     hash_c = _sha256(tmp_path / "mod_c.py")
+    hash_new = _sha256(tmp_path / "mod_new.py")
 
-    # Release Thread A to attempt its final commit
-    event_bc_finished.set()
+    # Release Thread A to execute optimistic merge against latest_on_disk
+    event_bc_done.set()
     thread_a.join(timeout=5.0)
     assert not thread_a.is_alive()
 
     # Verify final on-disk index
     final_idx = read_repository_index(tmp_path)
     assert final_idx
-    entries = {e["path"]: e for e in final_idx["entries"]}  # type: ignore[union-attr]
+    raw_entries = final_idx.get("entries")
+    assert isinstance(raw_entries, list)
+    entries = {e["path"]: e for e in raw_entries}
 
-    # Verify all 3 updates were preserved without data loss!
+    # Verify all newer updates were preserved without data loss
     assert entries["mod_a.py"]["sha256"] == _sha256(tmp_path / "mod_a.py")
     assert entries["mod_b.py"]["sha256"] == hash_b
     assert entries["mod_c.py"]["sha256"] == hash_c
-    assert len(entries) == 3
+    assert entries["mod_new.py"]["sha256"] == hash_new
+    # Deleted file must NOT be resurrected by Thread A's stale candidate
+    assert "mod_del.py" not in entries
+    assert len(entries) == 4
+
+
+def test_commit_lock_timeout_fail_closed(tmp_path: Path) -> None:
+    index_path = tmp_path / ".ai" / "cache" / "repository-index.json"
+    lock = index_path.with_suffix(".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text("active-lock", encoding="utf-8")
+
+    entered_critical_section = False
+    raised = False
+    try:
+        with repository._commit_lock(index_path, timeout=0.05):
+            entered_critical_section = True
+    except TimeoutError:
+        raised = True
+
+    assert raised, "TimeoutError must be raised when lock acquisition times out"
+    assert not entered_critical_section, (
+        "Must NOT enter critical section when lock acquisition fails"
+    )
+    assert lock.exists(), "Active lock must not be deleted on timeout"
 
 
 def test_concurrent_telemetry_records(tmp_path: Path) -> None:

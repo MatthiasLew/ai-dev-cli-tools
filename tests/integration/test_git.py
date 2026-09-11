@@ -187,3 +187,34 @@ def test_git_inspect_stash_count(tmp_path: Path) -> None:
     assert report_stashed.summary["stash_count"] == 1
 
 
+def test_git_inspect_worktree_stash_count(tmp_path: Path) -> None:
+    from ai_dev_tools.git.inspect import _stash_count
+
+    worktree_dir = tmp_path / "worktree"
+    worktree_dir.mkdir()
+    dot_git = worktree_dir / ".git"
+    gitdir_target = tmp_path / "main_repo" / ".git" / "worktrees" / "worktree"
+    gitdir_target.mkdir(parents=True)
+    dot_git.write_text(f"gitdir: {gitdir_target}\n", encoding="utf-8")
+
+    assert _stash_count(worktree_dir) == 0
+
+
+def test_git_states_and_large_files(tmp_path: Path) -> None:
+    from ai_dev_tools.git.inspect import _large_files, _states
+
+    states = _states("## HEAD (no branch)\nUU conflict.txt\n", None, True, False, True)
+    assert "DETACHED_HEAD" in states
+    assert "NO_UPSTREAM" in states
+    assert "CONFLICT" in states
+
+    large_file = tmp_path / "big.bin"
+    large_file.write_bytes(b"0" * 1_000_005)
+    normal_file = tmp_path / "small.txt"
+    normal_file.write_bytes(b"0" * 100)
+
+    res = _large_files(tmp_path, ["big.bin", "small.txt", "missing.txt"])
+    assert res == ["big.bin"]
+
+
+

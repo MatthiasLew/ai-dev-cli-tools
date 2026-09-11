@@ -208,3 +208,29 @@ def test_lsp_request_surfaces_server_error(tmp_path: Path) -> None:
 def test_flatten_lsp_symbols_ignores_malformed_values() -> None:
     assert _flatten_lsp_symbols(None, "app.py") == []
     assert _flatten_lsp_symbols([{"name": "bad", "range": "invalid"}], "app.py") == []
+
+
+def test_tree_sitter_detailed_handles_file_read_error(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.semantic_backends import tree_sitter_index_detailed
+    package = SimpleNamespace(
+        PackConfig=lambda **kwargs: kwargs,
+        init=lambda config: None,
+        get_parser=lambda language: SimpleNamespace(
+            parse=lambda v: SimpleNamespace(root_node=None)
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "tree_sitter_language_pack", package)
+    non_existent = tmp_path / "missing.py"
+    res = tree_sitter_index_detailed(tmp_path, [non_existent])
+    assert "missing.py" in res.failed
+
+
+def test_lsp_index_detailed_raises_when_no_server_available(tmp_path: Path) -> None:
+    from ai_dev_tools.semantic_backends import lsp_index_detailed
+    app_file = tmp_path / "app.py"
+    app_file.write_text("def run(): pass\n", encoding="utf-8")
+    try:
+        lsp_index_detailed(tmp_path, [app_file])
+    except OSError as exc:
+        assert "No local LSP server" in str(exc)
+

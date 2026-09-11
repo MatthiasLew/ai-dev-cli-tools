@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ai_dev_tools.runners.task import TaskOptions, run_prepare_task
@@ -62,3 +63,34 @@ def test_prepare_task_requires_description(tmp_path: Path) -> None:
 
     assert report.status == "invalid_configuration"
     assert report.summary["reason_code"] == "TASK_REQUIRED"
+
+
+def test_token_efficiency_client_profile_and_helpers(tmp_path: Path) -> None:
+    from ai_dev_tools.token_efficiency import (
+        _compact_evidence,
+        _selected_fields,
+        client_profile,
+        persist_acknowledged_state,
+    )
+
+    prof = client_profile("codex")
+    assert prof["content_default"] == "references"
+
+    try:
+        client_profile("non_existent_client")
+    except ValueError as exc:
+        assert "unknown AI client" in str(exc)
+
+    compact_non_dict = _compact_evidence("string", include_content=True)
+    assert compact_non_dict == {}
+
+    fields_non_dict = _selected_fields("string", ("path",))
+    assert fields_non_dict == {}
+
+    # State file without acknowledged_states dict
+    state_file = tmp_path / ".ai" / "token-efficiency" / "generic-state.json"
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(json.dumps({"acknowledged_states": "corrupted"}), encoding="utf-8")
+    persist_acknowledged_state(tmp_path, "generic", "new_hash")
+    assert load_acknowledged_state(tmp_path, "generic") == "new_hash"
+

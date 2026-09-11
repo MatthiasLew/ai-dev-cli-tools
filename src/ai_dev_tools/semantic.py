@@ -12,9 +12,17 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Protocol, cast
 
+from ai_dev_tools import semantic_backends
 from ai_dev_tools.cache.repository import update_repository_index
 from ai_dev_tools.models.report import Artifact, Issue, Report
-from ai_dev_tools.semantic_backends import lsp_index, tree_sitter_available, tree_sitter_index
+from ai_dev_tools.semantic_backends import (
+    BackendResult,
+    lsp_index,
+    lsp_index_detailed,
+    tree_sitter_available,
+    tree_sitter_index,
+    tree_sitter_index_detailed,
+)
 from ai_dev_tools.source_symbols import extract_source_symbols
 
 SEMANTIC_INDEX_PATH = Path(".ai/cache/semantic-index.json")
@@ -210,7 +218,7 @@ def run_semantic(
 
     if paths_to_index:
         try:
-            new_symbols = _index_with_backend(root, paths_to_index, selected_backend)
+            backend_res = _index_with_backend_detailed(root, paths_to_index, selected_backend)
         except (
             ImportError,
             AttributeError,
@@ -222,7 +230,7 @@ def run_semantic(
         ) as exc:
             if backend == "auto" and selected_backend == "treesitter":
                 selected_backend = "structural"
-                symbols = _structural_index(root, paths)
+                current_fingerprint = semantic_cache_fingerprint(selected_backend)
                 report.status = "partial"
                 report.issues.append(
                     Issue(
@@ -231,6 +239,11 @@ def run_semantic(
                         code="TREE_SITTER_FALLBACK",
                     )
                 )
+                paths_to_index = paths
+                cached_to_reuse = {}
+                assembled_by_path = {}
+                current_file_hashes = {}
+                backend_res = _index_with_backend_detailed(root, paths, selected_backend)
             else:
                 report.status = "invalid_configuration"
                 report.summary = {
@@ -240,26 +253,28 @@ def run_semantic(
                     "message": str(exc),
                 }
                 return report
-        else:
-            new_symbols_by_path: dict[str, list[dict[str, object]]] = {}
-            for item in new_symbols:
-                if isinstance(item, dict) and isinstance(item.get("path"), str):
-                    new_symbols_by_path.setdefault(str(item["path"]), []).append(item)
 
-            for path in paths_to_index:
-                rel = path.relative_to(root).as_posix()
+        new_symbols = backend_res.symbols
+        new_symbols_by_path: dict[str, list[dict[str, object]]] = {}
+        for item in new_symbols:
+            if isinstance(item, dict) and isinstance(item.get("path"), str):
+                new_symbols_by_path.setdefault(str(item["path"]), []).append(item)
+
+        for path in paths_to_index:
+            rel = path.relative_to(root).as_posix()
+            if rel in backend_res.processed:
                 file_syms = new_symbols_by_path.get(rel, [])
                 assembled_by_path[rel] = file_syms
                 symbols.extend(file_syms)
                 current_file_hashes[rel] = calculated_hashes[rel]
 
-            for file_syms in cached_to_reuse.values():
-                symbols.extend(file_syms)
+        for file_syms in cached_to_reuse.values():
+            symbols.extend(file_syms)
 
-            known_paths = {p.relative_to(root).as_posix() for p in paths}
-            for item in new_symbols:
-                if isinstance(item, dict) and str(item.get("path", "")) not in known_paths:
-                    symbols.append(item)
+        known_paths = {p.relative_to(root).as_posix() for p in paths}
+        for item in new_symbols:
+            if isinstance(item, dict) and str(item.get("path", "")) not in known_paths:
+                symbols.append(item)
     else:
         for file_syms in cached_to_reuse.values():
             symbols.extend(file_syms)
@@ -305,7 +320,9 @@ def run_semantic(
         _write_json(output, index_payload)
 
     files_total = len(paths)
-    files_indexed = len(paths_to_index)
+    files_indexed = len(
+        [p for p in paths_to_index if p.relative_to(root).as_posix() in current_file_hashes]
+    )
     files_reused = len(cached_to_reuse)
     files_omitted = max(0, files_total - (files_indexed + files_reused))
 
@@ -364,23 +381,69 @@ def semantic_capabilities() -> dict[str, object]:
     }
 
 
-def _index_with_backend(root: Path, paths: list[Path], backend: str) -> list[dict[str, object]]:
+def _index_with_backend_detailed(
+    root: Path, paths: list[Path], backend: str
+) -> BackendResult:
     if backend == "structural":
-        return _structural_index(root, paths)
+        rows = _structural_index(root, paths)
+        processed = {
+            str(item["path"])
+            for item in rows
+            if isinstance(item, dict) and isinstance(item.get("path"), str)
+        }
+        for path in paths:
+            rel = path.relative_to(root).as_posix()
+            if rel not in processed:
+                try:
+                    if path.stat().st_size <= 2_000_000:
+                        source = path.read_text(encoding="utf-8", errors="replace")
+                        if extract_source_symbols(source, path.suffix) is not None:
+                            processed.add(rel)
+                except OSError:
+                    pass
+        return BackendResult(symbols=rows, processed=processed)
     if backend == "treesitter":
-        return tree_sitter_index(root, paths)
+        if tree_sitter_index is not semantic_backends.tree_sitter_index:
+            rows = tree_sitter_index(root, paths)
+            processed = {
+                str(item["path"])
+                for item in rows
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            }
+            return BackendResult(symbols=rows, processed=processed)
+        return tree_sitter_index_detailed(root, paths)
     if backend == "lsp":
-        return lsp_index(root, paths)
+        if lsp_index is not semantic_backends.lsp_index:
+            rows = lsp_index(root, paths)
+            processed = {
+                str(item["path"])
+                for item in rows
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            }
+            return BackendResult(symbols=rows, processed=processed)
+        return lsp_index_detailed(root, paths)
     entry_points = _backend_entry_points()
     if backend not in entry_points:
         raise ValueError(f"Unknown semantic backend: {backend}")
     loaded = entry_points[backend].load()
     instance = loaded() if isinstance(loaded, type) else loaded
     provider = cast(SemanticBackend, instance)
+    if hasattr(provider, "index_detailed"):
+        res = provider.index_detailed(root, paths)
+        if isinstance(res, BackendResult):
+            return res
     result = provider.index(root, paths)
     if not isinstance(result, list):
         raise TypeError("Semantic backend must return a list of symbol objects")
-    return [item for item in result if isinstance(item, dict)]
+    symbols = [item for item in result if isinstance(item, dict)]
+    processed = {
+        str(item["path"]) for item in symbols if isinstance(item.get("path"), str)
+    }
+    return BackendResult(symbols=symbols, processed=processed)
+
+
+def _index_with_backend(root: Path, paths: list[Path], backend: str) -> list[dict[str, object]]:
+    return _index_with_backend_detailed(root, paths, backend).symbols
 
 
 def _structural_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:

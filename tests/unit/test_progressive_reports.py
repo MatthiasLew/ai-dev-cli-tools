@@ -106,3 +106,20 @@ def test_symbol_explain_is_bounded_qualified_and_project_scoped(tmp_path: Path) 
     assert report.summary["related_tests"] == ["tests/test_service.py"]
     assert unsafe.status == "failed"
     assert unsafe.summary["reason_code"] == "SYMBOL_PATH_OUTSIDE_PROJECT"
+
+
+def test_symbol_explain_error_branches(tmp_path: Path) -> None:
+    rep_invalid = run_explain_symbol(tmp_path, "no_hash_separator.py")
+    assert rep_invalid.status == "invalid_configuration"
+    assert rep_invalid.summary["reason_code"] == "INVALID_SYMBOL_REFERENCE"
+
+    rep_missing_file = run_explain_symbol(tmp_path, "does_not_exist.py#func")
+    assert rep_missing_file.status == "failed"
+    assert rep_missing_file.summary["reason_code"] == "SYMBOL_FILE_UNAVAILABLE"
+
+    source = tmp_path / "mod.py"
+    source.write_text("def existing(): pass\n", encoding="utf-8")
+    rep_missing_sym = run_explain_symbol(tmp_path, "mod.py#non_existent")
+    assert rep_missing_sym.status == "failed"
+    assert rep_missing_sym.summary["reason_code"] == "SYMBOL_NOT_FOUND"
+

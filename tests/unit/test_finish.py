@@ -50,3 +50,29 @@ def test_finish_blocks_conflicts_and_failed_checks(monkeypatch, tmp_path: Path) 
     report = finish.run_finish(tmp_path)
     assert "repository has merge conflicts" in report.summary["blocking_reasons"]
     assert "2 check(s) failed" in report.summary["blocking_reasons"]
+
+
+def test_finish_blocks_incomplete_checks_and_secrets(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.security.secrets import SecretFinding
+
+    git_report = Report(command="git inspect", project_root=tmp_path).finish()
+    git_report.summary = {
+        "changed_files": ["src/app.py", "data.parquet"],
+        "states": ["DIRTY", "DIVERGED"],
+        "conflicted_files": [],
+    }
+    check_report = Report(command="check", project_root=tmp_path, status="partial").finish()
+    monkeypatch.setattr(finish, "inspect_git", lambda root, detailed: git_report)
+    monkeypatch.setattr(finish, "run_check", lambda root, mode: check_report)
+    monkeypatch.setattr(
+        finish,
+        "scan_paths_for_secrets",
+        lambda root, paths: [SecretFinding("src/app.py", 1, "api_key", "secret1234567890")],
+    )
+    report = finish.run_finish(tmp_path)
+    assert report.status == "failed"
+    assert "required checks incomplete" in report.summary["blocking_reasons"]
+    assert "1 potential secret(s) detected" in report.summary["blocking_reasons"]
+    assert report.summary["changed"]["other_files"] == 1
+
+

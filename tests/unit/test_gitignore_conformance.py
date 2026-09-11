@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from ai_dev_tools.cache.repository import update_repository_index
 from ai_dev_tools.detectors.repository_map import map_repository
@@ -66,7 +67,9 @@ def test_gitignore_conformance_with_git_ls_files(tmp_path: Path) -> None:
     )
 
     index_payload = update_repository_index(tmp_path)
-    indexed_paths = sorted(e["path"].replace("\\", "/") for e in index_payload["entries"])
+    raw_entries = index_payload.get("entries")
+    assert isinstance(raw_entries, list)
+    indexed_paths = sorted(e["path"].replace("\\", "/") for e in raw_entries)
 
     assert indexed_paths == git_expected_files
 
@@ -119,7 +122,7 @@ def test_gitignore_fallback_in_nongit_directory(tmp_path: Path) -> None:
     assert not any("app.log" in f for f in all_posix)
 
 
-def test_subprocess_efficiency_in_git_mapping(monkeypatch, tmp_path: Path) -> None:
+def test_subprocess_efficiency_in_git_mapping(monkeypatch: Any, tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
     (tmp_path / "a.py").write_text("a=1", encoding="utf-8")
     (tmp_path / "b.py").write_text("b=2", encoding="utf-8")
@@ -128,10 +131,10 @@ def test_subprocess_efficiency_in_git_mapping(monkeypatch, tmp_path: Path) -> No
     call_count = 0
     real_run = original_subprocess.run
 
-    def tracked_run(*args, **kwargs):  # type: ignore[no-untyped-def]
+    def tracked_run(cmd: Any, *args: Any, **kwargs: Any) -> Any:
         nonlocal call_count
         call_count += 1
-        return real_run(*args, **kwargs)
+        return real_run(cmd, *args, **kwargs)
 
     monkeypatch.setattr(original_subprocess, "run", tracked_run)
 
@@ -161,7 +164,9 @@ def test_nested_subproject_git_detection(tmp_path: Path) -> None:
 
     # Index directly on the nested project root
     idx = update_repository_index(service_dir)
-    entries = {e["path"] for e in idx["entries"]}  # type: ignore[union-attr]
+    raw_entries = idx.get("entries")
+    assert isinstance(raw_entries, list)
+    entries = {e["path"] for e in raw_entries}
     assert "main.py" in entries
     assert "debug.log" not in entries, "Gitignore *.log must be respected in nested project"
 
@@ -198,7 +203,9 @@ def test_custom_ignore_paths_with_git(tmp_path: Path) -> None:
     subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
 
     idx = update_repository_index(tmp_path)
-    entries = {e["path"] for e in idx["entries"]}  # type: ignore[union-attr]
+    raw_entries = idx.get("entries")
+    assert isinstance(raw_entries, list)
+    entries = {e["path"] for e in raw_entries}
 
     assert "src/app.py" in entries
     assert "generated_api/client.py" not in entries, "Custom ignore path must be excluded"

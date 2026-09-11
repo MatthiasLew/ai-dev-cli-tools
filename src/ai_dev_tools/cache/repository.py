@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
-from ai_dev_tools.cache.graph import build_impact_graph
+from ai_dev_tools.cache.graph import build_impact_graph as build_impact_graph
 from ai_dev_tools.config import DEFAULT_IGNORES, load_settings
 
 INDEX_SCHEMA_VERSION = "1"
@@ -26,10 +26,12 @@ _COMMIT_LOCK_STALE_SECONDS = 30.0
 
 
 @contextmanager
-def _commit_lock(index_path: Path) -> Iterator[None]:
+def _commit_lock(
+    index_path: Path, timeout: float = _COMMIT_LOCK_TIMEOUT_SECONDS
+) -> Iterator[None]:
     lock = index_path.with_suffix(".lock")
     lock.parent.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + _COMMIT_LOCK_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout
     acquired = False
     while True:
         try:
@@ -48,12 +50,15 @@ def _commit_lock(index_path: Path) -> Iterator[None]:
             if time.monotonic() >= deadline:
                 break
             time.sleep(0.01)
+    if not acquired:
+        raise TimeoutError(
+            f"Could not acquire repository commit lock for {index_path} within {timeout}s"
+        )
     try:
         yield
     finally:
-        if acquired:
-            with suppress(OSError):
-                lock.unlink()
+        with suppress(OSError):
+            lock.unlink()
 
 
 class IndexEntry(TypedDict):

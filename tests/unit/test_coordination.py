@@ -91,3 +91,25 @@ def test_concurrent_claim_has_exactly_one_owner(tmp_path: Path) -> None:
     assert sorted(report.status for report in reports) == ["blocked", "success"]
     status = coordinate_agents(tmp_path, "status")
     assert len(status.summary["active_claims"]) == 1
+
+
+def test_coordination_heartbeat_and_duplicate(tmp_path: Path) -> None:
+    rep_add = coordinate_agents(tmp_path, "add", task_id="t1", title="Task 1", paths=["src"])
+    assert rep_add.status == "success"
+
+    # Duplicate add
+    rep_dup = coordinate_agents(tmp_path, "add", task_id="t1", title="Task 1", paths=["src"])
+    assert rep_dup.status == "blocked"
+    assert rep_dup.summary["reason_code"] == "TASK_ALREADY_EXISTS"
+
+    # Claim
+    coordinate_agents(tmp_path, "claim", task_id="t1", agent_id="agent-1", lease_seconds=30)
+
+    # Heartbeat
+    rep_hb = coordinate_agents(
+        tmp_path, "heartbeat", task_id="t1", agent_id="agent-1", lease_seconds=60
+    )
+    assert rep_hb.status == "success"
+    assert rep_hb.summary["reason_code"] == "LEASE_RENEWED"
+
+

@@ -5,6 +5,7 @@ import queue
 import shutil
 import subprocess
 import threading
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import BinaryIO
@@ -54,22 +55,39 @@ def tree_sitter_available() -> bool:
     return True
 
 
-def tree_sitter_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
+@dataclass(slots=True)
+class BackendResult:
+    symbols: list[dict[str, object]]
+    processed: set[str] = field(default_factory=set)
+    skipped: set[str] = field(default_factory=set)
+    failed: set[str] = field(default_factory=set)
+
+
+def tree_sitter_index_detailed(root: Path, paths: list[Path]) -> BackendResult:
     try:
         from tree_sitter_language_pack import PackConfig, get_parser, init
     except ImportError as exc:
         raise ImportError("Install ai-dev-cli-tools[semantic] for Tree-sitter support") from exc
 
     rows: list[dict[str, object]] = []
+    processed: set[str] = set()
+    skipped: set[str] = set()
+    failed: set[str] = set()
+
     cache = root / ".ai" / "cache" / "tree-sitter"
     cache.mkdir(parents=True, exist_ok=True)
     init(PackConfig(cache_dir=str(cache)))
     parsers: dict[str, object] = {}
     for path in paths:
+        rel = path.relative_to(root).as_posix()
         language = LANGUAGE_BY_SUFFIX.get(path.suffix.lower())
         if language is None:
+            skipped.add(rel)
             continue
         try:
+            if path.stat().st_size > 2_000_000:
+                skipped.add(rel)
+                continue
             source = path.read_bytes()
             parser = parsers.setdefault(language, get_parser(language))
             tree = parser.parse(source)  # type: ignore[attr-defined]
@@ -88,7 +106,7 @@ def tree_sitter_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
                 )
                 rows.append(
                     {
-                        "path": path.relative_to(root).as_posix(),
+                        "path": rel,
                         "name": name,
                         "kind": kind,
                         "start_line": node.start_point[0] + 1,
@@ -97,27 +115,53 @@ def tree_sitter_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
                         "language": language,
                     }
                 )
+            processed.add(rel)
         except (OSError, LookupError, ValueError):
+            failed.add(rel)
             continue
-    return rows
+    return BackendResult(symbols=rows, processed=processed, skipped=skipped, failed=failed)
 
 
-def lsp_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
+def tree_sitter_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
+    return tree_sitter_index_detailed(root, paths).symbols
+
+
+def lsp_index_detailed(root: Path, paths: list[Path]) -> BackendResult:
     grouped: dict[str, list[Path]] = {}
+    skipped: set[str] = set()
     for path in paths:
+        rel = path.relative_to(root).as_posix()
         language = LANGUAGE_BY_SUFFIX.get(path.suffix.lower())
         if language in LSP_COMMANDS:
             grouped.setdefault(language, []).append(path)
+        else:
+            skipped.add(rel)
     rows: list[dict[str, object]] = []
+    processed: set[str] = set()
+    failed: set[str] = set()
     for language, selected in grouped.items():
         available = [entry for entry in LSP_COMMANDS[language] if shutil.which(entry[0][0])]
         if not available:
             raise OSError(f"No local LSP server found for {language}")
         command, language_id = available[0]
-        with LspSession(command, root) as session:
+        try:
+            with LspSession(command, root) as session:
+                for path in selected:
+                    rel = path.relative_to(root).as_posix()
+                    try:
+                        syms = session.document_symbols(path, language_id, root)
+                        rows.extend(syms)
+                        processed.add(rel)
+                    except OSError:
+                        failed.add(rel)
+        except OSError:
             for path in selected:
-                rows.extend(session.document_symbols(path, language_id, root))
-    return rows
+                failed.add(path.relative_to(root).as_posix())
+    return BackendResult(symbols=rows, processed=processed, skipped=skipped, failed=failed)
+
+
+def lsp_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
+    return lsp_index_detailed(root, paths).symbols
 
 
 class LspSession:

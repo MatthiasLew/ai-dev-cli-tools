@@ -34,6 +34,25 @@ def test_unknown_semantic_backend_fails_closed(tmp_path: Path) -> None:
     assert report.summary["reason_code"] == "SEMANTIC_BACKEND_UNAVAILABLE"
 
 
+def test_semantic_index_truncation_warning_at_10k_symbols(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools import semantic
+
+    (tmp_path / "big.py").write_text("def run(): pass\n", encoding="utf-8")
+
+    many_symbols = [
+        {"path": "big.py", "name": f"sym_{i}", "kind": "function", "start_line": i, "end_line": i}
+        for i in range(10_005)
+    ]
+    monkeypatch.setattr(semantic, "_structural_index", lambda r, p: many_symbols)
+    rep = run_semantic(tmp_path, "index", "structural")
+    assert rep.status == "partial"
+    assert rep.summary["truncated"] is True
+    assert rep.summary["symbol_count"] == 10_000
+    assert rep.summary["total_symbol_count"] == 10_005
+    assert any(i.code == "SEMANTIC_INDEX_TRUNCATED" for i in rep.issues)
+
+
+
 def test_semantic_status_and_explicit_plugin_backend(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     from ai_dev_tools import semantic
 
@@ -139,4 +158,41 @@ def test_incremental_semantic_reindex(monkeypatch, tmp_path: Path) -> None:  # t
     assert rep4.summary["symbol_count"] == 3
     assert len(indexed_batches) == 1
     assert set(indexed_batches[0]) == {"file_a.py", "file_b.py"}
+
+
+def test_semantic_empty_paths_auto_fallback(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools import semantic
+
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: True)
+    monkeypatch.setattr(
+        semantic,
+        "_index_with_backend",
+        lambda root, paths, backend: (_ for _ in ()).throw(RuntimeError("empty paths failed")),
+    )
+    rep = run_semantic(tmp_path, "index", "auto")
+    assert rep.status == "partial"
+    assert rep.issues[0].code == "TREE_SITTER_FALLBACK"
+
+
+def test_semantic_fallback_to_index_when_cache_file_missing(tmp_path: Path) -> None:
+    from ai_dev_tools.semantic import SEMANTIC_CACHE_PATH, SEMANTIC_INDEX_PATH
+
+    (tmp_path / "app.py").write_text("def run(): pass\n", encoding="utf-8")
+    rep1 = run_semantic(tmp_path, "index", "structural")
+    assert rep1.status == "success"
+    assert rep1.summary["files_indexed"] == 1
+
+    # Delete semantic-cache.json, keeping semantic-index.json
+    cache_file = tmp_path / SEMANTIC_CACHE_PATH
+    index_file = tmp_path / SEMANTIC_INDEX_PATH
+    assert cache_file.exists() and index_file.exists()
+    cache_file.unlink()
+
+    # Next run should fall back to reading semantic-index.json for incremental cache
+    rep2 = run_semantic(tmp_path, "index", "structural")
+    assert rep2.status == "success"
+    assert rep2.summary["files_reused"] == 1
+    assert rep2.summary["files_indexed"] == 0
+
+
 

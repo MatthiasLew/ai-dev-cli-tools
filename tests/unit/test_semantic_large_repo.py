@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from ai_dev_tools import semantic
 from ai_dev_tools.semantic import (
@@ -184,4 +185,138 @@ def test_semantic_warm_no_op_write_avoidance(monkeypatch, tmp_path: Path) -> Non
     assert index_file.stat().st_mtime_ns == index_mtime_before, (
         "Index file must not be rewritten on no-op warm run"
     )
+
+
+def test_semantic_valid_file_with_zero_symbols_is_cached(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: False)
+
+    (tmp_path / "valid_no_syms.py").write_text("x = 42\ny = 'hello'\n# comment\n", encoding="utf-8")
+
+    rep1 = run_semantic(tmp_path, "index", backend="structural")
+    assert rep1.status == "success"
+    assert rep1.summary["files_total"] == 1
+    assert rep1.summary["files_indexed"] == 1
+    assert rep1.summary["files_reused"] == 0
+    assert rep1.summary["files_omitted"] == 0
+    assert rep1.summary["symbol_count"] == 0
+
+    cache_data = json.loads((tmp_path / SEMANTIC_CACHE_PATH).read_text(encoding="utf-8"))
+    assert "valid_no_syms.py" in cache_data["file_hashes"]
+    assert cache_data["file_symbols"].get("valid_no_syms.py") == []
+
+    # Warm run must reuse cache and not re-index
+    rep2 = run_semantic(tmp_path, "index", backend="structural")
+    assert rep2.status == "success"
+    assert rep2.summary["files_indexed"] == 0
+    assert rep2.summary["files_reused"] == 1
+    assert rep2.summary["files_omitted"] == 0
+
+
+def test_semantic_skipped_oversized_file_not_cached(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: False)
+
+    (tmp_path / "good.py").write_text("def ok(): pass\n", encoding="utf-8")
+    # Simulate an oversized file by monkeypatching stat or creating file
+    oversized = tmp_path / "huge.py"
+    oversized.write_text("def big(): pass\n", encoding="utf-8")
+
+    orig_stat = Path.stat
+
+    def mock_stat(self: Path, **kwargs: Any) -> Any:
+        st = orig_stat(self, **kwargs)
+        if self.name == "huge.py":
+            # Return stat with st_size > 2_000_000
+            import os
+            return os.stat_result((
+                st.st_mode, st.st_ino, st.st_dev, st.st_nlink, st.st_uid, st.st_gid,
+                2_500_000, st.st_atime, st.st_mtime, st.st_ctime
+            ))
+        return st
+
+    monkeypatch.setattr(Path, "stat", mock_stat)
+
+    rep1 = run_semantic(tmp_path, "index", backend="structural")
+    assert rep1.status == "partial"
+    assert rep1.summary["files_total"] == 2
+    assert rep1.summary["files_indexed"] == 1
+    assert rep1.summary["files_omitted"] == 1
+
+    cache_data = json.loads((tmp_path / SEMANTIC_CACHE_PATH).read_text(encoding="utf-8"))
+    assert "good.py" in cache_data["file_hashes"]
+    assert "huge.py" not in cache_data["file_hashes"], (
+        "Oversized file must NOT be cached in file_hashes"
+    )
+
+
+def test_semantic_failed_parser_file_not_cached_and_reindexed_after_fix(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: False)
+
+    broken = tmp_path / "broken.py"
+    broken.write_text("def incomplete(:\n", encoding="utf-8")  # SyntaxError in AST
+
+    rep1 = run_semantic(tmp_path, "index", backend="structural")
+    assert rep1.status == "partial"
+    assert rep1.summary["files_total"] == 1
+    assert rep1.summary["files_indexed"] == 0
+    assert rep1.summary["files_omitted"] == 1
+
+    cache_data = json.loads((tmp_path / SEMANTIC_CACHE_PATH).read_text(encoding="utf-8"))
+    assert "broken.py" not in cache_data["file_hashes"], (
+        "Failed parser file must NOT be cached in file_hashes"
+    )
+
+    # Fix the file
+    broken.write_text("def fixed(): pass\n", encoding="utf-8")
+
+    rep2 = run_semantic(tmp_path, "index", backend="structural")
+    assert rep2.status == "success"
+    assert rep2.summary["files_total"] == 1
+    assert rep2.summary["files_indexed"] == 1
+    assert rep2.summary["files_omitted"] == 0
+    assert rep2.summary["symbol_count"] == 1
+
+    cache_data2 = json.loads((tmp_path / SEMANTIC_CACHE_PATH).read_text(encoding="utf-8"))
+    assert "broken.py" in cache_data2["file_hashes"]
+    assert len(cache_data2["file_symbols"]["broken.py"]) == 1
+
+
+def test_semantic_auto_backend_fallback_fingerprint_and_cache(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    from ai_dev_tools.semantic import semantic_cache_fingerprint
+
+    (tmp_path / "app.py").write_text("def entry(): pass\n", encoding="utf-8")
+
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: True)
+
+    def failing_treesitter(root: Path, paths: list[Path]) -> Any:
+        raise RuntimeError("Simulated Tree-sitter binary failure")
+
+    monkeypatch.setattr(semantic, "tree_sitter_index_detailed", failing_treesitter)
+
+    rep = run_semantic(tmp_path, "index", backend="auto")
+    assert rep.status == "partial"
+    assert rep.summary["backend"] == "structural"
+    expected_structural_fp = semantic_cache_fingerprint("structural")
+    assert rep.summary["fingerprint"] == expected_structural_fp
+
+    cache_data = json.loads((tmp_path / SEMANTIC_CACHE_PATH).read_text(encoding="utf-8"))
+    assert cache_data["backend"] == "structural"
+    assert cache_data["fingerprint"] == expected_structural_fp
+    assert "app.py" in cache_data["file_hashes"]
+    assert len(cache_data["file_symbols"]["app.py"]) == 1
+
+    # Next run with auto when tree-sitter is unavailable uses structural cache directly
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: False)
+    rep_warm = run_semantic(tmp_path, "index", backend="auto")
+    assert rep_warm.status == "success"
+    assert rep_warm.summary["backend"] == "structural"
+    assert rep_warm.summary["files_indexed"] == 0
+    assert rep_warm.summary["files_reused"] == 1
 

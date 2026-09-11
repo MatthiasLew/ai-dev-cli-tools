@@ -99,3 +99,29 @@ def test_retry_limit_is_capped_and_cli_lists_history(
     assert exit_code == 0
     assert payload["command"] == "test flaky"
     assert payload["summary"]["known_flaky"] == 0
+
+
+def test_flaky_history_prunes_stale_entries(tmp_path: Path) -> None:
+    from ai_dev_tools.runners.check_models import CheckTask
+    from ai_dev_tools.runners.flaky import HISTORY_PATH, record_result
+
+    task = CheckTask("unit_tests", "unit_tests", ["pytest"], "fast", "detected")
+    cmd_res = CommandResult(["pytest"], 0, "passed", "", 0.1)
+
+    # Pre-populate history with 205 entries
+    history_file = tmp_path / HISTORY_PATH
+    history_file.parent.mkdir(parents=True, exist_ok=True)
+    initial_entries = {
+        f"test_{i}": {
+            "last_seen_at": f"2026-01-01T00:{i//60:02d}:{i%60:02d}Z",
+            "outcomes": ["pass"],
+        }
+        for i in range(205)
+    }
+    history_file.write_text(json.dumps({"entries": initial_entries}), encoding="utf-8")
+
+    # Record one more result, triggering pruning
+    record_result(tmp_path, task, "new_fp", cmd_res)
+
+    saved = json.loads(history_file.read_text(encoding="utf-8"))
+    assert len(saved["entries"]) <= 201
