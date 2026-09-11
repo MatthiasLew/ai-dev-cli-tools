@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import shutil
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -112,7 +115,15 @@ def capture_environment_state(
     }
     path = root / STATE_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2, sort_keys=True) + chr(10), encoding="utf-8")
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        encoded = json.dumps(state, indent=2, sort_keys=True) + chr(10)
+        temporary.write_text(encoded, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            with contextlib.suppress(OSError):
+                temporary.unlink()
     return path
 
 

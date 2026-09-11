@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
+import os
+import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -149,13 +153,33 @@ def record_usage(
         payload["cost"] = cost
     directory = root / ".ai" / "token-efficiency"
     path = directory / "sessions" / f"{session_id}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     latest = directory / "latest-session.json"
-    latest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_json_atomic(path, payload)
+    _write_json_atomic(latest, payload)
     from ai_dev_tools.telemetry_policy import optional_policy_status
 
     return {**payload, "path": path, "policy": optional_policy_status(root)}
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(
+        f"{path.name}.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}.tmp"
+    )
+    try:
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        for attempt in range(20):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        if temporary.exists():
+            with contextlib.suppress(OSError):
+                temporary.unlink()
 
 
 def telemetry_status(project_root: Path) -> Report:

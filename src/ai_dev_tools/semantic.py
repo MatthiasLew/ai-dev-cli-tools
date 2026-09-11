@@ -6,6 +6,7 @@ import importlib.metadata
 import json
 import os
 import shutil
+import threading
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -17,6 +18,9 @@ from ai_dev_tools.semantic_backends import lsp_index, tree_sitter_available, tre
 from ai_dev_tools.source_symbols import extract_source_symbols
 
 SEMANTIC_INDEX_PATH = Path(".ai/cache/semantic-index.json")
+SEMANTIC_CACHE_PATH = Path(".ai/cache/semantic-cache.json")
+SEMANTIC_SCHEMA_VERSION = "2"
+SEMANTIC_EXTRACTOR_VERSION = "1"
 SUPPORTED_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".rs", ".php"}
 LSP_EXECUTABLES = {
     "python": ("pyright-langserver", "pylsp"),
@@ -25,6 +29,27 @@ LSP_EXECUTABLES = {
     "java": ("jdtls",),
     "php": ("intelephense",),
 }
+
+
+def semantic_cache_fingerprint(
+    backend: str,
+    schema_version: str | None = None,
+    extractor_version: str | None = None,
+    config_items: tuple[str, ...] | None = None,
+) -> str:
+    schema = SEMANTIC_SCHEMA_VERSION if schema_version is None else schema_version
+    extractor = SEMANTIC_EXTRACTOR_VERSION if extractor_version is None else extractor_version
+    config = tuple(sorted(SUPPORTED_SUFFIXES)) if config_items is None else config_items
+    raw = json.dumps(
+        {
+            "schema_version": schema,
+            "backend": backend,
+            "extractor_version": extractor,
+            "config": config,
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
 @lru_cache(maxsize=64)
@@ -105,24 +130,44 @@ def run_semantic(
                 repo_fingerprints[str(item["path"])] = str(item["sha256"])
 
     output = root / SEMANTIC_INDEX_PATH
-    cached_data = None if (rebuild or action == "rebuild") else _read_json(output)
+    cache_path = root / SEMANTIC_CACHE_PATH
+    current_fingerprint = semantic_cache_fingerprint(selected_backend)
 
     cached_hashes: dict[str, str] = {}
     cached_symbols_by_path: dict[str, list[dict[str, object]]] = {}
     is_incremental_candidate = False
 
-    if (
-        cached_data is not None
-        and cached_data.get("backend") == selected_backend
-        and isinstance(cached_data.get("file_hashes"), dict)
-        and isinstance(cached_data.get("symbols"), list)
-        and not cached_data.get("truncated", False)
-    ):
-        cached_hashes = cast(dict[str, str], cached_data["file_hashes"])
-        for sym in cast(list[object], cached_data["symbols"]):
-            if isinstance(sym, dict) and isinstance(sym.get("path"), str):
-                cached_symbols_by_path.setdefault(str(sym["path"]), []).append(sym)
-        is_incremental_candidate = True
+    if not rebuild and action != "rebuild":
+        cache_data = _read_json(cache_path)
+        if (
+            cache_data is not None
+            and cache_data.get("fingerprint") == current_fingerprint
+            and isinstance(cache_data.get("file_hashes"), dict)
+            and isinstance(cache_data.get("file_symbols"), dict)
+        ):
+            cached_hashes = cast(dict[str, str], cache_data["file_hashes"])
+            raw_syms = cast(dict[str, object], cache_data["file_symbols"])
+            for rel_path, items in raw_syms.items():
+                if isinstance(items, list):
+                    cached_symbols_by_path[rel_path] = [
+                        sym for sym in items if isinstance(sym, dict)
+                    ]
+            is_incremental_candidate = True
+        else:
+            # Fallback to index file if present and matches fingerprint
+            index_data = _read_json(output)
+            if (
+                index_data is not None
+                and index_data.get("fingerprint") == current_fingerprint
+                and isinstance(index_data.get("file_hashes"), dict)
+                and isinstance(index_data.get("symbols"), list)
+                and not index_data.get("truncated", False)
+            ):
+                cached_hashes = cast(dict[str, str], index_data["file_hashes"])
+                for sym in cast(list[object], index_data["symbols"]):
+                    if isinstance(sym, dict) and isinstance(sym.get("path"), str):
+                        cached_symbols_by_path.setdefault(str(sym["path"]), []).append(sym)
+                is_incremental_candidate = True
 
     paths_to_index: list[Path] = []
     cached_to_reuse: dict[str, list[dict[str, object]]] = {}
@@ -141,6 +186,8 @@ def run_semantic(
             paths_to_index.append(path)
 
     symbols: list[dict[str, object]] = []
+    assembled_by_path: dict[str, list[dict[str, object]]] = dict(cached_to_reuse)
+
     if paths_to_index:
         try:
             new_symbols = _index_with_backend(root, paths_to_index, selected_backend)
@@ -182,9 +229,11 @@ def run_semantic(
             for path in paths:
                 rel = path.relative_to(root).as_posix()
                 if rel in cached_to_reuse:
-                    symbols.extend(cached_to_reuse[rel])
-                elif rel in new_symbols_by_path:
-                    symbols.extend(new_symbols_by_path[rel])
+                    file_syms = cached_to_reuse[rel]
+                else:
+                    file_syms = new_symbols_by_path.get(rel, [])
+                assembled_by_path[rel] = file_syms
+                symbols.extend(file_syms)
 
             known_paths = {p.relative_to(root).as_posix() for p in paths}
             for item in new_symbols:
@@ -193,29 +242,53 @@ def run_semantic(
     else:
         for path in paths:
             rel = path.relative_to(root).as_posix()
-            if rel in cached_to_reuse:
-                symbols.extend(cached_to_reuse[rel])
+            file_syms = cached_to_reuse.get(rel, [])
+            assembled_by_path[rel] = file_syms
+            symbols.extend(file_syms)
 
     bounded_symbols = symbols[:10_000]
-    payload: dict[str, object] = {
-        "schema_version": "1",
+    is_truncated = len(symbols) > 10_000
+
+    # Write internal full cache (unbounded, enables incremental indexing for >10k repos)
+    cache_payload: dict[str, object] = {
+        "schema_version": SEMANTIC_SCHEMA_VERSION,
+        "fingerprint": current_fingerprint,
+        "backend": selected_backend,
+        "extractor_version": SEMANTIC_EXTRACTOR_VERSION,
+        "files_considered": len(paths),
+        "total_symbols": len(symbols),
+        "file_hashes": current_file_hashes,
+        "file_symbols": assembled_by_path,
+    }
+    _write_json(cache_path, cache_payload)
+
+    # Write external bounded index (max 10,000 symbols)
+    index_payload: dict[str, object] = {
+        "schema_version": SEMANTIC_SCHEMA_VERSION,
+        "fingerprint": current_fingerprint,
         "backend": selected_backend,
         "files_considered": len(paths),
         "symbols": bounded_symbols,
-        "truncated": len(symbols) > 10_000,
+        "symbol_count": len(bounded_symbols),
+        "total_symbol_count": len(symbols),
+        "truncated": is_truncated,
         "file_hashes": current_file_hashes,
     }
-    _write_json(output, payload)
+    _write_json(output, index_payload)
+
     report.summary = {
         **capabilities,
-        "schema_version": payload["schema_version"],
+        "schema_version": index_payload["schema_version"],
+        "fingerprint": current_fingerprint,
         "backend": selected_backend,
         "files_considered": len(paths),
+        "files_indexed": len(paths_to_index),
         "symbol_count": len(bounded_symbols),
-        "truncated": payload["truncated"],
+        "total_symbol_count": len(symbols),
+        "truncated": index_payload["truncated"],
     }
     report.artifacts.append(Artifact(str(output), "semantic-index", "Local semantic symbol index"))
-    if payload["truncated"]:
+    if index_payload["truncated"]:
         report.status = "partial"
         report.issues.append(
             Issue(
@@ -334,10 +407,19 @@ def _sha256(path: Path) -> str:
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    temporary = path.with_name(
+        f"{path.name}.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}.tmp"
+    )
     try:
         temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        os.replace(temporary, path)
+        for attempt in range(20):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
     finally:
         if temporary.exists():
             with contextlib.suppress(OSError):

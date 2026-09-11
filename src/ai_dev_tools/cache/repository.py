@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import hashlib
 import json
 import os
 import posixpath
+import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -91,6 +94,40 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
         previous_edges=previous.get("graph"),
     )
 
+    known_previous = set(previous_entries)
+    latest_on_disk = read_repository_index(resolved_root)
+    if latest_on_disk and latest_on_disk.get("generated_at"):
+        disk_time = str(latest_on_disk.get("generated_at", ""))
+        prev_time = str(previous.get("generated_at", ""))
+        if disk_time > prev_time:
+            disk_entry_map = _entry_map(latest_on_disk.get("entries"))
+            known_previous = set(disk_entry_map)
+            for entry in final_entries:
+                disk_entry = disk_entry_map.get(entry["path"])
+                if disk_entry and disk_entry["mtime_ns"] > entry["mtime_ns"]:
+                    entry["size"] = disk_entry["size"]
+                    entry["mtime_ns"] = disk_entry["mtime_ns"]
+                    entry["sha256"] = disk_entry["sha256"]
+            for path_key, disk_entry in disk_entry_map.items():
+                if path_key not in {e["path"] for e in final_entries} and (
+                    resolved_root / path_key
+                ).exists():
+                    final_entries.append(disk_entry)
+            final_entries = [e for e in final_entries if (resolved_root / e["path"]).exists()]
+            final_entries.sort(key=lambda e: e["path"])
+            merged_paths = {item["path"] for item in final_entries}
+            reused_paths = {
+                item["path"]
+                for item in final_entries
+                if item["path"] in disk_entry_map or item["path"] in reused_paths
+            }
+            graph = build_impact_graph(
+                resolved_root,
+                merged_paths,
+                reused_paths=reused_paths,
+                previous_edges=latest_on_disk.get("graph"),
+            )
+
     payload: dict[str, object] = {
         "schema_version": INDEX_SCHEMA_VERSION,
         "project_root": str(resolved_root),
@@ -101,7 +138,7 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
             "files": len(final_entries),
             "hashed": hashed,
             "reused": reused,
-            "removed": len(set(previous_entries) - {item["path"] for item in final_entries}),
+            "removed": len(known_previous - {item["path"] for item in final_entries}),
             "graph_edges": len(graph),
         },
     }
@@ -163,7 +200,47 @@ def is_ignored_path(relative: str, ignored: set[str]) -> bool:
     return False
 
 
+def _git_project_file_entries(
+    root: Path, ignored: set[str]
+) -> list[tuple[Path, str, os.stat_result]] | None:
+    if not (root / ".git").exists() and not (root.parent / ".git").exists():
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+            cwd=root,
+            capture_output=True,
+            text=False,
+            timeout=10,
+        )
+        if proc.returncode != 0:
+            return None
+        parts = [
+            p.decode("utf-8", errors="surrogateescape")
+            for p in proc.stdout.split(b"\0")
+            if p
+        ]
+        entries: list[tuple[Path, str, os.stat_result]] = []
+        for rel in sorted(parts):
+            rel_normalized = rel.replace("\\", "/").strip("/")
+            if is_ignored_path(rel_normalized, {".ai", ".git"}):
+                continue
+            path = root / rel_normalized
+            try:
+                stat = path.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            entries.append((path, rel_normalized, stat))
+        return entries
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+
+
 def _project_file_entries(root: Path, ignored: set[str]) -> list[tuple[Path, str, os.stat_result]]:
+    git_entries = _git_project_file_entries(root, ignored)
+    if git_entries is not None:
+        return git_entries
+
     entries: list[tuple[Path, str, os.stat_result]] = []
 
     def _walk(current_dir: str, rel_prefix: str, parent_name: str) -> None:
@@ -265,6 +342,20 @@ def _sha256(path: Path) -> str:
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    temporary = path.with_name(
+        f"{path.name}.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}.tmp"
+    )
+    try:
+        temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        for attempt in range(20):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        if temporary.exists():
+            with contextlib.suppress(OSError):
+                temporary.unlink()

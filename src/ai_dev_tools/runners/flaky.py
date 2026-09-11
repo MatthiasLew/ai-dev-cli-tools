@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
@@ -98,9 +100,15 @@ def _record_result_unlocked(
     history["schema_version"] = HISTORY_SCHEMA
     history["updated_at"] = datetime.now(UTC).isoformat()
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(history, indent=2, sort_keys=True) + chr(10), encoding="utf-8")
-    os.replace(temporary, path)
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        payload = json.dumps(history, indent=2, sort_keys=True) + "\n"
+        temporary.write_text(payload, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            with contextlib.suppress(OSError):
+                temporary.unlink()
     return path
 
 
