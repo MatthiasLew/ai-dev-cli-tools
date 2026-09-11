@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import subprocess
 from pathlib import Path
@@ -137,3 +137,69 @@ def test_subprocess_efficiency_in_git_mapping(monkeypatch, tmp_path: Path) -> No
 
     map_repository(tmp_path)
     assert call_count == 1
+
+
+def test_nested_subproject_git_detection(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    (tmp_path / ".gitignore").write_text("*.log\n", encoding="utf-8")
+
+    # Nested 3 levels down: repo/packages/backend/service
+    service_dir = tmp_path / "packages" / "backend" / "service"
+    service_dir.mkdir(parents=True)
+    (service_dir / "main.py").write_text("def run(): pass\n", encoding="utf-8")
+    (service_dir / "debug.log").write_text("ignored log\n", encoding="utf-8")
+
+    # Index directly on the nested project root
+    idx = update_repository_index(service_dir)
+    entries = {e["path"] for e in idx["entries"]}  # type: ignore[union-attr]
+    assert "main.py" in entries
+    assert "debug.log" not in entries, "Gitignore *.log must be respected in nested project"
+
+    rep = map_repository(service_dir)
+    assert rep.summary["file_count_scanned"] == 1
+
+
+def test_custom_ignore_paths_with_git(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    # Configure custom ignores in .ai-dev-tools.toml (not in .gitignore)
+    config_content = '[ignore]\npaths = ["generated_api", "vendor-local"]\n'
+    (tmp_path / ".ai-dev-tools.toml").write_text(config_content, encoding="utf-8")
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("pass", encoding="utf-8")
+
+    (tmp_path / "generated_api").mkdir()
+    (tmp_path / "generated_api" / "client.py").write_text("# gen", encoding="utf-8")
+
+    (tmp_path / "vendor-local").mkdir()
+    (tmp_path / "vendor-local" / "lib.py").write_text("# vendor", encoding="utf-8")
+
+    # Git track everything including vendor-local
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+
+    idx = update_repository_index(tmp_path)
+    entries = {e["path"] for e in idx["entries"]}  # type: ignore[union-attr]
+
+    assert "src/app.py" in entries
+    assert "generated_api/client.py" not in entries, "Custom ignore path must be excluded"
+    assert "vendor-local/lib.py" not in entries, "Tracked file in custom ignore must be excluded"

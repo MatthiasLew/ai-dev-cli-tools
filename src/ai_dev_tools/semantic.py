@@ -31,19 +31,37 @@ LSP_EXECUTABLES = {
 }
 
 
+def _backend_version(backend: str) -> str:
+    if backend == "treesitter":
+        try:
+            import importlib.metadata
+
+            return importlib.metadata.version("tree-sitter-language-pack")
+        except Exception:
+            return "builtin"
+    elif backend == "lsp":
+        # LSP external language servers vary by system and language;
+        # running discovery subprocesses per fingerprint causes severe latency.
+        return "lsp_v1"
+    return "builtin"
+
+
 def semantic_cache_fingerprint(
     backend: str,
     schema_version: str | None = None,
     extractor_version: str | None = None,
+    backend_version: str | None = None,
     config_items: tuple[str, ...] | None = None,
 ) -> str:
     schema = SEMANTIC_SCHEMA_VERSION if schema_version is None else schema_version
     extractor = SEMANTIC_EXTRACTOR_VERSION if extractor_version is None else extractor_version
+    backend_ver = _backend_version(backend) if backend_version is None else backend_version
     config = tuple(sorted(SUPPORTED_SUFFIXES)) if config_items is None else config_items
     raw = json.dumps(
         {
             "schema_version": schema,
             "backend": backend,
+            "backend_version": backend_ver,
             "extractor_version": extractor,
             "config": config,
         },
@@ -172,16 +190,18 @@ def run_semantic(
     paths_to_index: list[Path] = []
     cached_to_reuse: dict[str, list[dict[str, object]]] = {}
     current_file_hashes: dict[str, str] = {}
+    calculated_hashes: dict[str, str] = {}
 
     for path in paths:
         rel = path.relative_to(root).as_posix()
         file_hash = repo_fingerprints.get(rel)
         if file_hash is None:
             file_hash = _sha256(path)
-        current_file_hashes[rel] = file_hash
+        calculated_hashes[rel] = file_hash
 
         if is_incremental_candidate and rel in cached_hashes and cached_hashes[rel] == file_hash:
             cached_to_reuse[rel] = cached_symbols_by_path.get(rel, [])
+            current_file_hashes[rel] = file_hash
         else:
             paths_to_index.append(path)
 
@@ -226,13 +246,14 @@ def run_semantic(
                 if isinstance(item, dict) and isinstance(item.get("path"), str):
                     new_symbols_by_path.setdefault(str(item["path"]), []).append(item)
 
-            for path in paths:
+            for path in paths_to_index:
                 rel = path.relative_to(root).as_posix()
-                if rel in cached_to_reuse:
-                    file_syms = cached_to_reuse[rel]
-                else:
-                    file_syms = new_symbols_by_path.get(rel, [])
+                file_syms = new_symbols_by_path.get(rel, [])
                 assembled_by_path[rel] = file_syms
+                symbols.extend(file_syms)
+                current_file_hashes[rel] = calculated_hashes[rel]
+
+            for file_syms in cached_to_reuse.values():
                 symbols.extend(file_syms)
 
             known_paths = {p.relative_to(root).as_posix() for p in paths}
@@ -240,10 +261,7 @@ def run_semantic(
                 if isinstance(item, dict) and str(item.get("path", "")) not in known_paths:
                     symbols.append(item)
     else:
-        for path in paths:
-            rel = path.relative_to(root).as_posix()
-            file_syms = cached_to_reuse.get(rel, [])
-            assembled_by_path[rel] = file_syms
+        for file_syms in cached_to_reuse.values():
             symbols.extend(file_syms)
 
     bounded_symbols = symbols[:10_000]
@@ -260,7 +278,6 @@ def run_semantic(
         "file_hashes": current_file_hashes,
         "file_symbols": assembled_by_path,
     }
-    _write_json(cache_path, cache_payload)
 
     # Write external bounded index (max 10,000 symbols)
     index_payload: dict[str, object] = {
@@ -274,15 +291,34 @@ def run_semantic(
         "truncated": is_truncated,
         "file_hashes": current_file_hashes,
     }
-    _write_json(output, index_payload)
+
+    cache_unchanged = (
+        not rebuild
+        and is_incremental_candidate
+        and not paths_to_index
+        and current_file_hashes == cached_hashes
+        and cache_path.exists()
+        and output.exists()
+    )
+    if not cache_unchanged:
+        _write_json(cache_path, cache_payload)
+        _write_json(output, index_payload)
+
+    files_total = len(paths)
+    files_indexed = len(paths_to_index)
+    files_reused = len(cached_to_reuse)
+    files_omitted = max(0, files_total - (files_indexed + files_reused))
 
     report.summary = {
         **capabilities,
         "schema_version": index_payload["schema_version"],
         "fingerprint": current_fingerprint,
         "backend": selected_backend,
-        "files_considered": len(paths),
-        "files_indexed": len(paths_to_index),
+        "files_considered": files_total,
+        "files_total": files_total,
+        "files_indexed": files_indexed,
+        "files_reused": files_reused,
+        "files_omitted": files_omitted,
         "symbol_count": len(bounded_symbols),
         "total_symbol_count": len(symbols),
         "truncated": index_payload["truncated"],
@@ -295,6 +331,15 @@ def run_semantic(
                 "warning",
                 "Semantic index reached its 10,000 symbol bound.",
                 code="SEMANTIC_INDEX_TRUNCATED",
+            )
+        )
+    if files_omitted > 0:
+        report.status = "partial"
+        report.issues.append(
+            Issue(
+                "warning",
+                f"{files_omitted} files could not be indexed by backend {selected_backend}.",
+                code="SEMANTIC_FILES_OMITTED",
             )
         )
     return report
@@ -340,7 +385,7 @@ def _index_with_backend(root: Path, paths: list[Path], backend: str) -> list[dic
 
 def _structural_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for path in paths[:2_000]:
+    for path in paths:
         try:
             if path.stat().st_size > 2_000_000:
                 continue

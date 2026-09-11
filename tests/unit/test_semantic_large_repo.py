@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -116,3 +116,72 @@ def test_semantic_cache_over_10k_symbols_allows_reuse(monkeypatch, tmp_path: Pat
     run_semantic(tmp_path, "index", backend="structural", rebuild=True)
     assert len(indexed_batches) == 1
     assert set(indexed_batches[0]) == {"mod_b.py", "mod_c.py"}
+
+
+def test_semantic_indexing_over_2000_files(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: False)
+
+    # Generate 2,050 files (exceeds previous 2,000 artificial cap)
+    file_count = 2050
+    content = "def sample():\n    return 42\n"
+    for i in range(file_count):
+        (tmp_path / f"mod_{i:04d}.py").write_text(content, encoding="utf-8")
+
+    # 1. Cold Run
+    rep = run_semantic(tmp_path, "index", backend="structural")
+    assert rep.status == "success"
+    assert rep.summary["files_total"] == file_count
+    assert rep.summary["files_indexed"] == file_count
+    assert rep.summary["files_omitted"] == 0
+    assert rep.summary["total_symbol_count"] == file_count
+
+    cache_data = json.loads((tmp_path / SEMANTIC_CACHE_PATH).read_text(encoding="utf-8"))
+    assert cache_data["total_symbols"] == file_count
+    assert len(cache_data["file_symbols"]) == file_count
+
+    # Verify file index 2000 and 2049 are genuinely parsed and NOT cached as empty
+    assert "mod_2000.py" in cache_data["file_symbols"]
+    assert len(cache_data["file_symbols"]["mod_2000.py"]) == 1
+    assert cache_data["file_symbols"]["mod_2000.py"][0]["name"] == "sample"
+
+    assert "mod_2049.py" in cache_data["file_symbols"]
+    assert len(cache_data["file_symbols"]["mod_2049.py"]) == 1
+
+    # 2. Warm Run -> 100% reused, 0 reindexed
+    rep_warm = run_semantic(tmp_path, "index", backend="structural")
+    assert rep_warm.status == "success"
+    assert rep_warm.summary["files_total"] == file_count
+    assert rep_warm.summary["files_indexed"] == 0
+    assert rep_warm.summary["files_reused"] == file_count
+    assert rep_warm.summary["files_omitted"] == 0
+
+
+def test_semantic_warm_no_op_write_avoidance(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(semantic, "tree_sitter_available", lambda: False)
+
+    (tmp_path / "mod_1.py").write_text("def a(): pass\n", encoding="utf-8")
+    (tmp_path / "mod_2.py").write_text("def b(): pass\n", encoding="utf-8")
+
+    rep1 = run_semantic(tmp_path, "index", backend="structural")
+    assert rep1.status == "success"
+
+    cache_file = tmp_path / SEMANTIC_CACHE_PATH
+    index_file = tmp_path / SEMANTIC_INDEX_PATH
+    assert cache_file.exists()
+    assert index_file.exists()
+
+    cache_mtime_before = cache_file.stat().st_mtime_ns
+    index_mtime_before = index_file.stat().st_mtime_ns
+
+    # Warm run with 0 changes -> must NOT rewrite JSON files!
+    rep2 = run_semantic(tmp_path, "index", backend="structural")
+    assert rep2.status == "success"
+    assert rep2.summary["files_indexed"] == 0
+
+    assert cache_file.stat().st_mtime_ns == cache_mtime_before, (
+        "Cache file must not be rewritten on no-op warm run"
+    )
+    assert index_file.stat().st_mtime_ns == index_mtime_before, (
+        "Index file must not be rewritten on no-op warm run"
+    )
+

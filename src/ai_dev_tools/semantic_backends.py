@@ -65,7 +65,7 @@ def tree_sitter_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
     cache.mkdir(parents=True, exist_ok=True)
     init(PackConfig(cache_dir=str(cache)))
     parsers: dict[str, object] = {}
-    for path in paths[:2_000]:
+    for path in paths:
         language = LANGUAGE_BY_SUFFIX.get(path.suffix.lower())
         if language is None:
             continue
@@ -104,7 +104,7 @@ def tree_sitter_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
 
 def lsp_index(root: Path, paths: list[Path]) -> list[dict[str, object]]:
     grouped: dict[str, list[Path]] = {}
-    for path in paths[:2_000]:
+    for path in paths:
         language = LANGUAGE_BY_SUFFIX.get(path.suffix.lower())
         if language in LSP_COMMANDS:
             grouped.setdefault(language, []).append(path)

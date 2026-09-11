@@ -75,9 +75,14 @@ def run_benchmark_for_scale(n_symbols: int, symbols_per_file: int = 50) -> dict[
         assert rep_inc.status in ("success", "partial")
 
         peak_bytes = max(peak_mem_cold, peak_mem_warm, peak_mem_inc, peak_mem_json)
+        cold_summary = rep_cold.summary
         return {
-            "symbols": n_symbols,
-            "files": n_files,
+            "requested_symbols": n_symbols,
+            "generated_files": n_files,
+            "files_actually_indexed": cold_summary.get("files_indexed", 0),
+            "actual_symbols_indexed": cold_summary.get("total_symbol_count", 0),
+            "omitted_files": cold_summary.get("files_omitted", 0),
+            "truncated": cold_summary.get("truncated", False),
             "cold_build_ms": round(cold_time * 1000, 2),
             "warm_build_ms": round(warm_time * 1000, 2),
             "one_file_mod_ms": round(inc_time * 1000, 2),
@@ -94,20 +99,22 @@ def main() -> None:
     scales = [10_000, 50_000, 100_000, 250_000]
     results = []
     header = (
-        f"{'Symbols':>8} | {'Files':>6} | {'Cold (ms)':>10} | {'Warm (ms)':>10} | "
-        f"{'1-Mod (ms)':>10} | {'Size (MB)':>10} | {'Load (ms)':>10} | "
-        f"{'Dump (ms)':>10} | {'Peak RAM':>10}"
+        f"{'Req Sym':>8} | {'Act Sym':>8} | {'Gen Fl':>6} | {'Idx Fl':>6} | "
+        f"{'Cold (ms)':>10} | {'Warm (ms)':>10} | {'1-Mod (ms)':>10} | "
+        f"{'Size (MB)':>9} | {'Load (ms)':>9} | {'Dump (ms)':>9} | {'Peak RAM':>9}"
     )
     print(header)
-    print("-" * 95)
+    print("-" * 115)
     for scale in scales:
         res = run_benchmark_for_scale(scale)
         results.append(res)
         print(
-            f"{res['symbols']:>8} | {res['files']:>6} | {res['cold_build_ms']:>10.2f} | "
-            f"{res['warm_build_ms']:>10.2f} | {res['one_file_mod_ms']:>10.2f} | "
-            f"{res['cache_size_mb']:>10.2f} | {res['json_load_ms']:>10.2f} | "
-            f"{res['json_dump_ms']:>10.2f} | {res['peak_mem_mb']:>8.2f} MB"
+            f"{res['requested_symbols']:>8} | {res['actual_symbols_indexed']:>8} | "
+            f"{res['generated_files']:>6} | {res['files_actually_indexed']:>6} | "
+            f"{res['cold_build_ms']:>10.2f} | {res['warm_build_ms']:>10.2f} | "
+            f"{res['one_file_mod_ms']:>10.2f} | {res['cache_size_mb']:>9.2f} | "
+            f"{res['json_load_ms']:>9.2f} | {res['json_dump_ms']:>9.2f} | "
+            f"{res['peak_mem_mb']:>7.2f} MB"
         )
 
     print("\nJSON Results:")

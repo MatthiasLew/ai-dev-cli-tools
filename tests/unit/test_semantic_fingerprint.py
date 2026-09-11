@@ -155,3 +155,39 @@ def test_change_extractor_version_invalidates_cache(monkeypatch, tmp_path: Path)
     assert rep.status == "success"
     assert len(indexed_batches) == 1, "Extractor version change must invalidate cache and rebuild"
 
+
+def test_treesitter_backend_version_change_invalidates_cache(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from ai_dev_tools.semantic import semantic_cache_fingerprint
+
+    fp1 = semantic_cache_fingerprint("treesitter", backend_version="0.2.0")
+    fp2 = semantic_cache_fingerprint("treesitter", backend_version="0.3.0")
+    assert fp1 != fp2, "Different tree-sitter versions must produce different fingerprints"
+
+    # Verify structural backend version is constant
+    fp_struct1 = semantic_cache_fingerprint("structural")
+    fp_struct2 = semantic_cache_fingerprint("structural")
+    assert fp_struct1 == fp_struct2
+
+    # Verify caching behavior when backend version changes
+    (tmp_path / "app.py").write_text("def run(): pass\n", encoding="utf-8")
+    monkeypatch.setattr(semantic, "_backend_version", lambda b: "1.0.0")
+
+    indexed_batches: list[list[str]] = []
+    original_structural = semantic._structural_index
+
+    def tracked_structural(root: Path, paths: list[Path]) -> list[dict[str, object]]:
+        indexed_batches.append([p.name for p in paths])
+        return original_structural(root, paths)
+
+    monkeypatch.setattr(semantic, "_structural_index", tracked_structural)
+
+    run_semantic(tmp_path, "index", backend="structural")
+    assert len(indexed_batches) == 1
+
+    # Simulate backend package upgrade
+    monkeypatch.setattr(semantic, "_backend_version", lambda b: "2.0.0")
+    indexed_batches.clear()
+    rep = run_semantic(tmp_path, "index", backend="structural")
+    assert rep.status == "success"
+    assert len(indexed_batches) == 1, "Backend package upgrade must invalidate cache and rebuild"
+

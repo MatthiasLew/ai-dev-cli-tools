@@ -80,8 +80,6 @@ class _IgnoreRule:
 
 
 def _git_ls_files(root: Path) -> list[str] | None:
-    if not (root / ".git").exists() and not (root.parent / ".git").exists():
-        return None
     try:
         proc = subprocess.run(
             ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],

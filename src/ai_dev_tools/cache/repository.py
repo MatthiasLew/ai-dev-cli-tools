@@ -9,16 +9,51 @@ import posixpath
 import subprocess
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
 from ai_dev_tools.cache.graph import build_impact_graph
-from ai_dev_tools.config import DEFAULT_IGNORES
+from ai_dev_tools.config import DEFAULT_IGNORES, load_settings
 
 INDEX_SCHEMA_VERSION = "1"
 INDEX_RELATIVE_PATH = Path(".ai/cache/repository-index.json")
+_COMMIT_LOCK_TIMEOUT_SECONDS = 10.0
+_COMMIT_LOCK_STALE_SECONDS = 30.0
+
+
+@contextmanager
+def _commit_lock(index_path: Path) -> Iterator[None]:
+    lock = index_path.with_suffix(".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + _COMMIT_LOCK_TIMEOUT_SECONDS
+    acquired = False
+    while True:
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(descriptor)
+            acquired = True
+            break
+        except (FileExistsError, PermissionError):
+            try:
+                if time.time() - lock.stat().st_mtime > _COMMIT_LOCK_STALE_SECONDS:
+                    with suppress(OSError):
+                        lock.unlink()
+                    continue
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.01)
+    try:
+        yield
+    finally:
+        if acquired:
+            with suppress(OSError):
+                lock.unlink()
 
 
 class IndexEntry(TypedDict):
@@ -35,9 +70,15 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
     previous_entries = _entry_map(previous.get("entries"))
     reused = 0
     reused_paths: set[str] = set()
-    ignored = {item.replace(chr(92), "/").strip("/") for item in DEFAULT_IGNORES}
+    settings = load_settings(resolved_root)
+    custom_ignores = (settings.ignore_paths - DEFAULT_IGNORES) | {".ai", ".git"}
+    fallback_ignores = {
+        item.replace(chr(92), "/").strip("/")
+        for item in (DEFAULT_IGNORES | settings.ignore_paths)
+        if item.strip()
+    }
 
-    file_entries = list(_project_file_entries(resolved_root, ignored))
+    file_entries = list(_project_file_entries(resolved_root, custom_ignores, fallback_ignores))
     entries: list[IndexEntry | None] = [None] * len(file_entries)
     to_hash: list[tuple[int, Path, str, os.stat_result]] = []
 
@@ -94,56 +135,57 @@ def update_repository_index(root: Path, *, rebuild: bool = False) -> dict[str, o
         previous_edges=previous.get("graph"),
     )
 
-    known_previous = set(previous_entries)
-    latest_on_disk = read_repository_index(resolved_root)
-    if latest_on_disk and latest_on_disk.get("generated_at"):
-        disk_time = str(latest_on_disk.get("generated_at", ""))
-        prev_time = str(previous.get("generated_at", ""))
-        if disk_time > prev_time:
-            disk_entry_map = _entry_map(latest_on_disk.get("entries"))
-            known_previous = set(disk_entry_map)
-            for entry in final_entries:
-                disk_entry = disk_entry_map.get(entry["path"])
-                if disk_entry and disk_entry["mtime_ns"] > entry["mtime_ns"]:
-                    entry["size"] = disk_entry["size"]
-                    entry["mtime_ns"] = disk_entry["mtime_ns"]
-                    entry["sha256"] = disk_entry["sha256"]
-            for path_key, disk_entry in disk_entry_map.items():
-                if path_key not in {e["path"] for e in final_entries} and (
-                    resolved_root / path_key
-                ).exists():
-                    final_entries.append(disk_entry)
-            final_entries = [e for e in final_entries if (resolved_root / e["path"]).exists()]
-            final_entries.sort(key=lambda e: e["path"])
-            merged_paths = {item["path"] for item in final_entries}
-            reused_paths = {
-                item["path"]
-                for item in final_entries
-                if item["path"] in disk_entry_map or item["path"] in reused_paths
-            }
-            graph = build_impact_graph(
-                resolved_root,
-                merged_paths,
-                reused_paths=reused_paths,
-                previous_edges=latest_on_disk.get("graph"),
-            )
+    with _commit_lock(index_path):
+        known_previous = set(previous_entries)
+        latest_on_disk = read_repository_index(resolved_root)
+        if latest_on_disk and latest_on_disk.get("generated_at"):
+            disk_time = str(latest_on_disk.get("generated_at", ""))
+            prev_time = str(previous.get("generated_at", ""))
+            if disk_time > prev_time:
+                disk_entry_map = _entry_map(latest_on_disk.get("entries"))
+                known_previous = set(disk_entry_map)
+                for entry in final_entries:
+                    disk_entry = disk_entry_map.get(entry["path"])
+                    if disk_entry and disk_entry["mtime_ns"] > entry["mtime_ns"]:
+                        entry["size"] = disk_entry["size"]
+                        entry["mtime_ns"] = disk_entry["mtime_ns"]
+                        entry["sha256"] = disk_entry["sha256"]
+                for path_key, disk_entry in disk_entry_map.items():
+                    if path_key not in {e["path"] for e in final_entries} and (
+                        resolved_root / path_key
+                    ).exists():
+                        final_entries.append(disk_entry)
+                final_entries = [e for e in final_entries if (resolved_root / e["path"]).exists()]
+                final_entries.sort(key=lambda e: e["path"])
+                merged_paths = {item["path"] for item in final_entries}
+                reused_paths = {
+                    item["path"]
+                    for item in final_entries
+                    if item["path"] in disk_entry_map or item["path"] in reused_paths
+                }
+                graph = build_impact_graph(
+                    resolved_root,
+                    merged_paths,
+                    reused_paths=reused_paths,
+                    previous_edges=latest_on_disk.get("graph"),
+                )
 
-    payload: dict[str, object] = {
-        "schema_version": INDEX_SCHEMA_VERSION,
-        "project_root": str(resolved_root),
-        "generated_at": datetime.now(UTC).isoformat(),
-        "entries": final_entries,
-        "graph": graph,
-        "summary": {
-            "files": len(final_entries),
-            "hashed": hashed,
-            "reused": reused,
-            "removed": len(known_previous - {item["path"] for item in final_entries}),
-            "graph_edges": len(graph),
-        },
-    }
-    _write_json(index_path, payload)
-    return payload
+        payload: dict[str, object] = {
+            "schema_version": INDEX_SCHEMA_VERSION,
+            "project_root": str(resolved_root),
+            "generated_at": datetime.now(UTC).isoformat(),
+            "entries": final_entries,
+            "graph": graph,
+            "summary": {
+                "files": len(final_entries),
+                "hashed": hashed,
+                "reused": reused,
+                "removed": len(known_previous - {item["path"] for item in final_entries}),
+                "graph_edges": len(graph),
+            },
+        }
+        _write_json(index_path, payload)
+        return payload
 
 
 def read_repository_index(root: Path) -> dict[str, object]:
@@ -201,10 +243,8 @@ def is_ignored_path(relative: str, ignored: set[str]) -> bool:
 
 
 def _git_project_file_entries(
-    root: Path, ignored: set[str]
+    root: Path, custom_ignores: set[str]
 ) -> list[tuple[Path, str, os.stat_result]] | None:
-    if not (root / ".git").exists() and not (root.parent / ".git").exists():
-        return None
     try:
         proc = subprocess.run(
             ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
@@ -223,7 +263,7 @@ def _git_project_file_entries(
         entries: list[tuple[Path, str, os.stat_result]] = []
         for rel in sorted(parts):
             rel_normalized = rel.replace("\\", "/").strip("/")
-            if is_ignored_path(rel_normalized, {".ai", ".git"}):
+            if is_ignored_path(rel_normalized, custom_ignores):
                 continue
             path = root / rel_normalized
             try:
@@ -236,8 +276,10 @@ def _git_project_file_entries(
         return None
 
 
-def _project_file_entries(root: Path, ignored: set[str]) -> list[tuple[Path, str, os.stat_result]]:
-    git_entries = _git_project_file_entries(root, ignored)
+def _project_file_entries(
+    root: Path, custom_ignores: set[str], fallback_ignores: set[str]
+) -> list[tuple[Path, str, os.stat_result]]:
+    git_entries = _git_project_file_entries(root, custom_ignores)
     if git_entries is not None:
         return git_entries
 
@@ -269,11 +311,11 @@ def _project_file_entries(root: Path, ignored: set[str]) -> list[tuple[Path, str
                 continue
 
             if is_dir:
-                if _is_ignored_name(name, ignored):
+                if _is_ignored_name(name, fallback_ignores):
                     continue
                 if parent_name in {"test", "tests"} and name == "fixtures":
                     continue
-                if is_ignored_path(rel_path, ignored):
+                if is_ignored_path(rel_path, fallback_ignores):
                     continue
                 subdirs.append(entry)
             else:
@@ -282,9 +324,9 @@ def _project_file_entries(root: Path, ignored: set[str]) -> list[tuple[Path, str
                         continue
                 except OSError:
                     continue
-                if _is_ignored_name(name, ignored):
+                if _is_ignored_name(name, fallback_ignores):
                     continue
-                if is_ignored_path(rel_path, ignored):
+                if is_ignored_path(rel_path, fallback_ignores):
                     continue
                 try:
                     stat = entry.stat(follow_symlinks=False)
@@ -302,7 +344,7 @@ def _project_file_entries(root: Path, ignored: set[str]) -> list[tuple[Path, str
 
 def _project_files(root: Path) -> list[Path]:
     ignored = {item.replace(chr(92), "/").strip("/") for item in DEFAULT_IGNORES}
-    return [path for path, _, _ in _project_file_entries(root, ignored)]
+    return [path for path, _, _ in _project_file_entries(root, set(), ignored)]
 
 
 def _entry_map(value: object) -> dict[str, IndexEntry]:
