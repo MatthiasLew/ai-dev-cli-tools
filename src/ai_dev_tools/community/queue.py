@@ -3,7 +3,9 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +32,14 @@ def enqueue_event(payload: dict[str, Any]) -> Path | None:
 
     prune_queue()
 
-    # File naming: <timestamp_ns>_<event_id>.json
+    # File naming: <timestamp_ns>_<thread_id>_<unique_hex>_<event_id>.json
     event_id = str(payload.get("event_id", "unknown"))
     timestamp_ns = time.time_ns()
-    filename = f"{timestamp_ns}_{event_id}.json"
+    thread_id = threading.get_ident()
+    unique_suffix = uuid.uuid4().hex[:8]
+    filename = f"{timestamp_ns}_{thread_id}_{unique_suffix}_{event_id}.json"
     target_path = queue_dir / filename
-    temp_path = queue_dir / f"{filename}.{os.getpid()}.tmp"
+    temp_path = queue_dir / f"{filename}.{os.getpid()}.{thread_id}.tmp"
 
     try:
         temp_path.write_bytes(raw_bytes)
