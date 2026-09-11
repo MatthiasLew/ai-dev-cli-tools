@@ -19,6 +19,43 @@ artifacts may be removed when no longer needed; cache, runtime, and temporary st
 be safe for `ai-dev` to recreate.
 ```
 
+## Help improve ai-dev
+
+`ai-dev` is being evaluated on real-world coding-agent workflows.
+
+If you want to support development, you can optionally enable privacy-preserving opt-in telemetry without persistent user identifiers.
+
+Telemetry is **OFF by default**.
+
+Example:
+
+```bash
+ai-dev telemetry sharing enable basic
+```
+
+or
+
+```bash
+ai-dev telemetry sharing enable research
+```
+
+Never shared:
+- source code
+- prompts
+- model responses
+- repository names
+- file names or paths
+- usernames/emails
+- secrets/API keys
+
+Inspect exactly what would be sent:
+
+```bash
+ai-dev telemetry sharing preview --level research
+```
+
+For complete details on data handling, allowed scalar metrics, and local queueing, see [docs/community-telemetry.md](docs/community-telemetry.md).
+
 ## Install
 
 ```bash

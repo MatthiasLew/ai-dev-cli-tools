@@ -335,6 +335,17 @@ def build_parser() -> argparse.ArgumentParser:
         "provider", choices=["openai", "anthropic", "gemini", "generic"]
     )
     telemetry_pricing_activate.add_argument("version")
+    telemetry_sharing = telemetry_sub.add_parser("sharing")
+    telemetry_sharing_sub = telemetry_sharing.add_subparsers(
+        dest="telemetry_sharing_command", required=True
+    )
+    telemetry_sharing_sub.add_parser("status")
+    telemetry_sharing_enable = telemetry_sharing_sub.add_parser("enable")
+    telemetry_sharing_enable.add_argument("level", choices=["basic", "research"])
+    telemetry_sharing_sub.add_parser("disable")
+    telemetry_sharing_preview = telemetry_sharing_sub.add_parser("preview")
+    telemetry_sharing_preview.add_argument("--level", choices=["basic", "research"])
+    telemetry_sharing_sub.add_parser("flush")
 
     sub.add_parser("diagnostics")
     sub.add_parser("capabilities")
@@ -385,8 +396,18 @@ def main(argv: list[str] | None = None) -> int:
     report = _dispatch(args, project_root).finish()
     dispatch_seconds = time.monotonic() - dispatch_started
     _record_command_performance(report, args, startup_seconds, dispatch_seconds)
+    from ai_dev_tools.community import record_command_event
+
+    record_command_event(report, startup_seconds + dispatch_seconds, project_root)
     if args.json:
-        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        if (
+            args.command == "telemetry"
+            and getattr(args, "telemetry_command", "") == "sharing"
+            and getattr(args, "telemetry_sharing_command", "") == "preview"
+        ):
+            print(json.dumps(report.summary.get("payload", {}), indent=2, sort_keys=True))
+        else:
+            print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
     elif not args.quiet:
         _print_text(report)
     else:
@@ -765,6 +786,25 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
                 source=args.source,
                 activate=args.activate,
             )
+        if args.telemetry_command == "sharing":
+            from ai_dev_tools.community import (
+                disable_telemetry,
+                enable_telemetry,
+                flush_telemetry,
+                get_telemetry_status,
+                preview_telemetry,
+            )
+
+            if args.telemetry_sharing_command == "status":
+                return get_telemetry_status(project_root)
+            if args.telemetry_sharing_command == "enable":
+                return enable_telemetry(args.level, project_root)
+            if args.telemetry_sharing_command == "disable":
+                return disable_telemetry(project_root)
+            if args.telemetry_sharing_command == "preview":
+                return preview_telemetry(getattr(args, "level", None), project_root)
+            if args.telemetry_sharing_command == "flush":
+                return flush_telemetry(project_root)
         return import_usage(
             project_root,
             args.input,
@@ -883,6 +923,11 @@ def _capabilities_report(project_root: Path) -> Report:
         "telemetry gate",
         "telemetry pricing import",
         "telemetry pricing activate",
+        "telemetry sharing status",
+        "telemetry sharing enable",
+        "telemetry sharing disable",
+        "telemetry sharing preview",
+        "telemetry sharing flush",
         "performance latest",
         "performance compare",
         "explain",
@@ -909,6 +954,17 @@ def _capabilities_report(project_root: Path) -> Report:
 
 
 def _print_text(report: Report) -> None:
+    if report.command == "telemetry sharing status":
+        level_val = report.summary.get("community_telemetry", "OFF")
+        _print_console_line(f"Community telemetry: {level_val}")
+        _print_console_line(f"Endpoint: {report.summary.get('endpoint', 'not configured')}")
+        _print_console_line(f"Queued events: {report.summary.get('queued_events', 0)}")
+        return
+    if report.command.startswith("telemetry sharing preview"):
+        level = report.summary.get("telemetry_level", "")
+        _print_console_line(f"Community telemetry preview ({level}):")
+        _print_console_line(json.dumps(report.summary.get("payload", {}), indent=2))
+        return
     _print_console_line(f"STATUS: {report.status.upper()}")
     _print_console_line(f"COMMAND: {report.command}")
     _print_console_line(f"DURATION: {report.duration_seconds}s")
