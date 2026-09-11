@@ -684,6 +684,7 @@ class LocalMcpServer:
             tool_name=_optional_string(arguments, "tool_name", 100),
             task_kind=_optional_string(arguments, "task_kind", 100),
             quality_passed=quality_passed,
+            origin="mcp",
             duration_seconds=_optional_number(
                 arguments,
                 "duration_seconds",
@@ -927,19 +928,34 @@ def serve_mcp(
     reader = input_stream or sys.stdin
     writer = output_stream or sys.stdout
     server = LocalMcpServer(project_root)
-    for raw_line in reader:
-        if not raw_line.strip():
-            continue
-        response: JsonObject | None
+    try:
+        from ai_dev_tools.community import start_background_autoflush
+
+        start_background_autoflush()
+    except Exception:
+        pass
+
+    try:
+        for raw_line in reader:
+            if not raw_line.strip():
+                continue
+            response: JsonObject | None
+            try:
+                message = json.loads(raw_line)
+            except json.JSONDecodeError:
+                response = _rpc_error(None, -32700, "Parse error")
+            else:
+                response = server.handle(message)
+            if response is not None:
+                writer.write(json.dumps(response, separators=(",", ":"), ensure_ascii=False) + "\n")
+                writer.flush()
+    finally:
         try:
-            message = json.loads(raw_line)
-        except json.JSONDecodeError:
-            response = _rpc_error(None, -32700, "Parse error")
-        else:
-            response = server.handle(message)
-        if response is not None:
-            writer.write(json.dumps(response, separators=(",", ":"), ensure_ascii=False) + "\n")
-            writer.flush()
+            from ai_dev_tools.community import wait_for_autoflush
+
+            wait_for_autoflush(0.05)
+        except Exception:
+            pass
     return 0
 
 

@@ -54,6 +54,7 @@ def import_usage(
             model=usage.get("model", ""),
             request_id=usage.get("request_id", ""),
             source=f"import:{format_name}",
+            origin="import",
             source_id=source_id,
             pricing_path=pricing_path,
             phase=phase,
@@ -92,6 +93,7 @@ def record_usage(
     model: str = "",
     request_id: str = "",
     source: str = "client_reported",
+    origin: str | None = None,
     source_id: str = "",
     pricing_path: Path | None = None,
     phase: str = "",
@@ -161,6 +163,15 @@ def record_usage(
     try:
         from ai_dev_tools.community import record_provider_usage_event
 
+        if origin in {"mcp", "import", "unknown"}:
+            resolved_origin = origin
+        elif source.startswith("import:") or source in {"cli_import", "import"}:
+            resolved_origin = "import"
+        elif source in {"client_reported", "mcp"}:
+            resolved_origin = "mcp"
+        else:
+            resolved_origin = "unknown"
+
         record_provider_usage_event(
             client=client,
             model=model or "",
@@ -171,7 +182,8 @@ def record_usage(
             reasoning_tokens=values["reasoning_tokens"],
             quality_passed=quality_passed,
             duration_seconds=duration,
-            command_name="telemetry" if source == "cli_import" else "mcp",
+            origin=resolved_origin,
+            command_name="telemetry" if resolved_origin == "import" else "mcp",
         )
     except Exception:
         pass

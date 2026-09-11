@@ -278,7 +278,8 @@ def record_provider_usage_event(
     reasoning_tokens: int = 0,
     quality_passed: bool | None = None,
     duration_seconds: float | None = None,
-    command_name: str = "mcp",
+    origin: str = "mcp",
+    command_name: str | None = None,
 ) -> None:
     try:
         config = load_community_config()
@@ -297,8 +298,10 @@ def record_provider_usage_event(
             reasoning_tokens=reasoning_tokens,
             quality_passed=quality_passed,
             duration_seconds=duration_seconds,
+            origin=origin,
             command_name=command_name,
         )
         enqueue_event(payload)
+        start_background_autoflush()
     except Exception:
         pass

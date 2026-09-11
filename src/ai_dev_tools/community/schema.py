@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 import sys
+import uuid
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 COMMUNITY_SCHEMA_VERSION = 1
 MAX_PAYLOAD_BYTES = 32_768  # 32 KB
+
+TIMESTAMP_HOUR_REGEX = re.compile(
+    r"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):00:00Z$"
+)
+PYTHON_VERSION_REGEX = re.compile(r"^3\.\d+$")
+AI_DEV_VERSION_REGEX = re.compile(r"^[\w\.\-\+]+$")
 
 OS_FAMILIES = {"windows", "linux", "macos", "other"}
 
@@ -119,6 +128,9 @@ KNOWN_PUBLIC_MODELS = {
     "gemini-2.5-pro",
     "gemini-2.5-flash",
 }
+
+ALLOWED_MODELS = KNOWN_PUBLIC_MODELS | {"local", "other", "unknown"}
+PROVIDER_USAGE_ORIGINS = frozenset({"mcp", "import", "unknown"})
 
 KNOWN_LANGUAGES = {
     "python",
@@ -360,6 +372,7 @@ RESEARCH_ADDITIONAL_KEYS = {
     "task_outcome",
     "retrieval_reason_code",
     "selection_reason_codes",
+    "origin",
 }
 
 RESEARCH_PAYLOAD_KEYS = BASIC_PAYLOAD_KEYS | RESEARCH_ADDITIONAL_KEYS
@@ -410,6 +423,48 @@ class ResearchCommunityPayload(BasicCommunityPayload, total=False):
     task_outcome: str
     retrieval_reason_code: str | None
     selection_reason_codes: list[str] | None
+    origin: str | None
+
+
+def _is_valid_uuid4(val: Any) -> bool:
+    if not isinstance(val, str) or len(val) != 36:
+        return False
+    try:
+        parsed = uuid.UUID(val, version=4)
+        return str(parsed).lower() == val.lower()
+    except (ValueError, AttributeError):
+        return False
+
+
+def _validate_non_negative_int(val: Any, field_name: str, max_val: int) -> None:
+    if val is None:
+        return
+    if isinstance(val, bool) or not isinstance(val, int):
+        raise ValueError(f"{field_name} must be an integer or None (got {type(val).__name__})")
+    if val < 0 or val > max_val:
+        raise ValueError(f"{field_name} must be between 0 and {max_val} (got {val})")
+
+
+def _validate_ratio(val: Any, field_name: str) -> None:
+    if val is None:
+        return
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{field_name} must be a number or None")
+    f_val = float(val)
+    if not math.isfinite(f_val) or f_val < 0.0 or f_val > 1.0:
+        raise ValueError(f"{field_name} must be a finite number between 0.0 and 1.0 (got {val})")
+
+
+def _validate_duration(val: Any, field_name: str, max_seconds: float = 604800.0) -> None:
+    if val is None:
+        return
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{field_name} must be a number or None")
+    f_val = float(val)
+    if not math.isfinite(f_val) or f_val < 0.0 or f_val > max_seconds:
+        raise ValueError(
+            f"{field_name} must be a finite number between 0.0 and {max_seconds} (got {val})"
+        )
 
 
 def validate_community_payload(payload: dict[str, Any]) -> None:
@@ -453,11 +508,29 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
     if payload["schema_version"] != COMMUNITY_SCHEMA_VERSION:
         raise ValueError(f"Unsupported schema_version: {payload['schema_version']}")
 
+    if not _is_valid_uuid4(payload.get("event_id")):
+        raise ValueError(f"event_id must be a valid UUIDv4 string, got '{payload.get('event_id')}'")
+
     if payload["event_type"] not in EVENT_TYPES:
         raise ValueError(f"Invalid event_type: {payload['event_type']}")
 
+    if (
+        not isinstance(payload["ai_dev_version"], str)
+        or not 1 <= len(payload["ai_dev_version"]) <= 32
+        or not AI_DEV_VERSION_REGEX.match(payload["ai_dev_version"])
+    ):
+        raise ValueError(f"Invalid ai_dev_version: '{payload.get('ai_dev_version')}'")
+
     if payload["os_family"] not in OS_FAMILIES:
         raise ValueError(f"Invalid os_family: {payload['os_family']}")
+
+    if not isinstance(payload["python_version"], str) or not PYTHON_VERSION_REGEX.match(
+        payload["python_version"]
+    ):
+        py_ver = payload.get("python_version")
+        raise ValueError(
+            f"python_version must be in major.minor format (e.g. '3.11'), got '{py_ver}'"
+        )
 
     if payload["command_name"] not in COMMAND_NAMES:
         raise ValueError(f"Invalid command_name: {payload['command_name']}")
@@ -474,9 +547,29 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
     if payload["duration_bucket"] not in DURATION_BUCKETS:
         raise ValueError(f"Invalid duration_bucket: {payload['duration_bucket']}")
 
+    _validate_duration(payload["duration_seconds"], "duration_seconds", max_seconds=604800.0)
+
+    if payload["cache_hit"] is not None and not isinstance(payload["cache_hit"], bool):
+        raise ValueError(
+            f"cache_hit must be a boolean or None, got {type(payload['cache_hit']).__name__}"
+        )
+
+    if not isinstance(payload["timestamp_hour"], str) or not TIMESTAMP_HOUR_REGEX.match(
+        payload["timestamp_hour"]
+    ):
+        ts_hour = payload.get("timestamp_hour")
+        raise ValueError(
+            f"timestamp_hour must match format 'YYYY-MM-DDTHH:00:00Z', got '{ts_hour}'"
+        )
+
     if level == "research":
         if payload["ai_client"] not in AI_CLIENTS:
             raise ValueError(f"Invalid ai_client: {payload['ai_client']}")
+        if payload["model"] not in ALLOWED_MODELS:
+            raise ValueError(
+                f"Invalid model: '{payload['model']}'. "
+                "Must be a sanitized known model, 'local', 'other', or 'unknown'"
+            )
         if payload["task_kind"] not in TASK_KINDS:
             raise ValueError(f"Invalid task_kind: {payload['task_kind']}")
         if payload["validation_result"] not in VALIDATION_OUTCOMES:
@@ -487,19 +580,92 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
             raise ValueError(f"Invalid repo_files_bucket: {payload['repo_files_bucket']}")
         if payload["repo_size_bucket"] not in REPO_SIZE_BUCKETS:
             raise ValueError(f"Invalid repo_size_bucket: {payload['repo_size_bucket']}")
+
         if not isinstance(payload["language_families"], list):
             raise ValueError("language_families must be a list")
+        if len(payload["language_families"]) > 50:
+            count = len(payload["language_families"])
+            raise ValueError(f"language_families exceeds maximum length of 50 (got {count})")
         for lang in payload["language_families"]:
             if not isinstance(lang, str) or lang not in KNOWN_LANGUAGES:
                 raise ValueError(f"Invalid language family: {lang}")
+
         if (
             payload["retrieval_reason_code"] is not None
             and payload["retrieval_reason_code"] not in RETRIEVAL_REASONS
         ):
             raise ValueError(f"Invalid retrieval_reason_code: {payload['retrieval_reason_code']}")
+
         if payload["selection_reason_codes"] is not None:
             if not isinstance(payload["selection_reason_codes"], list):
                 raise ValueError("selection_reason_codes must be a list or None")
+            if len(payload["selection_reason_codes"]) > 100:
+                sc_count = len(payload["selection_reason_codes"])
+                raise ValueError(
+                    f"selection_reason_codes exceeds maximum length of 100 (got {sc_count})"
+                )
             for code in payload["selection_reason_codes"]:
                 if not isinstance(code, str) or code not in SELECTION_REASON_CODES:
                     raise ValueError(f"Invalid selection_reason_code: {code}")
+
+        if payload["origin"] is not None and payload["origin"] not in PROVIDER_USAGE_ORIGINS:
+            allowed_origins = sorted(PROVIDER_USAGE_ORIGINS)
+            raise ValueError(
+                f"Invalid origin: '{payload['origin']}'. Must be None or one of {allowed_origins}"
+            )
+
+        # Numeric and token bounds
+        for tok_field in (
+            "context_candidate_tokens",
+            "context_delivered_tokens",
+            "context_budget",
+            "input_tokens",
+            "cached_input_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+            "total_tokens",
+        ):
+            _validate_non_negative_int(payload[tok_field], tok_field, max_val=100_000_000)
+
+        _validate_non_negative_int(payload["tool_call_count"], "tool_call_count", max_val=100_000)
+        for file_field in ("files_considered", "files_selected", "files_omitted"):
+            _validate_non_negative_int(payload[file_field], file_field, max_val=1_000_000)
+
+        _validate_ratio(payload["cache_hit_ratio"], "cache_hit_ratio")
+        _validate_ratio(payload["semantic_cache_reuse"], "semantic_cache_reuse")
+
+        _validate_duration(
+            payload["local_overhead_seconds"], "local_overhead_seconds", max_seconds=86400.0
+        )
+        _validate_duration(
+            payload["total_wall_time_seconds"], "total_wall_time_seconds", max_seconds=604800.0
+        )
+
+        # Token consistency validation
+        in_tok = payload["input_tokens"]
+        out_tok = payload["output_tokens"]
+        cached_tok = payload["cached_input_tokens"]
+        tot_tok = payload["total_tokens"]
+
+        if in_tok is not None and cached_tok is not None and cached_tok > in_tok:
+            raise ValueError(
+                f"cached_input_tokens ({cached_tok}) cannot exceed input_tokens ({in_tok})"
+            )
+        if tot_tok is not None and in_tok is not None and tot_tok < in_tok:
+            raise ValueError(
+                f"total_tokens ({tot_tok}) cannot be less than input_tokens ({in_tok})"
+            )
+        if tot_tok is not None and out_tok is not None and tot_tok < out_tok:
+            raise ValueError(
+                f"total_tokens ({tot_tok}) cannot be less than output_tokens ({out_tok})"
+            )
+        if (
+            tot_tok is not None
+            and in_tok is not None
+            and out_tok is not None
+            and tot_tok < in_tok + out_tok
+        ):
+            expected_min = in_tok + out_tok
+            raise ValueError(
+                f"total_tokens ({tot_tok}) cannot be less than input + output ({expected_min})"
+            )

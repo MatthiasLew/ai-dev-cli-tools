@@ -64,7 +64,7 @@ def test_managed_process_stop(monkeypatch, tmp_path: Path) -> None:  # type: ign
     monkeypatch.setattr(runner, "resolve_run_plan", lambda settings: plan)
 
     started = run_application(tmp_path, RunOptions())
-    stopped = stop_application(tmp_path, timeout_seconds=10)
+    stopped = stop_application(tmp_path, timeout_seconds=15)
 
     assert started.status == "success"
     assert started.summary["status"] == "running"

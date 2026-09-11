@@ -19,9 +19,11 @@ Community Telemetry is an explicit, opt-in, privacy-preserving telemetry layer d
 6. **Decoupled from Local Telemetry**:
    - Existing local telemetry and token-efficiency features remain strictly local in `.ai/token-efficiency/`.
    - Turning Community Telemetry off never disables local token-efficiency accounting, reports, or benchmarks.
-7. **Failure Isolation**:
-   - Network errors, timeouts, or collector outages **never** fail or slow down normal CLI commands.
-   - Exit codes and command execution remain completely unaffected by telemetry transport.
+7. **Non-Blocking Network & Bounded Shutdown**:
+   - Network uploads are not part of the command's critical execution path.
+   - Background upload requests run in a daemon thread; on CLI command or MCP server termination, waiting for an opportunistic background flush is strictly bounded to 50 ms (`wait_for_autoflush(0.05)`).
+   - If an upload takes longer or fails due to network/collector issues, the daemon thread is detached upon timeout and the command exits immediately.
+   - Network errors, timeouts, or collector outages **never** affect command status or exit codes.
 
 ---
 
@@ -106,9 +108,57 @@ Includes all **BASIC** fields plus aggregated efficiency and workflow metrics to
 | `task_outcome` | string | Closed enum: `"success"`, `"failure"`, `"unknown"` |
 | `retrieval_reason_code` | string or null | Controlled retrieval strategy code |
 | `selection_reason_codes` | list of strings or null | Safe strategy codes from closed enum (e.g. `["CHANGED_FILE", "USER_INCLUDE"]`) |
+| `origin` | string or null | Controlled origin enum for provider events: `"mcp"`, `"import"`, `"unknown"`, or `null` for commands |
 
 #### Provider Usage Events (`event_type: "provider_usage"`)
-When `RESEARCH` telemetry is active, local provider metrics recorded via MCP tools (`record_usage`) or CLI import generate an additional `provider_usage` event. This event shares the allowlisted research schema and contains only provider-reported token counts, client, sanitized model, and task outcome. It **never** contains `request_id`, `source_id`, `session_id`, `phase`, `tool_name`, or file paths.
+When `RESEARCH` telemetry is active, local provider metrics recorded via MCP tools (`record_usage`) or CLI import (`ai-dev telemetry import`) generate an additional `provider_usage` event.
+
+- **Trigger Sources**:
+  - MCP `record_usage` tool invocation: records origin `"mcp"`, `command_name="mcp"`.
+  - CLI `ai-dev telemetry import`: records origin `"import"`, `command_name="telemetry"`.
+- **Fields Included**:
+  - `event_id` (UUIDv4), `schema_version=1`, `telemetry_level="research"`, `event_type="provider_usage"`
+  - `ai_client`, `model` (sanitized public or "local"/"other"/"unknown"), `task_kind`
+  - Token counts (`input_tokens`, `cached_input_tokens`, `output_tokens`, `reasoning_tokens`, `total_tokens`)
+  - `duration_seconds` and `total_wall_time_seconds` (if measured)
+  - `validation_result` and `task_outcome`
+  - `origin` (`"mcp"` or `"import"`)
+- **Strictly Excluded (NEVER collected or sent)**:
+  - `request_id`
+  - `source_id`
+  - `session_id`
+  - `phase`
+  - `tool_name`
+  - `prompt` content or queries
+  - `response` text or completions
+  - File paths, file names, or code snippets
+  - Raw source strings (e.g. `"import:openai"` is mapped strictly to `"import"`)
+- **Telemetry Level Guard**:
+  - In `OFF`: 0 events generated, 0 queued, 0 sent.
+  - In `BASIC`: 0 `provider_usage` events are ever generated or queued (BASIC only records minimal CLI command execution metrics).
+  - In `RESEARCH`: events are queued locally and delivered via non-blocking background transport if an endpoint is configured.
+
+---
+
+## Strict Fail-Closed Schema Validation
+
+Before any event is written to queue or sent over the network, `validate_community_payload(payload)` validates all fields:
+1. **Top-Level Allowlist**: Unknown or unexpected keys are rejected immediately.
+2. **Closed Enums**: Every categorical value (`os_family`, `command_name`, `command_category`, `command_outcome`, `ai_client`, `task_kind`, `validation_result`, `task_outcome`, `repo_files_bucket`, `repo_size_bucket`, `duration_bucket`, `reason_code`, `retrieval_reason_code`, `selection_reason_codes`, `origin`) is strictly validated against a closed allowlist.
+3. **Sanitized Models**: Unrecognized or proprietary model strings are mapped to `"other"` or `"unknown"`. Arbitrary model names never pass through.
+4. **Format Verification**:
+   - `event_id`: must be a valid UUIDv4.
+   - `timestamp_hour`: must match exact UTC hour format `YYYY-MM-DDTHH:00:00Z`.
+   - `python_version`: must match major.minor format `^3\.\d+$` (e.g. `3.11`, `3.12`).
+   - `ai_dev_version`: bounded string up to 32 characters.
+5. **Numeric Bounds & Types**:
+   - Booleans are rejected as integers (`True` cannot be smuggled as `1`).
+   - All token and count fields must be non-negative integers within safe upper bounds (e.g. tokens `<= 100_000_000`, tool calls `<= 100_000`, files `<= 1_000_000`).
+   - Ratios (`cache_hit_ratio`, `semantic_cache_reuse`) must be finite numbers between `0.0` and `1.0`.
+   - Durations must be finite numbers between `0.0` and `604800.0`. `NaN` and `Infinity` are rejected.
+   - Token consistency: `cached_input_tokens <= input_tokens`, `total_tokens >= input_tokens + output_tokens`.
+6. **Payload Size Limit**: Serialized JSON must not exceed 32 KB (`32,768 bytes`).
+7. **Fail-Closed Transport**: If any field fails validation, `send_event()` aborts before creating any network connection and records 0 HTTP requests.
 
 ---
 
@@ -163,6 +213,17 @@ When Community Telemetry is enabled (`basic` or `research`):
 
 ## CLI Commands
 
+### Preview Semantics
+
+- `ai-dev telemetry sharing preview`:
+  - **Real repository inspection**: Scans the local repository tree to compute actual `language_families`, `repo_files_bucket`, and `repo_size_bucket`.
+  - Dynamic runtime and token fields (such as `command_duration_bucket`, `input_tokens`, `output_tokens`, `model`) remain `None` or `"unknown"` because no live command or model execution took place.
+  - **Nothing is written to queue, nothing is sent.**
+- `ai-dev telemetry sharing preview --sample`:
+  - **Synthetic example only**: Generates a mock payload demonstrating example token counts and metrics.
+  - Labeled explicitly as `SAMPLE / EXAMPLE — NOT QUEUED, NOT SENT`.
+  - **Nothing is written to queue, nothing is sent.**
+
 ```bash
 # Check current telemetry sharing status
 ai-dev telemetry sharing status
@@ -176,7 +237,7 @@ ai-dev telemetry sharing enable research
 # Disable telemetry and clear any queued events
 ai-dev telemetry sharing disable
 
-# Inspect the payload from real repository inspection (dynamic token/duration fields are None)
+# Inspect real repository inspection (dynamic token/duration fields are None)
 ai-dev telemetry sharing preview
 ai-dev telemetry sharing preview --level basic --json
 

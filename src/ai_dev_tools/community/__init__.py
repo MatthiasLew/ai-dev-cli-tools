@@ -11,7 +11,9 @@ from ai_dev_tools.community.config import (
 )
 from ai_dev_tools.community.queue import clear_queue, enqueue_event, list_queued_events, queue_size
 from ai_dev_tools.community.schema import (
+    ALLOWED_MODELS,
     COMMUNITY_SCHEMA_VERSION,
+    PROVIDER_USAGE_ORIGINS,
     SELECTION_REASON_CODES,
     validate_community_payload,
 )
@@ -29,8 +31,10 @@ from ai_dev_tools.community.service import (
 from ai_dev_tools.community.transport import UploadResult, send_event
 
 __all__ = [
+    "ALLOWED_MODELS",
     "COMMUNITY_SCHEMA_VERSION",
     "CommunityTelemetryConfig",
+    "PROVIDER_USAGE_ORIGINS",
     "SELECTION_REASON_CODES",
     "UploadResult",
     "build_community_payload",

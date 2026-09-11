@@ -14,6 +14,7 @@ from ai_dev_tools.community.schema import (
     COMMAND_OUTCOMES,
     COMMUNITY_SCHEMA_VERSION,
     KNOWN_LANGUAGES,
+    PROVIDER_USAGE_ORIGINS,
     RETRIEVAL_REASONS,
     duration_bucket,
     get_os_family,
@@ -449,6 +450,7 @@ def build_community_payload(
         "task_outcome": task_outcome,
         "retrieval_reason_code": retrieval_reason_code,
         "selection_reason_codes": selection_reason_codes,
+        "origin": None,
     }
 
     validate_community_payload(research_payload)
@@ -466,7 +468,8 @@ def build_provider_usage_payload(
     reasoning_tokens: int = 0,
     quality_passed: bool | None = None,
     duration_seconds: float | None = None,
-    command_name: str = "mcp",
+    origin: str = "mcp",
+    command_name: str | None = None,
 ) -> dict[str, Any]:
     dur = (
         float(duration_seconds)
@@ -493,7 +496,13 @@ def build_provider_usage_payload(
     clean_client = client.strip().lower() if client else "unknown"
     safe_client = clean_client if clean_client in AI_CLIENTS else "unknown"
 
-    safe_cmd = command_name if command_name in COMMAND_NAMES else "mcp"
+    clean_origin = origin.strip().lower() if origin else "unknown"
+    safe_origin = clean_origin if clean_origin in PROVIDER_USAGE_ORIGINS else "unknown"
+
+    if command_name is not None and command_name in COMMAND_NAMES:
+        safe_cmd = command_name
+    else:
+        safe_cmd = "telemetry" if safe_origin == "import" else "mcp"
 
     payload: dict[str, Any] = {
         "schema_version": COMMUNITY_SCHEMA_VERSION,
@@ -538,6 +547,7 @@ def build_provider_usage_payload(
         "task_outcome": t_outcome,
         "retrieval_reason_code": None,
         "selection_reason_codes": None,
+        "origin": safe_origin,
     }
 
     validate_community_payload(payload)
