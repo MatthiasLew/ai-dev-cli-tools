@@ -15,7 +15,9 @@ TIMESTAMP_HOUR_REGEX = re.compile(
     r"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):00:00Z$"
 )
 PYTHON_VERSION_REGEX = re.compile(r"^3\.\d+$")
-AI_DEV_VERSION_REGEX = re.compile(r"^[\w\.\-\+]+$")
+AI_DEV_VERSION_REGEX = re.compile(
+    r"^\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc|alpha|beta|dev|post)\d*|\.(?:dev|post)\d*|-(?:a|b|rc|alpha|beta|dev|post)\.?\d*)*(?:\+[a-zA-Z0-9._-]+)?$"
+)
 
 OS_FAMILIES = {"windows", "linux", "macos", "other"}
 
@@ -490,6 +492,15 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
     else:
         raise ValueError(f"Invalid telemetry_level in payload: '{level}'")
 
+    event_type = payload.get("event_type")
+    if event_type not in EVENT_TYPES:
+        raise ValueError(f"Invalid event_type: {event_type}")
+
+    if event_type == "provider_usage" and level != "research":
+        raise ValueError(
+            "provider_usage event is only allowed with telemetry_level='research'"
+        )
+
     actual_keys = set(payload.keys())
     unexpected = actual_keys - allowed_keys
     if unexpected:
@@ -511,8 +522,43 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
     if not _is_valid_uuid4(payload.get("event_id")):
         raise ValueError(f"event_id must be a valid UUIDv4 string, got '{payload.get('event_id')}'")
 
-    if payload["event_type"] not in EVENT_TYPES:
-        raise ValueError(f"Invalid event_type: {payload['event_type']}")
+    if event_type == "command_run":
+        if level == "research" and payload.get("origin") is not None:
+            raise ValueError(
+                f"command_run event must have origin=None, got '{payload.get('origin')}'"
+            )
+    elif event_type == "provider_usage":
+
+        origin = payload.get("origin")
+        if origin is None:
+            raise ValueError("provider_usage event requires origin to be set, got None")
+        if origin not in PROVIDER_USAGE_ORIGINS:
+            allowed_origins = sorted(PROVIDER_USAGE_ORIGINS)
+            raise ValueError(
+                f"provider_usage origin must be one of {allowed_origins}, got '{origin}'"
+            )
+
+        cmd_name = payload.get("command_name")
+        if origin == "mcp" and cmd_name != "mcp":
+            raise ValueError(
+                f"provider_usage with origin='mcp' must have command_name='mcp', got '{cmd_name}'"
+            )
+        if origin == "import" and cmd_name != "telemetry":
+            raise ValueError(
+                "provider_usage with origin='import' must have command_name='telemetry', "
+                f"got '{cmd_name}'"
+            )
+        if origin == "unknown" and cmd_name != "mcp":
+            raise ValueError(
+                "provider_usage with origin='unknown' must have command_name='mcp', "
+                f"got '{cmd_name}'"
+            )
+
+        cmd_cat = payload.get("command_category")
+        if cmd_cat != "telemetry":
+            raise ValueError(
+                f"provider_usage event must have command_category='telemetry', got '{cmd_cat}'"
+            )
 
     if (
         not isinstance(payload["ai_dev_version"], str)

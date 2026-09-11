@@ -307,3 +307,167 @@ def test_docs_and_schema_contract_consistency() -> None:
 
     assert "wait_for_autoflush(0.05)" in community_doc or "50 ms" in community_doc
     assert "origin" in community_doc
+    assert "single-flight" in community_doc.lower()
+    assert "deduplication" in collector_doc.lower()
+    assert "at-least-once" in community_doc.lower()
+
+
+def test_event_type_and_origin_invariants() -> None:
+    # 6. valid provider_usage MCP -> accepted
+    valid_mcp = build_provider_usage_payload(
+        client="cursor",
+        model="gpt-4o",
+        input_tokens=100,
+        output_tokens=50,
+        origin="mcp",
+    )
+    validate_community_payload(valid_mcp)
+
+    # 7. valid provider_usage import -> accepted
+    valid_import = build_provider_usage_payload(
+        client="cursor",
+        model="gpt-4o",
+        input_tokens=100,
+        output_tokens=50,
+        origin="import",
+    )
+    validate_community_payload(valid_import)
+
+    # 1. provider_usage + basic -> rejected
+    with pytest.raises(
+        ValueError,
+        match="provider_usage event is only allowed with telemetry_level='research'",
+    ):
+        validate_community_payload({**valid_mcp, "telemetry_level": "basic"})
+
+    # 2. provider_usage + origin=None -> rejected
+    with pytest.raises(ValueError, match="provider_usage event requires origin to be set"):
+        validate_community_payload({**valid_mcp, "origin": None})
+
+    # 3. command_run research + origin="mcp" -> rejected
+    cmd_run = build_community_payload("research", sample=True)
+    with pytest.raises(ValueError, match="command_run event must have origin=None"):
+        validate_community_payload({**cmd_run, "origin": "mcp"})
+
+    # 4. provider_usage origin=mcp + command_name=git -> rejected
+    with pytest.raises(
+        ValueError, match="provider_usage with origin='mcp' must have command_name='mcp'"
+    ):
+        validate_community_payload({**valid_mcp, "command_name": "git"})
+
+    # 5. provider_usage origin=import + command_name=scan -> rejected
+    with pytest.raises(
+        ValueError,
+        match="provider_usage with origin='import' must have command_name='telemetry'",
+    ):
+        validate_community_payload({**valid_import, "command_name": "scan"})
+
+    # 13. send_event invalid invariant -> ZERO HTTP calls
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        res = send_event(
+            "https://collector.example.com/events",
+            {**valid_mcp, "command_name": "git"},
+        )
+        assert not res.success
+        assert res.retryable is False
+        mock_urlopen.assert_not_called()
+
+
+def test_ai_dev_version_strict_format_validation() -> None:
+    from ai_dev_tools import __version__
+
+    base = build_community_payload("research", sample=True)
+
+    # 8. invalid ai_dev_version
+    for invalid_ver in ("SecretInternalVersion", "../secret", "1.2.3 secret", "MateuszBuild"):
+        with pytest.raises(ValueError, match="Invalid ai_dev_version"):
+            validate_community_payload({**base, "ai_dev_version": invalid_ver})
+
+    # 9. valid ai_dev_version
+    for valid_ver in ("1.2.2", "1.3.0", "1.3.0rc1", "1.3.0.dev1", "1.3.0+local", __version__):
+        validate_community_payload({**base, "ai_dev_version": valid_ver})
+
+
+def test_single_flight_autoflush_deterministic_and_no_double_send() -> None:
+    import time
+
+    save_community_config("research", endpoint="http://127.0.0.1:9999/events")
+    clear_queue()
+
+    event = build_provider_usage_payload(
+        client="cursor",
+        model="gpt-4o",
+        input_tokens=100,
+        origin="mcp",
+    )
+    enqueue_event(event)
+
+    sent_events: list[dict[str, object]] = []
+
+    def mock_send(
+        endpoint: str,
+        payload: dict[str, object],
+        timeout: float = 2.0,
+        retries: int = 1,
+    ) -> MagicMock:
+        time.sleep(0.1)
+        sent_events.append(payload)
+        res = MagicMock()
+        res.success = True
+        res.retryable = False
+        return res
+
+    with patch("ai_dev_tools.community.service.send_event", side_effect=mock_send):
+        threads: list[object] = []
+        for _ in range(15):
+            t = start_background_autoflush()
+            if t is not None:
+                threads.append(t)
+
+        # 10. repeated calls -> one worker
+        assert len(threads) == 15
+        assert all(t is threads[0] for t in threads)
+
+        wait_for_autoflush(timeout=1.0)
+
+        # 12. same event not double-sent by concurrent autoflush workers
+        assert len(sent_events) == 1
+
+
+def test_concurrent_single_flight_start_race() -> None:
+    import concurrent.futures
+    import time
+
+    save_community_config("research", endpoint="http://127.0.0.1:9999/events")
+    clear_queue()
+
+    event = build_provider_usage_payload(
+        client="cursor",
+        model="gpt-4o",
+        input_tokens=100,
+        origin="mcp",
+    )
+    enqueue_event(event)
+
+    def mock_send(
+        endpoint: str,
+        payload: dict[str, object],
+        timeout: float = 2.0,
+        retries: int = 1,
+    ) -> MagicMock:
+        time.sleep(0.05)
+        res = MagicMock()
+        res.success = True
+        res.retryable = False
+        return res
+
+    with patch("ai_dev_tools.community.service.send_event", side_effect=mock_send):
+        # 11. concurrent single-flight start: several threads -> one worker
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(start_background_autoflush) for _ in range(20)]
+            results = [f.result() for f in futures]
+
+        unique_threads = {id(t) for t in results if t is not None}
+        assert len(unique_threads) == 1
+
+        wait_for_autoflush(timeout=1.0)

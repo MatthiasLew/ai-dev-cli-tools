@@ -499,10 +499,7 @@ def build_provider_usage_payload(
     clean_origin = origin.strip().lower() if origin else "unknown"
     safe_origin = clean_origin if clean_origin in PROVIDER_USAGE_ORIGINS else "unknown"
 
-    if command_name is not None and command_name in COMMAND_NAMES:
-        safe_cmd = command_name
-    else:
-        safe_cmd = "telemetry" if safe_origin == "import" else "mcp"
+    safe_cmd = "telemetry" if safe_origin == "import" else "mcp"
 
     payload: dict[str, Any] = {
         "schema_version": COMMUNITY_SCHEMA_VERSION,

@@ -196,6 +196,7 @@ def flush_telemetry(project_root: Path | None = None) -> Report:
 
 
 _autoflush_thread: threading.Thread | None = None
+_autoflush_start_lock = threading.Lock()
 
 
 def _opportunistic_flush(endpoint: str) -> None:
@@ -220,15 +221,19 @@ def start_background_autoflush() -> threading.Thread | None:
         if queue_size() == 0:
             return None
 
-        thread = threading.Thread(
-            target=_opportunistic_flush,
-            args=(config.endpoint,),
-            daemon=True,
-            name="ai-dev-community-autoflush",
-        )
-        thread.start()
-        _autoflush_thread = thread
-        return thread
+        with _autoflush_start_lock:
+            if _autoflush_thread is not None and _autoflush_thread.is_alive():
+                return _autoflush_thread
+
+            thread = threading.Thread(
+                target=_opportunistic_flush,
+                args=(config.endpoint,),
+                daemon=True,
+                name="ai-dev-community-autoflush",
+            )
+            thread.start()
+            _autoflush_thread = thread
+            return thread
     except Exception:
         return None
 

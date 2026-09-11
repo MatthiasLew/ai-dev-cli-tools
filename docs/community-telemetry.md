@@ -138,6 +138,16 @@ When `RESEARCH` telemetry is active, local provider metrics recorded via MCP too
   - In `BASIC`: 0 `provider_usage` events are ever generated or queued (BASIC only records minimal CLI command execution metrics).
   - In `RESEARCH`: events are queued locally and delivered via non-blocking background transport if an endpoint is configured.
 
+### Event Types & Invariants
+
+| Event Type | Allowed Levels | Allowed Origin | Allowed Command Name | Command Category | Description |
+|---|---|---|---|---|---|
+| `command_run` | `basic`, `research` | `null` (must be `None`) | Any valid CLI command (`"check"`, `"scan"`, `"context"`, etc.) | Mapped by command | Regular `ai-dev` command execution |
+| `provider_usage` | `research` only | `"mcp"`, `"import"`, `"unknown"` | `"mcp"` (for `"mcp"`/`"unknown"`), `"telemetry"` (for `"import"`) | `"telemetry"` | LLM provider token usage from MCP tools or CLI telemetry import |
+
+- **`command_run` invariants**: In `research` level, `origin` must be `null` (`None`). A `command_run` event cannot mimic a `provider_usage` event.
+- **`provider_usage` invariants**: Permitted only at `research` level (`basic` is rejected). `origin` must be explicitly set to `"mcp"`, `"import"`, or `"unknown"` (never `null`). `command_name` must be `"mcp"` (for `"mcp"` or `"unknown"`) or `"telemetry"` (for `"import"`). `command_category` must be `"telemetry"`.
+
 ---
 
 ## Strict Fail-Closed Schema Validation
@@ -150,7 +160,7 @@ Before any event is written to queue or sent over the network, `validate_communi
    - `event_id`: must be a valid UUIDv4.
    - `timestamp_hour`: must match exact UTC hour format `YYYY-MM-DDTHH:00:00Z`.
    - `python_version`: must match major.minor format `^3\.\d+$` (e.g. `3.11`, `3.12`).
-   - `ai_dev_version`: bounded string up to 32 characters.
+    - `ai_dev_version`: PEP 440 / semver format starting with digits (e.g. `1.2.2`, `1.3.0rc1`), bounded to 32 characters. Arbitrary identifiers or build strings are rejected.
 5. **Numeric Bounds & Types**:
    - Booleans are rejected as integers (`True` cannot be smuggled as `1`).
    - All token and count fields must be non-negative integers within safe upper bounds (e.g. tokens `<= 100_000_000`, tool calls `<= 100_000`, files `<= 1_000_000`).
@@ -193,8 +203,9 @@ When Community Telemetry is enabled (`basic` or `research`):
 3. **Bounded Size**: Maximum 1,000 events. If the limit is reached, the oldest events are pruned automatically.
 4. **Bounded Age**: Events older than 7 days are automatically pruned.
 5. **Bounded Payload**: Any event exceeding 32 KB is rejected.
-6. **Opportunistic Background Flush**: When an endpoint is configured, events are dispatched via non-blocking background transport.
-7. **Disabling Telemetry**: Running `ai-dev telemetry sharing disable` immediately removes all pending queued events from disk.
+6. **Single-Flight Background Flush**: When an endpoint is configured, events are dispatched via non-blocking background transport. At most **one** autoflush worker thread is active per process at any time, protected by a process-level start lock.
+7. **Delivery Guarantees**: Community Telemetry provides **at-least-once / best-effort delivery with `event_id` available for deduplication**. If an HTTP transport error occurs or the network fails after receipt but before the client receives the acknowledgment, queued events remain on disk for retry, potentially causing duplicate delivery. The random UUIDv4 `event_id` enables the collector to perform idempotent deduplication.
+8. **Disabling Telemetry**: Running `ai-dev telemetry sharing disable` immediately removes all pending queued events from disk.
 
 ---
 

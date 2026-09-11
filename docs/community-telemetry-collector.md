@@ -52,9 +52,19 @@ The collector must operate in a **strict fail-closed** manner. **Never trust cli
    - `event_id`: Must be a valid UUIDv4 string (`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).
    - `timestamp_hour`: Must strictly match UTC hour format `YYYY-MM-DDTHH:00:00Z` (minutes, seconds, microseconds must be zero).
    - `python_version`: Must strictly match major.minor pattern `^3\.\d+$` (e.g. `3.11`, `3.12`, `3.14`).
-   - `ai_dev_version`: Bounded string between 1 and 32 characters (`^[\w\.\-\+]+$`).
+   - `ai_dev_version`: PEP 440 / semver string starting with digits (`^\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc|alpha|beta|dev|post)\d*|\.(?:dev|post)\d*|-(?:a|b|rc|alpha|beta|dev|post)\.?\d*)*(?:\+[a-zA-Z0-9._-]+)?$`), bounded between 1 and 32 characters.
 
-6. **Closed Enums**:
+6. **Event Type Invariants**:
+   - `command_run`:
+     - Allowed `telemetry_level`: `"basic"` or `"research"`.
+     - In `research`, `origin` must strictly be `null` (`command_run` cannot pretend to be `provider_usage`).
+   - `provider_usage`:
+     - Allowed `telemetry_level`: `"research"` only. Any `provider_usage` with `telemetry_level="basic"` must be rejected (`400 Bad Request`).
+     - `origin`: Must NOT be `null`. Must be one of `{"mcp", "import", "unknown"}`.
+     - `command_name`: Must be `"mcp"` (for `"mcp"` or `"unknown"`) or `"telemetry"` (for `"import"`).
+     - `command_category`: Must strictly be `"telemetry"`.
+
+7. **Closed Enums**:
    - `telemetry_level`: `"basic"` or `"research"`.
    - `os_family`: `"windows"`, `"linux"`, `"macos"`, `"other"`.
    - `command_name`: closed set (`"check"`, `"scan"`, `"mcp"`, `"telemetry"`, etc.).
@@ -74,7 +84,7 @@ The collector must operate in a **strict fail-closed** manner. **Never trust cli
    - `language_families`: list of up to 50 items, each strictly from `KNOWN_LANGUAGES`.
    - `origin`: `null` (commands) or `"mcp"`, `"import"`, `"unknown"` (provider usage).
 
-7. **Numeric Bounds & Token Consistency**:
+8. **Numeric Bounds & Token Consistency**:
    - `duration_seconds`: `null` or finite float `0.0 <= x <= 604800.0` (reject `NaN`, `inf`, and boolean types).
    - `cache_hit`: `null` or boolean.
    - Tokens (`input_tokens`, `output_tokens`, `total_tokens`, etc.): `null` or integer `0 <= x <= 100_000_000`.
@@ -83,9 +93,18 @@ The collector must operate in a **strict fail-closed** manner. **Never trust cli
    - Overheads (`local_overhead_seconds` `<= 86400.0`, `total_wall_time_seconds` `<= 604800.0`).
    - Consistency check: `cached_input_tokens <= input_tokens`, `total_tokens >= input_tokens + output_tokens`.
 
-8. **Rate Limiting**:
+9. **Rate Limiting**:
    - Enforce IP-based token bucket or leaky bucket rate limiting (e.g., max 60 requests per minute per IP address).
    - In case of abuse, return `429 Too Many Requests` with a `Retry-After` header.
+
+10. **Deduplication & Idempotency**:
+   - The delivery model is **at-least-once / best-effort delivery with `event_id` available for deduplication**. Network retries after a lost connection or dropped ACK can deliver duplicates.
+   - The collector MUST use `event_id` as a deduplication key.
+   - When receiving an `event_id` that already exists in the recent deduplication index:
+     - Do NOT re-insert or double-count the payload.
+     - Return `200 OK` (or `202 Accepted`) so the client marks the event as delivered and stops retrying.
+   - `event_id` MUST NOT be used for user tracking or cross-event profiling; it exists solely for idempotency.
+   - Retention of the deduplication index must align with raw event retention (90 days).
 
 ---
 
