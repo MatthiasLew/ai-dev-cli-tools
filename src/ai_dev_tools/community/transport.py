@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from ai_dev_tools import __version__
-from ai_dev_tools.community.schema import COMMUNITY_SCHEMA_VERSION, MAX_PAYLOAD_BYTES
+from ai_dev_tools.community.schema import (
+    COMMUNITY_SCHEMA_VERSION,
+    MAX_PAYLOAD_BYTES,
+    validate_community_payload,
+)
 
 DEFAULT_TIMEOUT_SECONDS = 3.0
 MAX_RETRIES = 2
@@ -53,6 +57,16 @@ def send_event(
         validate_endpoint_url(endpoint)
     except ValueError as exc:
         return UploadResult(success=False, status_code=0, message=str(exc), retryable=False)
+
+    try:
+        validate_community_payload(payload)
+    except (ValueError, TypeError) as exc:
+        return UploadResult(
+            success=False,
+            status_code=0,
+            message=f"Payload validation failed: {exc}",
+            retryable=False,
+        )
 
     try:
         raw_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

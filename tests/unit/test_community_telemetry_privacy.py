@@ -157,4 +157,4 @@ def test_config_never_contains_tracking_identifiers(tmp_path: Path) -> None:
     # Inspect the raw JSON on disk
     config_file = tmp_path / "config" / "community_telemetry.json"
     raw_content = json.loads(config_file.read_text(encoding="utf-8"))
-    assert set(raw_content.keys()) == {"telemetry_level", "endpoint"}
+    assert set(raw_content.keys()) == {"telemetry_level", "endpoint_override"}

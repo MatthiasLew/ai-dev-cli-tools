@@ -156,6 +156,26 @@ def record_usage(
     latest = directory / "latest-session.json"
     _write_json_atomic(path, payload)
     _write_json_atomic(latest, payload)
+
+    # Community Telemetry hook (RESEARCH level only, privacy-preserving provider usage)
+    try:
+        from ai_dev_tools.community import record_provider_usage_event
+
+        record_provider_usage_event(
+            client=client,
+            model=model or "",
+            task_kind=task_kind or "",
+            input_tokens=values["input_tokens"],
+            cached_input_tokens=values["cached_input_tokens"],
+            output_tokens=values["output_tokens"],
+            reasoning_tokens=values["reasoning_tokens"],
+            quality_passed=quality_passed,
+            duration_seconds=duration,
+            command_name="telemetry" if source == "cli_import" else "mcp",
+        )
+    except Exception:
+        pass
+
     from ai_dev_tools.telemetry_policy import optional_policy_status
 
     return {**payload, "path": path, "policy": optional_policy_status(root)}

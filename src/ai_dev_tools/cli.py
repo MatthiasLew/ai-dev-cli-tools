@@ -345,6 +345,11 @@ def build_parser() -> argparse.ArgumentParser:
     telemetry_sharing_sub.add_parser("disable")
     telemetry_sharing_preview = telemetry_sharing_sub.add_parser("preview")
     telemetry_sharing_preview.add_argument("--level", choices=["basic", "research"])
+    telemetry_sharing_preview.add_argument(
+        "--sample",
+        action="store_true",
+        help="Generate a synthetic sample payload with example metrics for illustration",
+    )
     telemetry_sharing_sub.add_parser("flush")
 
     sub.add_parser("diagnostics")
@@ -392,13 +397,21 @@ def main(argv: list[str] | None = None) -> int:
 
         print(render_completion(args.shell), end="")
         return EXIT_SUCCESS
+
+    # Early opportunistic autoflush of older queued events in parallel with command execution
+    if not (args.command == "telemetry" and getattr(args, "telemetry_command", "") == "sharing"):
+        from ai_dev_tools.community import start_background_autoflush
+
+        start_background_autoflush()
+
     dispatch_started = time.monotonic()
     report = _dispatch(args, project_root).finish()
     dispatch_seconds = time.monotonic() - dispatch_started
     _record_command_performance(report, args, startup_seconds, dispatch_seconds)
-    from ai_dev_tools.community import record_command_event
+    from ai_dev_tools.community import record_command_event, wait_for_autoflush
 
     record_command_event(report, startup_seconds + dispatch_seconds, project_root)
+    wait_for_autoflush(0.05)
     if args.json:
         if (
             args.command == "telemetry"
@@ -802,7 +815,11 @@ def _dispatch(args: argparse.Namespace, project_root: Path) -> Report:
             if args.telemetry_sharing_command == "disable":
                 return disable_telemetry(project_root)
             if args.telemetry_sharing_command == "preview":
-                return preview_telemetry(getattr(args, "level", None), project_root)
+                return preview_telemetry(
+                    getattr(args, "level", None),
+                    project_root,
+                    sample=bool(getattr(args, "sample", False)),
+                )
             if args.telemetry_sharing_command == "flush":
                 return flush_telemetry(project_root)
         return import_usage(
@@ -962,7 +979,10 @@ def _print_text(report: Report) -> None:
         return
     if report.command.startswith("telemetry sharing preview"):
         level = report.summary.get("telemetry_level", "")
+        mode = report.summary.get("mode", "")
         _print_console_line(f"Community telemetry preview ({level}):")
+        if mode:
+            _print_console_line(f"Mode: {mode}")
         _print_console_line(json.dumps(report.summary.get("payload", {}), indent=2))
         return
     _print_console_line(f"STATUS: {report.status.upper()}")

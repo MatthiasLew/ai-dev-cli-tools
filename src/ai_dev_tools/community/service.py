@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import threading
 from pathlib import Path
@@ -90,6 +91,7 @@ def preview_telemetry(
     level: str | None = None,
     project_root: Path | None = None,
     report_to_preview: Report | None = None,
+    sample: bool = False,
 ) -> Report:
     config = load_community_config()
     target_level = level.strip().lower() if level else config.telemetry_level
@@ -102,16 +104,21 @@ def preview_telemetry(
         target_level,
         report=report_to_preview,
         project_root=root,
-        sample=report_to_preview is None,
+        sample=sample,
     )
 
-    report = Report(
-        command=f"telemetry sharing preview --level {target_level}",
-        project_root=root,
-    )
+    cmd = f"telemetry sharing preview --level {target_level}"
+    if sample:
+        cmd += " --sample"
+
+    report = Report(command=cmd, project_root=root)
     report.status = "success"
+    mode_str = (
+        "SAMPLE / EXAMPLE — NOT QUEUED, NOT SENT" if sample else "ACTUAL REPOSITORY PREVIEW"
+    )
     report.summary = {
         "telemetry_level": target_level.upper(),
+        "mode": mode_str,
         "payload": payload,
     }
     return report
@@ -188,6 +195,9 @@ def flush_telemetry(project_root: Path | None = None) -> Report:
     return report
 
 
+_autoflush_thread: threading.Thread | None = None
+
+
 def _opportunistic_flush(endpoint: str) -> None:
     try:
         events = list_queued_events()
@@ -197,6 +207,37 @@ def _opportunistic_flush(endpoint: str) -> None:
                 remove_event(path)
     except Exception:
         pass
+
+
+def start_background_autoflush() -> threading.Thread | None:
+    global _autoflush_thread
+    try:
+        if os.environ.get("AI_DEV_COMMUNITY_TELEMETRY_NO_AUTO_FLUSH"):
+            return None
+        config = load_community_config()
+        if not config.is_enabled or not config.endpoint:
+            return None
+        if queue_size() == 0:
+            return None
+
+        thread = threading.Thread(
+            target=_opportunistic_flush,
+            args=(config.endpoint,),
+            daemon=True,
+            name="ai-dev-community-autoflush",
+        )
+        thread.start()
+        _autoflush_thread = thread
+        return thread
+    except Exception:
+        return None
+
+
+def wait_for_autoflush(timeout: float = 0.05) -> None:
+    global _autoflush_thread
+    if _autoflush_thread is not None and _autoflush_thread.is_alive():
+        with contextlib.suppress(Exception):
+            _autoflush_thread.join(timeout=timeout)
 
 
 def record_command_event(
@@ -221,14 +262,43 @@ def record_command_event(
         )
 
         enqueue_event(payload)
-
-        # If endpoint configured, opportunistically flush in background daemon thread
-        if config.endpoint and not os.environ.get("AI_DEV_COMMUNITY_TELEMETRY_NO_AUTO_FLUSH"):
-            threading.Thread(
-                target=_opportunistic_flush,
-                args=(config.endpoint,),
-                daemon=True,
-            ).start()
     except Exception:
         # Guarantee: community telemetry failure NEVER breaks user commands
+        pass
+
+
+def record_provider_usage_event(
+    *,
+    client: str,
+    model: str = "",
+    task_kind: str = "",
+    input_tokens: int = 0,
+    cached_input_tokens: int = 0,
+    output_tokens: int = 0,
+    reasoning_tokens: int = 0,
+    quality_passed: bool | None = None,
+    duration_seconds: float | None = None,
+    command_name: str = "mcp",
+) -> None:
+    try:
+        config = load_community_config()
+        if config.telemetry_level != "research":
+            return
+
+        from ai_dev_tools.community.builder import build_provider_usage_payload
+
+        payload = build_provider_usage_payload(
+            client=client,
+            model=model,
+            task_kind=task_kind,
+            input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
+            output_tokens=output_tokens,
+            reasoning_tokens=reasoning_tokens,
+            quality_passed=quality_passed,
+            duration_seconds=duration_seconds,
+            command_name=command_name,
+        )
+        enqueue_event(payload)
+    except Exception:
         pass

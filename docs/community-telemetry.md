@@ -60,12 +60,12 @@ Minimal operational metrics concerning `ai-dev` execution itself.
 |---|---|---|
 | `schema_version` | integer | Always `1` |
 | `event_id` | string (UUIDv4) | Random UUID generated per event for deduplication |
-| `event_type` | string | Closed enum: `"command_run"` |
+| `event_type` | string | Closed enum: `"command_run"` or `"provider_usage"` |
 | `telemetry_level` | string | `"basic"` |
 | `ai_dev_version` | string | Package version (e.g. `"1.2.2"`) |
 | `os_family` | string | Closed enum: `"windows"`, `"linux"`, `"macos"`, `"other"` |
 | `python_version` | string | Major.minor (e.g. `"3.12"`) |
-| `command_name` | string | Closed enum: `"check"`, `"scan"`, `"context"`, etc. |
+| `command_name` | string | Closed enum: `"check"`, `"scan"`, `"context"`, `"mcp"`, etc. |
 | `command_category` | string | Closed enum: `"analysis"`, `"execution"`, `"quality"`, `"context"`, `"benchmark"`, `"telemetry"`, `"agent"`, `"runtime"`, `"other"` |
 | `command_outcome` | string | Closed enum: `"success"`, `"partial"`, `"failure"` |
 | `reason_code` | string or null | Controlled error reason code if available (e.g. `"NONE"`, `"TIMEOUT"`, `"TOKEN_BUDGET_EXCEEDED"`) |
@@ -75,7 +75,7 @@ Minimal operational metrics concerning `ai-dev` execution itself.
 | `timestamp_hour` | string (ISO 8601) | Coarse UTC hour bucket (e.g. `"2026-09-11T12:00:00Z"`) |
 
 ### 3. RESEARCH
-Includes all **BASIC** fields plus aggregated efficiency and workflow metrics to evaluate agent performance on real-world coding tasks:
+Includes all **BASIC** fields plus aggregated efficiency and workflow metrics to evaluate agent performance on real-world coding tasks.
 
 #### Additional Fields in RESEARCH:
 | Field | Type | Description |
@@ -105,7 +105,10 @@ Includes all **BASIC** fields plus aggregated efficiency and workflow metrics to
 | `validation_result` | string | Closed enum: `"passed"`, `"failed"`, `"unknown"` |
 | `task_outcome` | string | Closed enum: `"success"`, `"failure"`, `"unknown"` |
 | `retrieval_reason_code` | string or null | Controlled retrieval strategy code |
-| `selection_reason_codes` | list of strings or null | Safe strategy codes (e.g. `["IMPORT_DEPENDENCY"]`) |
+| `selection_reason_codes` | list of strings or null | Safe strategy codes from closed enum (e.g. `["CHANGED_FILE", "USER_INCLUDE"]`) |
+
+#### Provider Usage Events (`event_type: "provider_usage"`)
+When `RESEARCH` telemetry is active, local provider metrics recorded via MCP tools (`record_usage`) or CLI import generate an additional `provider_usage` event. This event shares the allowlisted research schema and contains only provider-reported token counts, client, sanitized model, and task outcome. It **never** contains `request_id`, `source_id`, `session_id`, `phase`, `tool_name`, or file paths.
 
 ---
 
@@ -117,16 +120,18 @@ Community Telemetry settings are stored at the user level, **not** inside projec
 - **Linux**: `$XDG_CONFIG_HOME/ai-dev/community_telemetry.json` (fallback: `~/.config/ai-dev/community_telemetry.json`)
 - **macOS**: `~/Library/Application Support/ai-dev/community_telemetry.json` (fallback: `~/.config/ai-dev/community_telemetry.json`)
 
-Override via environment variable:
-`AI_DEV_COMMUNITY_TELEMETRY_CONFIG_DIR=/path/to/config/dir`
-
 ### Configuration Content
 ```json
 {
-  "telemetry_level": "off",
-  "endpoint": ""
+  "telemetry_level": "off"
 }
 ```
+If a custom endpoint override is specified, it is recorded under `"endpoint_override"`.
+
+### Endpoint Resolution Precedence
+1. Environment variable: `AI_DEV_COMMUNITY_TELEMETRY_ENDPOINT` (highest priority)
+2. User explicit override: `endpoint_override` in config file
+3. Package default: `DEFAULT_COMMUNITY_ENDPOINT` (currently empty — production collector not yet deployed)
 
 ---
 
@@ -171,10 +176,13 @@ ai-dev telemetry sharing enable research
 # Disable telemetry and clear any queued events
 ai-dev telemetry sharing disable
 
-# Inspect the exact payload that would be generated
+# Inspect the payload from real repository inspection (dynamic token/duration fields are None)
 ai-dev telemetry sharing preview
 ai-dev telemetry sharing preview --level basic --json
-ai-dev telemetry sharing preview --level research --json
+
+# Inspect a synthetic sample payload showing example token counts and metrics
+ai-dev telemetry sharing preview --sample
+ai-dev telemetry sharing preview --sample --level research --json
 
 # Manually flush the queued events to the configured endpoint
 ai-dev telemetry sharing flush
@@ -189,6 +197,6 @@ ai-dev telemetry sharing flush
 | **Location** | `.ai/token-efficiency/` inside repository | User config/data dir (`%LOCALAPPDATA%`, etc.) |
 | **Default State** | Active locally for efficiency & cache tracking | Completely OFF |
 | **Network Sharing** | Never touches network | Optional, opt-in upload to configured endpoint |
-| **Details Included** | Detailed local sessions, pricing estimation | Bucketed, privacy-preserved anonymous metrics |
+| **Details Included** | Detailed local sessions, pricing estimation | Bucketed, privacy-preserving metrics without persistent identifiers |
 | **User Identifiers** | Local session IDs | Random UUIDv4 per event only |
 | **Turning Off** | Configured via policy / gates | `ai-dev telemetry sharing disable` |

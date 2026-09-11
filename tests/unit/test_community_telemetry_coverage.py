@@ -366,16 +366,17 @@ def test_transport_edge_cases() -> None:
 
     # Send with HTTPError 400 (non-retryable) and 500 (retryable)
     from urllib.error import HTTPError
+    valid_payload = build_community_payload("basic", sample=True)
     err400 = HTTPError("http://127.0.0.1:8000/events", 400, "Bad Request", {}, None)  # type: ignore[arg-type]
     with patch("urllib.request.urlopen", side_effect=err400):
-        r400 = send_event("http://127.0.0.1:8000/events", {"test": 1}, retries=1)
+        r400 = send_event("http://127.0.0.1:8000/events", valid_payload, retries=1)
         assert not r400.success
         assert r400.status_code == 400
         assert not r400.retryable
 
     err500 = HTTPError("http://127.0.0.1:8000/events", 500, "Server Error", {}, None)  # type: ignore[arg-type]
     with patch("urllib.request.urlopen", side_effect=err500):
-        r500 = send_event("http://127.0.0.1:8000/events", {"test": 1}, retries=1)
+        r500 = send_event("http://127.0.0.1:8000/events", valid_payload, retries=1)
         assert not r500.success
         assert r500.status_code == 500
         assert r500.retryable

@@ -154,6 +154,67 @@ RETRIEVAL_REASONS = {
     "unknown",
 }
 
+EVENT_TYPES = {"command_run", "provider_usage"}
+
+SELECTION_REASON_CODES = {
+    "USER_INCLUDE",
+    "CHANGED_FILE",
+    "RELATED_TEST",
+    "DETECTED_ENTRYPOINT",
+    "ENTRYPOINT",
+    "IMPORTANT_FILE",
+    "TEST_FILE",
+    "CI_WORKFLOW",
+    "DOCUMENTATION",
+    "HIERARCHICAL_REFINEMENT",
+    "PYTHON_DEPENDENCY",
+    "JS_TS_DEPENDENCY",
+    "RUST_DEPENDENCY",
+    "JAVA_DEPENDENCY",
+    "PHP_DEPENDENCY",
+    "DEPENDENCY",
+    "SELECTED_FILE",
+    "TASK_SYMBOL_MATCH",
+    "PUBLIC_SYMBOL",
+    "UNKNOWN",
+}
+
+DURATION_BUCKETS = {
+    "<100ms",
+    "100ms-500ms",
+    "500ms-1s",
+    "1s-5s",
+    "5s-30s",
+    "30s-120s",
+    "120s+",
+    "unknown",
+}
+
+REPO_FILES_BUCKETS = {
+    "1-50",
+    "51-200",
+    "201-1000",
+    "1001-5000",
+    "5000+",
+    "unknown",
+}
+
+REPO_SIZE_BUCKETS = {
+    "<1MB",
+    "1-10MB",
+    "10-50MB",
+    "50-250MB",
+    "250MB+",
+    "unknown",
+}
+
+
+def sanitize_selection_reason_code(raw_code: str | None) -> str:
+    if not raw_code:
+        return "UNKNOWN"
+    normalized = raw_code.strip().upper()
+    return normalized if normalized in SELECTION_REASON_CODES else "UNKNOWN"
+
 
 def sanitize_model_name(raw_model: str | None) -> str:
     if not raw_model:
@@ -355,6 +416,17 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
     if not isinstance(payload, dict):
         raise ValueError("Payload must be a dictionary")
 
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False)
+        payload_len = len(serialized.encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Payload serialization failed: {exc}") from exc
+
+    if payload_len > MAX_PAYLOAD_BYTES:
+        raise ValueError(
+            f"Payload size ({payload_len} bytes) exceeds limit of {MAX_PAYLOAD_BYTES} bytes"
+        )
+
     level = payload.get("telemetry_level")
     if level == "basic":
         allowed_keys = BASIC_PAYLOAD_KEYS
@@ -381,11 +453,26 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
     if payload["schema_version"] != COMMUNITY_SCHEMA_VERSION:
         raise ValueError(f"Unsupported schema_version: {payload['schema_version']}")
 
+    if payload["event_type"] not in EVENT_TYPES:
+        raise ValueError(f"Invalid event_type: {payload['event_type']}")
+
     if payload["os_family"] not in OS_FAMILIES:
         raise ValueError(f"Invalid os_family: {payload['os_family']}")
 
+    if payload["command_name"] not in COMMAND_NAMES:
+        raise ValueError(f"Invalid command_name: {payload['command_name']}")
+
+    if payload["command_category"] not in COMMAND_CATEGORIES:
+        raise ValueError(f"Invalid command_category: {payload['command_category']}")
+
     if payload["command_outcome"] not in COMMAND_OUTCOMES:
         raise ValueError(f"Invalid command_outcome: {payload['command_outcome']}")
+
+    if payload["reason_code"] is not None and payload["reason_code"] not in KNOWN_REASON_CODES:
+        raise ValueError(f"Invalid reason_code: {payload['reason_code']}")
+
+    if payload["duration_bucket"] not in DURATION_BUCKETS:
+        raise ValueError(f"Invalid duration_bucket: {payload['duration_bucket']}")
 
     if level == "research":
         if payload["ai_client"] not in AI_CLIENTS:
@@ -396,15 +483,23 @@ def validate_community_payload(payload: dict[str, Any]) -> None:
             raise ValueError(f"Invalid validation_result: {payload['validation_result']}")
         if payload["task_outcome"] not in TASK_OUTCOMES:
             raise ValueError(f"Invalid task_outcome: {payload['task_outcome']}")
+        if payload["repo_files_bucket"] not in REPO_FILES_BUCKETS:
+            raise ValueError(f"Invalid repo_files_bucket: {payload['repo_files_bucket']}")
+        if payload["repo_size_bucket"] not in REPO_SIZE_BUCKETS:
+            raise ValueError(f"Invalid repo_size_bucket: {payload['repo_size_bucket']}")
         if not isinstance(payload["language_families"], list):
             raise ValueError("language_families must be a list")
         for lang in payload["language_families"]:
             if not isinstance(lang, str) or lang not in KNOWN_LANGUAGES:
                 raise ValueError(f"Invalid language family: {lang}")
-
-    serialized = json.dumps(payload, ensure_ascii=False)
-    payload_len = len(serialized.encode("utf-8"))
-    if payload_len > MAX_PAYLOAD_BYTES:
-        raise ValueError(
-            f"Payload size ({payload_len} bytes) exceeds limit of {MAX_PAYLOAD_BYTES} bytes"
-        )
+        if (
+            payload["retrieval_reason_code"] is not None
+            and payload["retrieval_reason_code"] not in RETRIEVAL_REASONS
+        ):
+            raise ValueError(f"Invalid retrieval_reason_code: {payload['retrieval_reason_code']}")
+        if payload["selection_reason_codes"] is not None:
+            if not isinstance(payload["selection_reason_codes"], list):
+                raise ValueError("selection_reason_codes must be a list or None")
+            for code in payload["selection_reason_codes"]:
+                if not isinstance(code, str) or code not in SELECTION_REASON_CODES:
+                    raise ValueError(f"Invalid selection_reason_code: {code}")

@@ -48,10 +48,16 @@ Never shared:
 - usernames/emails
 - secrets/API keys
 
-Inspect exactly what would be sent:
+Preview what data fields would be shared from your repository:
 
 ```bash
 ai-dev telemetry sharing preview --level research
+```
+
+Or view a synthetic example payload:
+
+```bash
+ai-dev telemetry sharing preview --level research --sample
 ```
 
 For complete details on data handling, allowed scalar metrics, and local queueing, see [docs/community-telemetry.md](docs/community-telemetry.md).

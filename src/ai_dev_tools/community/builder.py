@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import uuid
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from ai_dev_tools.community.schema import (
     repo_size_bucket,
     sanitize_model_name,
     sanitize_reason_code,
+    sanitize_selection_reason_code,
     sanitize_task_kind,
     validate_community_payload,
 )
@@ -93,70 +95,68 @@ COMMAND_CATEGORY_MAP: dict[str, str] = {
 }
 
 
-def detect_language_families(project_root: Path | None) -> list[str]:
+PRUNED_DIRECTORIES = {
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "dist",
+    "build",
+    ".ai",
+    ".tox",
+    ".nox",
+    ".eggs",
+    "site-packages",
+}
+
+
+def scan_repo_stats(project_root: Path | None) -> tuple[list[str], str, str]:
     if project_root is None or not project_root.is_dir():
-        return []
+        return [], "unknown", "unknown"
+
     languages: set[str] = set()
-    ignored_dirs = {
-        ".git",
-        ".venv",
-        "venv",
-        "node_modules",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        "__pycache__",
-        "dist",
-        "build",
-        ".ai",
-    }
+    total_files = 0
+    total_bytes = 0
+
     try:
-        count = 0
-        for entry in project_root.rglob("*"):
-            if count > 500:  # Sample at most 500 files to remain fast
+        for root_dir, dirs, files in os.walk(str(project_root)):
+            # Prune ignored and hidden directories in-place so os.walk NEVER traverses into them
+            dirs[:] = [d for d in dirs if d not in PRUNED_DIRECTORIES and not d.startswith(".")]
+
+            for filename in files:
+                total_files += 1
+                filepath = os.path.join(root_dir, filename)
+                with contextlib.suppress(OSError):
+                    total_bytes += os.path.getsize(filepath)
+
+                _, ext = os.path.splitext(filename)
+                if ext:
+                    lang = EXTENSION_LANGUAGE_MAP.get(ext.lower())
+                    if lang and lang in KNOWN_LANGUAGES:
+                        languages.add(lang)
+
+                # Cap scanning at 50,000 files to guarantee sub-100ms performance on extreme repos
+                if total_files > 50_000:
+                    break
+            if total_files > 50_000:
                 break
-            if any(part in ignored_dirs for part in entry.parts):
-                continue
-            if entry.is_file():
-                count += 1
-                suffix = entry.suffix.lower()
-                lang = EXTENSION_LANGUAGE_MAP.get(suffix)
-                if lang and lang in KNOWN_LANGUAGES:
-                    languages.add(lang)
     except OSError:
-        pass
-    return sorted(languages)
+        return [], "unknown", "unknown"
+
+    return sorted(languages), repo_files_bucket(total_files), repo_size_bucket(total_bytes)
+
+
+def detect_language_families(project_root: Path | None) -> list[str]:
+    return scan_repo_stats(project_root)[0]
 
 
 def compute_repo_buckets(project_root: Path | None) -> tuple[str, str]:
-    if project_root is None or not project_root.is_dir():
-        return "unknown", "unknown"
-    ignored_dirs = {
-        ".git",
-        ".venv",
-        "venv",
-        "node_modules",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        "__pycache__",
-        "dist",
-        "build",
-        ".ai",
-    }
-    total_files = 0
-    total_bytes = 0
-    try:
-        for entry in project_root.rglob("*"):
-            if any(part in ignored_dirs for part in entry.parts):
-                continue
-            if entry.is_file():
-                total_files += 1
-                with contextlib.suppress(OSError):
-                    total_bytes += entry.stat().st_size
-    except OSError:
-        return "unknown", "unknown"
-    return repo_files_bucket(total_files), repo_size_bucket(total_bytes)
+    stats = scan_repo_stats(project_root)
+    return stats[1], stats[2]
 
 
 def build_community_payload(
@@ -343,7 +343,7 @@ def build_community_payload(
             if isinstance(sf, dict):
                 code = sf.get("reason_code")
                 if isinstance(code, str) and code:
-                    reasons_found.add(code[:30])
+                    reasons_found.add(sanitize_selection_reason_code(code))
         if reasons_found:
             selection_reason_codes = sorted(reasons_found)
 
@@ -408,11 +408,10 @@ def build_community_payload(
         validation_result = "passed"
         task_outcome = "unknown"
         retrieval_reason_code = "high_confidence_task"
-        selection_reason_codes = ["IMPORT_DEPENDENCY", "TASK_KEYWORD_MATCH"]
+        selection_reason_codes = ["CHANGED_FILE", "PYTHON_DEPENDENCY"]
 
-    # Language families and repository buckets
-    lang_families = detect_language_families(project_root)
-    r_files_bucket, r_size_bucket = compute_repo_buckets(project_root)
+    # Language families and repository buckets (single pass)
+    lang_families, r_files_bucket, r_size_bucket = scan_repo_stats(project_root)
     if sample:
         if not lang_families:
             lang_families = ["python", "markdown"]
@@ -454,3 +453,92 @@ def build_community_payload(
 
     validate_community_payload(research_payload)
     return research_payload
+
+
+def build_provider_usage_payload(
+    *,
+    client: str,
+    model: str = "",
+    task_kind: str = "",
+    input_tokens: int = 0,
+    cached_input_tokens: int = 0,
+    output_tokens: int = 0,
+    reasoning_tokens: int = 0,
+    quality_passed: bool | None = None,
+    duration_seconds: float | None = None,
+    command_name: str = "mcp",
+) -> dict[str, Any]:
+    dur = (
+        float(duration_seconds)
+        if duration_seconds is not None and duration_seconds >= 0
+        else None
+    )
+    in_tok = max(0, int(input_tokens))
+    out_tok = max(0, int(output_tokens))
+    cached_tok = max(0, int(cached_input_tokens))
+    reason_tok = max(0, int(reasoning_tokens))
+    tot_tok = in_tok + out_tok
+
+    val_result = (
+        "passed"
+        if quality_passed is True
+        else ("failed" if quality_passed is False else "unknown")
+    )
+    t_outcome = (
+        "success"
+        if quality_passed is True
+        else ("failure" if quality_passed is False else "unknown")
+    )
+
+    clean_client = client.strip().lower() if client else "unknown"
+    safe_client = clean_client if clean_client in AI_CLIENTS else "unknown"
+
+    safe_cmd = command_name if command_name in COMMAND_NAMES else "mcp"
+
+    payload: dict[str, Any] = {
+        "schema_version": COMMUNITY_SCHEMA_VERSION,
+        "event_id": str(uuid.uuid4()),
+        "event_type": "provider_usage",
+        "telemetry_level": "research",
+        "ai_dev_version": __version__,
+        "os_family": get_os_family(),
+        "python_version": get_python_version(),
+        "command_name": safe_cmd,
+        "command_category": "telemetry",
+        "command_outcome": "success",
+        "reason_code": None,
+        "duration_bucket": duration_bucket(dur),
+        "duration_seconds": dur,
+        "cache_hit": None,
+        "timestamp_hour": get_utc_hour_timestamp(),
+        # Research specific fields
+        "ai_client": safe_client,
+        "model": sanitize_model_name(model),
+        "task_kind": sanitize_task_kind(task_kind),
+        "language_families": [],
+        "repo_files_bucket": "unknown",
+        "repo_size_bucket": "unknown",
+        "context_candidate_tokens": None,
+        "context_delivered_tokens": None,
+        "context_budget": None,
+        "input_tokens": in_tok,
+        "cached_input_tokens": cached_tok,
+        "output_tokens": out_tok,
+        "reasoning_tokens": reason_tok,
+        "total_tokens": tot_tok,
+        "tool_call_count": None,
+        "files_considered": None,
+        "files_selected": None,
+        "files_omitted": None,
+        "cache_hit_ratio": None,
+        "semantic_cache_reuse": None,
+        "local_overhead_seconds": None,
+        "total_wall_time_seconds": dur,
+        "validation_result": val_result,
+        "task_outcome": t_outcome,
+        "retrieval_reason_code": None,
+        "selection_reason_codes": None,
+    }
+
+    validate_community_payload(payload)
+    return payload
