@@ -10,16 +10,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 # 1. Install collector dependencies
 COPY collector/requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 2. Build and install ai-dev-cli-tools package for schema validation without external dev tools
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir build hatchling && \
     python -m build --wheel --no-isolation --outdir /wheels . && \
-    pip install --no-cache-dir --user --no-deps /wheels/*.whl
+    pip install --no-cache-dir --no-deps /wheels/*.whl
 
 
 FROM python:3.13-slim AS runner
@@ -29,9 +32,10 @@ RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin -c "Do
 
 WORKDIR /app
 
-# Copy installed python dependencies from builder
-COPY --from=builder /root/.local /home/appuser/.local
-ENV PATH=/home/appuser/.local/bin:$PATH
+# Copy virtualenv from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
