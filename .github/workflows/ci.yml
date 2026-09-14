@@ -152,7 +152,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -c requirements-dev.lock -e ".[dev]"
+      - run: python -m pip install -r collector/requirements.txt -e .
       - name: Test Alembic migration against PostgreSQL
         env:
           DATABASE_URL: postgresql+psycopg://telemetry_user:test_ci_password_123@localhost:5432/telemetry
