@@ -21,9 +21,12 @@ flowchart LR
 ### Core Tenets
 1. **Privacy-Preserving**: No client IP addresses are ever stored in the database.
 2. **Reverse Proxy Log Suppression**: Web server access logs for `/v1/events` must have client IPs discarded or disabled.
-3. **Fail-Closed Validation**: Payloads are strictly checked against schema invariants before database insertion.
-4. **Idempotent Ingestion**: Duplicate submissions of the same `event_id` are acknowledged with `200 OK` (`duplicate: true`) without redundant database writes.
-5. **90-Day Retention**: Raw events are purged after 90 days via an automated retention task.
+3. **Strict Trusted Proxying**: The collector ignores `X-Forwarded-For` unless `TRUST_PROXY_HEADERS=true` and the direct peer matches `TRUSTED_PROXY_IPS`.
+4. **Streaming Chunk Body Limit**: Payloads exceeding 32 KB are aborted immediately without buffering.
+5. **Fail-Closed Validation**: Payloads are strictly checked against schema invariants before database insertion.
+6. **Idempotent Ingestion**: Duplicate submissions of the same `event_id` are acknowledged with `200 OK` (`duplicate: true`) without redundant database writes.
+7. **Versioned Migrations**: Database schema changes are managed explicitly via Alembic (`collector/alembic/`).
+8. **90-Day Retention**: Raw events are purged after 90 days via an automated retention task based on server `received_at`.
 
 ---
 
@@ -58,15 +61,19 @@ mkdir -p /opt/ai-dev-collector
 cd /opt/ai-dev-collector
 ```
 
-Copy the `collector/` directory to `/opt/ai-dev-collector`.
+Copy the repository to `/opt/ai-dev-collector`.
 
 Create `/opt/ai-dev-collector/.env`:
 ```env
-DATABASE_URL=postgresql://collector_user:STRONG_PASSWORD_HERE@db:5432/telemetry_db
+POSTGRES_PASSWORD=GENERATE_A_VERY_STRONG_RANDOM_PASSWORD_HERE
+DATABASE_URL=postgresql+psycopg://telemetry_user:GENERATE_A_VERY_STRONG_RANDOM_PASSWORD_HERE@db:5432/telemetry
 RATE_LIMIT_PER_MINUTE=60
+RATE_LIMIT_MAX_ENTRIES=10000
 RETENTION_DAYS=90
 MAX_PAYLOAD_BYTES=32768
 ENVIRONMENT=production
+TRUST_PROXY_HEADERS=true
+TRUSTED_PROXY_IPS=127.0.0.1,::1,172.16.0.0/12
 ```
 
 ### 3. Caddy Reverse Proxy Configuration
@@ -107,8 +114,8 @@ telemetry.ai-dev.example.com {
         }
     }
 
-    # Health check endpoint (can be monitored by UptimeRobot / BetterStack)
-    @health path /health
+    # Health & readiness probes
+    @health path /health /ready
     handle @health {
         reverse_proxy collector:8000
     }
@@ -157,8 +164,8 @@ server {
         proxy_send_timeout 10s;
     }
 
-    # Health check endpoint
-    location = /health {
+    # Health & readiness probes
+    location ~ ^/(health|ready)$ {
         access_log /var/log/nginx/health_access.log;
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -171,19 +178,23 @@ server {
 }
 ```
 
-### 5. Start the Stack
+### 5. Applying Database Migrations & Starting Services
+
+Before launching the collector, apply Alembic migrations to create the database schema:
 
 ```bash
-docker compose up -d
+docker compose -f collector/docker-compose.yml run --rm migrate
+docker compose -f collector/docker-compose.yml up -d
 ```
 
 Verify service status:
 ```bash
-docker compose ps
+docker compose -f collector/docker-compose.yml ps
 curl -i https://telemetry.ai-dev.example.com/health
+curl -i https://telemetry.ai-dev.example.com/ready
 ```
 
-Expected response:
+Expected responses:
 ```json
 HTTP/2 200
 content-type: application/json
@@ -192,38 +203,32 @@ x-content-type-options: nosniff
 {"status":"ok","schema_version":1}
 ```
 
+And for `/ready`:
+```json
+HTTP/2 200
+content-type: application/json
+x-content-type-options: nosniff
+
+{"status":"ready","database":"connected"}
+```
+
 ---
 
 ## Option A: Managed PaaS Deployment (Render / Fly.io)
 
 ### Deploying to Render
 1. **New Web Service**: Connect your GitHub repository.
-2. **Root Directory**: `collector`.
-3. **Environment**: `Docker` (uses `collector/Dockerfile`).
+2. **Root Directory**: Repository root.
+3. **Environment**: `Docker` (Dockerfile Path: `collector/Dockerfile`).
 4. **Environment Variables**:
-   - `DATABASE_URL`: Set to connection string from a Managed PostgreSQL instance.
+   - `DATABASE_URL`: Connection string from Managed PostgreSQL instance.
    - `RATE_LIMIT_PER_MINUTE`: `60`
+   - `RATE_LIMIT_MAX_ENTRIES`: `10000`
    - `RETENTION_DAYS`: `90`
+   - `ENVIRONMENT`: `production`
+   - `TRUST_PROXY_HEADERS`: `true`
 5. **Health Check Path**: `/health`.
-
-### Deploying to Fly.io
-1. Change directory to `collector/`:
-   ```bash
-   cd collector
-   fly launch --no-deploy
-   ```
-2. Attach a Fly Postgres database:
-   ```bash
-   fly postgres attach <postgres-app-name>
-   ```
-3. Set secrets:
-   ```bash
-   fly secrets set RATE_LIMIT_PER_MINUTE=60 RETENTION_DAYS=90
-   ```
-4. Deploy:
-   ```bash
-   fly deploy
-   ```
+6. **Pre-Deploy Command**: `alembic -c collector/alembic.ini upgrade head`.
 
 ---
 
@@ -250,27 +255,7 @@ After=docker.service
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/ai-dev-collector
-ExecStart=/usr/bin/docker compose exec -T collector python -m app.retention --days 90
-```
-
-And timer:
-```ini
-# /etc/systemd/system/telemetry-retention.timer
-[Unit]
-Description=Run ai-dev Community Telemetry retention cleanup daily
-
-[Timer]
-OnCalendar=*-*-* 03:30:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable and activate:
-```bash
-systemctl daemon-reload
-systemctl enable --now telemetry-retention.timer
+ExecStart=/usr/bin/docker compose -f collector/docker-compose.yml exec -T collector python -m app.retention --days 90
 ```
 
 ---
@@ -279,11 +264,14 @@ systemctl enable --now telemetry-retention.timer
 
 Before pointing production clients to this endpoint, verify each item:
 
-- [ ] **Health Check**: `GET /health` returns `200 OK` with `{"status": "ok", "schema_version": 1}`.
+- [ ] **Liveness Probe**: `GET /health` returns `200 OK` with `{"status": "ok", "schema_version": 1}`.
+- [ ] **Readiness Probe**: `GET /ready` returns `200 OK` with `{"status": "ready", "database": "connected"}`.
 - [ ] **TLS Enforcement**: Non-HTTPS requests are redirected to HTTPS.
 - [ ] **Access Log Privacy**: Confirmed reverse proxy does NOT write client IP addresses for requests to `/v1/events`.
-- [ ] **Payload Size Limit**: A request exceeding 32 KB returns `413 Content Too Large`.
-- [ ] **Rate Limiting**: Sending >60 requests in a burst returns `429 Too Many Requests`.
+- [ ] **Trusted Proxy**: Verified that direct requests with fake `X-Forwarded-For` are ignored.
+- [ ] **Streaming Payload Limit**: A streamed request exceeding 32 KB returns `413 Content Too Large`.
+- [ ] **Bounded Memory**: Rate limiter state does not exceed configured `RATE_LIMIT_MAX_ENTRIES`.
 - [ ] **Fail-Closed Validation**: Sending an invalid schema or unexpected field returns `400 Bad Request`.
 - [ ] **Deduplication**: Submitting the same `event_id` twice returns `200 OK` with `{"duplicate": true}` on the second call without creating a second record.
-- [ ] **Retention Job**: `python -m app.retention --dry-run` successfully connects and reports expired count.
+- [ ] **Alembic Migrations**: `python -m alembic -c collector/alembic.ini current` reports `head`.
+- [ ] **Retention Job**: `python -m app.retention --dry-run` successfully connects and reports expired count based on `received_at`.

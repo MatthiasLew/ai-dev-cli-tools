@@ -19,7 +19,7 @@ def test_ingest_valid_basic_command_run(client: TestClient) -> None:
     payload = build_community_payload("basic", sample=True)
     response = client.post("/v1/events", json=payload)
     assert response.status_code == 202
-    assert response.json() == {"status": "accepted"}
+    assert response.json() == {"status": "accepted", "duplicate": False}
     assert response.headers.get("X-Content-Type-Options") == "nosniff"
 
 
@@ -27,7 +27,7 @@ def test_ingest_valid_research_command_run(client: TestClient) -> None:
     payload = build_community_payload("research", sample=True)
     response = client.post("/v1/events", json=payload)
     assert response.status_code == 202
-    assert response.json() == {"status": "accepted"}
+    assert response.json() == {"status": "accepted", "duplicate": False}
 
 
 def test_ingest_valid_provider_usage_mcp(client: TestClient) -> None:
@@ -41,7 +41,7 @@ def test_ingest_valid_provider_usage_mcp(client: TestClient) -> None:
     )
     response = client.post("/v1/events", json=payload)
     assert response.status_code == 202
-    assert response.json() == {"status": "accepted"}
+    assert response.json() == {"status": "accepted", "duplicate": False}
 
 
 def test_ingest_valid_provider_usage_import(client: TestClient) -> None:
@@ -54,7 +54,7 @@ def test_ingest_valid_provider_usage_import(client: TestClient) -> None:
     )
     response = client.post("/v1/events", json=payload)
     assert response.status_code == 202
-    assert response.json() == {"status": "accepted"}
+    assert response.json() == {"status": "accepted", "duplicate": False}
 
 
 def test_ingest_invalid_content_type(client: TestClient) -> None:

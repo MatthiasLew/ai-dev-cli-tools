@@ -36,6 +36,54 @@ def test_token_bucket_deterministic_clock() -> None:
     assert allowed_other is True
 
 
+def test_token_bucket_hard_memory_bound() -> None:
+    # Hard bound: max_entries = 100
+    limiter = TokenBucketRateLimiter(rate_per_minute=60, max_burst=60, max_entries=100)
+
+    # Flood with 10,000 distinct IP keys
+    for i in range(10_000):
+        key = f"10.0.{i // 256}.{i % 256}"
+        allowed, _ = limiter.is_allowed(key)
+        assert allowed is True
+
+    # Invariant: internal state must NEVER exceed max_entries
+    assert len(limiter) <= 100
+    assert len(limiter) == 100
+
+
+def test_token_bucket_lru_and_stale_eviction() -> None:
+    current_time = 1000.0
+    limiter = TokenBucketRateLimiter(
+        rate_per_minute=60,
+        max_burst=60,
+        max_entries=3,
+        clock=lambda: current_time,
+    )
+
+    limiter.is_allowed("ip1")
+    limiter.is_allowed("ip2")
+    limiter.is_allowed("ip3")
+    assert len(limiter) == 3
+
+    # Access ip1 again to make it most recently used
+    limiter.is_allowed("ip1")
+
+    # Add ip4: ip2 (oldest LRU) should be evicted
+    limiter.is_allowed("ip4")
+    assert len(limiter) == 3
+    # ip1, ip3, ip4 should be in buckets, ip2 should have been evicted
+    assert "ip1" in limiter._buckets
+    assert "ip3" in limiter._buckets
+    assert "ip4" in limiter._buckets
+    assert "ip2" not in limiter._buckets
+
+    # Advance clock past 600s stale threshold
+    current_time += 700.0
+    # Insert new IP: triggers stale cleanup
+    limiter.is_allowed("ip5")
+    assert len(limiter) <= 3
+
+
 def test_http_rate_limiting_integration(client: TestClient) -> None:
     # Temporarily set rate limiter with small burst
     simulated_time = 0.0

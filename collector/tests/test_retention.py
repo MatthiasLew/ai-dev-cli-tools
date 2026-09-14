@@ -53,3 +53,39 @@ def test_retention_90_days_cleanup(test_db_session: sessionmaker[Session]) -> No
         remaining_after = set(session.scalars(select(TelemetryEvent.event_id)).all())
         assert remaining_after == {id_edge, id_fresh}
         assert id_old not in remaining_after
+
+
+def test_retention_strictly_uses_received_at_not_client_timestamp(
+    test_db_session: sessionmaker[Session],
+) -> None:
+    now = datetime.now(UTC)
+    payload = build_community_payload("basic", sample=True)
+
+    id_fake_old_client_time = str(uuid.uuid4())
+    id_fake_future_client_time = str(uuid.uuid4())
+
+    with test_db_session() as session:
+        # Client claims timestamp_hour is 3 years ago, but server received it TODAY -> RETAINED
+        ev_today = TelemetryEvent.from_payload(
+            {
+                **payload,
+                "event_id": id_fake_old_client_time,
+                "timestamp_hour": "2023-01-01T00:00:00Z",
+            },
+            received_at=now,
+        )
+        # Client claims timestamp_hour is TODAY, but server received it 95 days ago -> PURGED
+        ev_purged = TelemetryEvent.from_payload(
+            {**payload, "event_id": id_fake_future_client_time},
+            received_at=now - timedelta(days=95),
+        )
+        session.add_all([ev_today, ev_purged])
+        session.commit()
+
+    with test_db_session() as session:
+        purged = delete_expired_events(session, days=90, dry_run=False, now=now)
+        assert purged == 1
+
+        remaining = set(session.scalars(select(TelemetryEvent.event_id)).all())
+        assert id_fake_old_client_time in remaining
+        assert id_fake_future_client_time not in remaining

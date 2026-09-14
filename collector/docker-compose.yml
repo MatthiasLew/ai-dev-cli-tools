@@ -1,3 +1,14 @@
+# ==============================================================================
+# LOCAL DEVELOPMENT DOCKER COMPOSE CONFIGURATION
+# ==============================================================================
+# WARNING: This file is intended for LOCAL TESTING and DEVELOPMENT only.
+# In PRODUCTION, do not use default fallback passwords; set POSTGRES_PASSWORD
+# and externalize database credentials safely.
+#
+# Usage:
+#   docker compose -f collector/docker-compose.yml up -d --build
+# ==============================================================================
+
 services:
   db:
     image: postgres:16-alpine
@@ -16,19 +27,37 @@ services:
       timeout: 5s
       retries: 5
 
-  collector:
+  migrate:
     build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
+      context: ..
+      dockerfile: collector/Dockerfile
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://telemetry_user:${POSTGRES_PASSWORD:-local_dev_password_change_in_production}@db:5432/telemetry
+      ENVIRONMENT: development
+    command: ["alembic", "-c", "collector/alembic.ini", "upgrade", "head"]
+
+  collector:
+    build:
+      context: ..
+      dockerfile: collector/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql+psycopg://telemetry_user:${POSTGRES_PASSWORD:-local_dev_password_change_in_production}@db:5432/telemetry
       RATE_LIMIT_PER_MINUTE: "60"
+      RATE_LIMIT_MAX_ENTRIES: "10000"
       RETENTION_DAYS: "90"
+      MAX_PAYLOAD_BYTES: "32768"
       ENVIRONMENT: production
+      TRUST_PROXY_HEADERS: "false"
     ports:
       - "127.0.0.1:8000:8000"
 

@@ -73,6 +73,7 @@ class ValidationError(ValueError):
 
     def __init__(self, message: str, category: str = "validation_failed") -> None:
         super().__init__(message)
+        self.message = message
         self.category = category
 
 

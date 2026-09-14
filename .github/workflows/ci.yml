@@ -129,3 +129,47 @@ jobs:
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           sarif_file: .ai/reports/ai-dev.sarif
+
+  collector-postgres-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: telemetry
+          POSTGRES_USER: telemetry_user
+          POSTGRES_PASSWORD: test_ci_password_123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -c requirements-dev.lock -e ".[dev]"
+      - name: Test Alembic migration against PostgreSQL
+        env:
+          DATABASE_URL: postgresql+psycopg://telemetry_user:test_ci_password_123@localhost:5432/telemetry
+        run: |
+          python -m alembic -c collector/alembic.ini upgrade head
+          python -m alembic -c collector/alembic.ini current
+      - name: Build Docker collector image
+        run: docker build -f collector/Dockerfile -t ai-dev-collector:test .
+      - name: Run Docker collector container smoke test
+        run: |
+          docker run -d --name test-collector --network host \
+            -e DATABASE_URL=postgresql+psycopg://telemetry_user:test_ci_password_123@localhost:5432/telemetry \
+            -e ENVIRONMENT=production \
+            ai-dev-collector:test
+          sleep 3
+          docker logs test-collector
+          curl -f http://127.0.0.1:8000/health
+          curl -f http://127.0.0.1:8000/ready
+          docker stop test-collector
+          docker rm test-collector

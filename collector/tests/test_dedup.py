@@ -15,7 +15,7 @@ def test_event_id_deduplication(client: TestClient, test_db_session: sessionmake
     # First attempt: brand new event
     resp1 = client.post("/v1/events", json=payload)
     assert resp1.status_code == 202
-    assert resp1.json() == {"status": "accepted"}
+    assert resp1.json() == {"status": "accepted", "duplicate": False}
 
     # Second attempt: same event_id delivered again
     resp2 = client.post("/v1/events", json=payload)
