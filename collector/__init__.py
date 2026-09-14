@@ -1,0 +1,1 @@
+"""Community Telemetry Collector package."""

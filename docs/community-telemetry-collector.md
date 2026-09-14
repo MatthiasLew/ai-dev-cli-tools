@@ -1,158 +1,237 @@
-# Community Telemetry Collector Specification
+# Community Telemetry Collector Specification & Architecture
 
-This document defines the contract, security requirements, and operational guidelines for the backend collector service receiving Community Telemetry events from `ai-dev`.
-
-> [!NOTE]
-> **Deployment Status**: Production collector still needs deployment.
-> No production endpoint is currently hardcoded or hosted. For local development and testing, use the mock collector or override `AI_DEV_COMMUNITY_TELEMETRY_ENDPOINT`.
+This document defines the contract, schema validation rules, storage architecture, and operational guidelines for the production Community Telemetry Collector service (`collector/`) receiving events from `ai-dev`.
 
 ---
 
-## 1. Collector Contract
+## 1. Collector Architecture
 
-### HTTP Endpoint
+```mermaid
+flowchart TD
+    Client["ai-dev CLI / MCP (Client)"] -->|"POST /v1/events"| Proxy["Edge Reverse Proxy (Caddy / Nginx)"]
+    Proxy -->|"HTTP (internal)"| FastAPIServer["FastAPI Collector (collector/app/main.py)"]
+    FastAPIServer -->|"1. Check Content-Type & Size (<=32KB)"| Guard["Body Size & Header Guard"]
+    Guard -->|"2. Token Bucket IP Check"| RateLimiter["In-Memory Rate Limiter"]
+    RateLimiter -->|"3. Fail-Closed Validation"| Validator["Schema & Invariant Validator (validation.py)"]
+    Validator -->|"4. Atomic Ingestion"| Storage["SQLAlchemy Storage (storage.py)"]
+    Storage -->|"ON CONFLICT (event_id) DO NOTHING"| DB[("PostgreSQL 16+\n(telemetry_events table)")]
+```
+
+### Key Modules
+- **`collector/app/main.py`**: FastAPI application exposing `POST /v1/events` and `GET /health`.
+- **`collector/app/validation.py`**: Fail-closed schema and invariant validation (UUIDv4, UTC hour format, PEP 440 semver, exact key allowlist, token consistency, origin/event_type invariants).
+- **`collector/app/models.py`**: SQLAlchemy declarative model (`TelemetryEvent`). Stores only allowlisted fields.
+- **`collector/app/storage.py`**: Database session and atomic conflict handling.
+- **`collector/app/rate_limit.py`**: Token bucket rate limiter keyed by transient client IP (memory bounded).
+- **`collector/app/retention.py`**: 90-day retention cleanup utility.
+
+---
+
+## 2. HTTP Endpoints Contract
+
+### `POST /v1/events`
+Receives and stores a single telemetry event.
+
 - **Method**: `POST`
-- **Path**: e.g. `/telemetry/events` or root `/`
-- **Content-Type**: `application/json`
-- **Headers**:
+- **Path**: `/v1/events`
+- **Request Headers**:
   - `Content-Type: application/json`
   - `User-Agent: ai-dev/<version>`
   - `X-Schema-Version: 1`
+- **Request Body**: JSON object matching `schema_version = 1` (maximum `32,768 bytes`).
+- **Response Status Codes**:
+  - `202 Accepted`: Payload accepted and stored (`{"status": "accepted", "duplicate": false}`).
+  - `200 OK`: Payload accepted as duplicate (`{"status": "accepted", "duplicate": true}`). No new record is inserted.
+  - `400 Bad Request`: Validation failure or malformed JSON (`{"status": "rejected", "error": "validation_failed", "detail": "<reason>"}`).
+  - `413 Content Too Large`: Payload exceeds 32 KB (`{"status": "rejected", "error": "payload_too_large"}`).
+  - `415 Unsupported Media Type`: Content-Type is not `application/json` (`{"status": "rejected", "error": "unsupported_media_type"}`).
+  - `429 Too Many Requests`: Client exceeded rate limit (`{"status": "rejected", "error": "rate_limit_exceeded"}`). Includes `Retry-After` header.
+
+### `GET /health`
+Liveness and database connectivity probe.
+
+- **Method**: `GET`
+- **Path**: `/health`
 - **Response**:
-  - `200 OK` or `202 Accepted` on valid receipt: `{"status": "accepted"}`
-  - `400 Bad Request` on invalid payload or unexpected schema: `{"status": "rejected", "error": "validation_failed"}`
-  - `413 Payload Too Large` if payload exceeds size limit
-  - `429 Too Many Requests` on rate limiting
+  - `200 OK`: `{"status": "ok", "schema_version": 1}`
+  - `503 Service Unavailable`: `{"status": "degraded", "error": "database_unreachable"}`
 
 ---
 
-## 2. Ingestion Constraints & Validation Rules
+## 3. Strict Fail-Closed Ingestion & Validation Rules
 
-The collector must operate in a **strict fail-closed** manner. **Never trust client payloads without complete re-validation.**
+The collector operates with zero client trust. Every incoming payload is validated against these rules:
 
-1. **Payload Size & Body Parsing Limits**:
-   - Maximum 32 KB (`32,768 bytes`) per event raw body.
-   - Any request exceeding this limit must immediately return `413 Payload Too Large`.
-   - Prevent unbounded JSON parsing memory allocation (limit parser buffer).
-
-2. **No Schema Coercion**:
-   - Do not coerce types (e.g. `true` must NOT be accepted as integer `1`, string `"120"` must NOT be accepted as integer `120`).
-   - If a field is of an invalid type, return `400 Bad Request` with `validation_failed`.
-
+1. **Payload Size Limit**: Raw request body must be $\le 32,768$ bytes.
+2. **No Schema Coercion**: Types must match strictly (e.g. `true` is never coerced to `1`, `"120"` is never coerced to `120`).
 3. **Strict Top-Level Key Allowlist**:
-   - Payloads must contain only keys explicitly defined in `BASIC_PAYLOAD_KEYS` (for `basic`) or `RESEARCH_PAYLOAD_KEYS` (for `research`).
-   - Any unknown, additional, or arbitrary top-level key must cause immediate rejection (`400 Bad Request`).
-
-4. **Event Types**:
-   - Supported values: `"command_run"` and `"provider_usage"`.
-   - Both event types adhere to the same versioned allowlist structure (`command_run` for CLI commands, `provider_usage` for MCP / CLI import token sessions).
-
-5. **Format & Identity Constraints**:
-   - `schema_version`: Must strictly equal `1` (integer).
-   - `event_id`: Must be a valid UUIDv4 string (`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).
-   - `timestamp_hour`: Must strictly match UTC hour format `YYYY-MM-DDTHH:00:00Z` (minutes, seconds, microseconds must be zero).
-   - `python_version`: Must strictly match major.minor pattern `^3\.\d+$` (e.g. `3.11`, `3.12`, `3.14`).
-   - `ai_dev_version`: PEP 440 / semver string starting with digits (`^\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc|alpha|beta|dev|post)\d*|\.(?:dev|post)\d*|-(?:a|b|rc|alpha|beta|dev|post)\.?\d*)*(?:\+[a-zA-Z0-9._-]+)?$`), bounded between 1 and 32 characters.
-
-6. **Event Type Invariants**:
-   - `command_run`:
-     - Allowed `telemetry_level`: `"basic"` or `"research"`.
-     - In `research`, `origin` must strictly be `null` (`command_run` cannot pretend to be `provider_usage`).
-   - `provider_usage`:
-     - Allowed `telemetry_level`: `"research"` only. Any `provider_usage` with `telemetry_level="basic"` must be rejected (`400 Bad Request`).
-     - `origin`: Must NOT be `null`. Must be one of `{"mcp", "import", "unknown"}`.
-     - `command_name`: Must be `"mcp"` (for `"mcp"` or `"unknown"`) or `"telemetry"` (for `"import"`).
-     - `command_category`: Must strictly be `"telemetry"`.
-
-7. **Closed Enums**:
-   - `telemetry_level`: `"basic"` or `"research"`.
-   - `os_family`: `"windows"`, `"linux"`, `"macos"`, `"other"`.
-   - `command_name`: closed set (`"check"`, `"scan"`, `"mcp"`, `"telemetry"`, etc.).
-   - `command_category`: `"analysis"`, `"execution"`, `"quality"`, `"context"`, `"benchmark"`, `"telemetry"`, `"agent"`, `"runtime"`, `"other"`.
-   - `command_outcome`: `"success"`, `"partial"`, `"failure"`.
-   - `reason_code`: `null` or from `KNOWN_REASON_CODES`.
-   - `duration_bucket`: `"<100ms"`, `"100ms-500ms"`, `"500ms-1s"`, `"1s-5s"`, `"5s-30s"`, `"30s-120s"`, `"120s+"`, `"unknown"`.
-   - `ai_client`: `"codex"`, `"claude"`, `"cursor"`, `"gemini"`, `"other"`, `"unknown"`.
-   - `model`: public known model, `"local"`, `"other"`, or `"unknown"`. Reject arbitrary model names!
-   - `task_kind`: `"bugfix"`, `"feature"`, `"refactor"`, `"test"`, `"documentation"`, `"performance"`, `"security"`, `"investigation"`, `"other"`, `"unknown"`.
-   - `validation_result`: `"passed"`, `"failed"`, `"unknown"`.
-   - `task_outcome`: `"success"`, `"failure"`, `"unknown"`.
-   - `repo_files_bucket`: `"1-50"`, `"51-200"`, `"201-1000"`, `"1001-5000"`, `"5000+"`, `"unknown"`.
-   - `repo_size_bucket`: `"<1MB"`, `"1-10MB"`, `"10-50MB"`, `"50-250MB"`, `"250MB+"`, `"unknown"`.
-   - `retrieval_reason_code`: `null` or from `RETRIEVAL_REASONS`.
-   - `selection_reason_codes`: `null` or list of up to 100 codes, each strictly from `SELECTION_REASON_CODES`.
-   - `language_families`: list of up to 50 items, each strictly from `KNOWN_LANGUAGES`.
-   - `origin`: `null` (commands) or `"mcp"`, `"import"`, `"unknown"` (provider usage).
-
-8. **Numeric Bounds & Token Consistency**:
-   - `duration_seconds`: `null` or finite float `0.0 <= x <= 604800.0` (reject `NaN`, `inf`, and boolean types).
-   - `cache_hit`: `null` or boolean.
-   - Tokens (`input_tokens`, `output_tokens`, `total_tokens`, etc.): `null` or integer `0 <= x <= 100_000_000`.
-   - Counts (`tool_call_count` `<= 100_000`; `files_considered`, `files_selected`, `files_omitted` `<= 1_000_000`).
-   - Ratios (`cache_hit_ratio`, `semantic_cache_reuse`): `null` or finite float `0.0 <= x <= 1.0`.
-   - Overheads (`local_overhead_seconds` `<= 86400.0`, `total_wall_time_seconds` `<= 604800.0`).
-   - Consistency check: `cached_input_tokens <= input_tokens`, `total_tokens >= input_tokens + output_tokens`.
-
-9. **Rate Limiting**:
-   - Enforce IP-based token bucket or leaky bucket rate limiting (e.g., max 60 requests per minute per IP address).
-   - In case of abuse, return `429 Too Many Requests` with a `Retry-After` header.
-
-10. **Deduplication & Idempotency**:
-   - The delivery model is **at-least-once / best-effort delivery with `event_id` available for deduplication**. Network retries after a lost connection or dropped ACK can deliver duplicates.
-   - The collector MUST use `event_id` as a deduplication key.
-   - When receiving an `event_id` that already exists in the recent deduplication index:
-     - Do NOT re-insert or double-count the payload.
-     - Return `200 OK` (or `202 Accepted`) so the client marks the event as delivered and stops retrying.
-   - `event_id` MUST NOT be used for user tracking or cross-event profiling; it exists solely for idempotency.
-   - Retention of the deduplication index must align with raw event retention (90 days).
+   - `basic`: Exactly the 11 keys (`schema_version`, `event_id`, `event_type`, `timestamp_hour`, `os_family`, `python_version`, `ai_dev_version`, `command_name`, `command_category`, `command_outcome`, `duration_bucket`).
+   - `research`: Only the 33 approved keys. Any unknown key causes immediate `400 Bad Request`.
+4. **Format & Identity Constraints**:
+   - `schema_version`: Must strictly equal integer `1`.
+   - `event_id`: Valid UUIDv4 matching `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`.
+   - `timestamp_hour`: Must strictly match UTC hour format `YYYY-MM-DDTHH:00:00Z` (minutes, seconds, and microseconds must be zero).
+   - `python_version`: Major.minor string `^3\.\d+$` (e.g. `3.11`, `3.12`).
+   - `ai_dev_version`: PEP 440 semver string starting with digits, length 1–32.
+5. **Event Type Invariants**:
+   - `command_run`: Allowed levels `basic` or `research`. When `research`, `origin` must strictly be `null`.
+   - `provider_usage`: Allowed level `research` only. `origin` must be one of `{"mcp", "import", "unknown"}`. `command_name` must be `"mcp"` or `"telemetry"`, and `command_category` must be `"telemetry"`.
+6. **Numeric Bounds & Token Consistency**:
+   - Finite floats only: Reject `NaN`, `Infinity`, `-Infinity`.
+   - `duration_seconds`: $0.0 \le x \le 604800.0$.
+   - Tokens: $0 \le \text{tokens} \le 100,000,000$.
+   - Token Consistency: `cached_input_tokens <= input_tokens` and `total_tokens >= input_tokens + output_tokens`.
+   - Ratios: $0.0 \le \text{ratio} \le 1.0$.
+   - Tool calls $\le 100,000$, file counts $\le 1,000,000$.
+   - List limits: `selection_reason_codes` $\le 100$, `language_families` $\le 50$.
 
 ---
 
-## 3. Privacy & Data Handling Guarantees
+## 4. Database Schema
 
-1. **No Raw IP Logging**:
-   - The application collector must not store client IP addresses in database tables or long-term storage.
-   - Reverse proxies (e.g. Nginx, Cloudflare) should configure access logs to truncate or hash IP addresses (e.g. subnet masking `/24` for IPv4, `/48` for IPv6) or disable access logs completely for the telemetry path.
-2. **No User Identification or Fingerprinting**:
-   - Do not attempt to correlate events by IP address or TCP timestamps.
-   - Do not perform browser/system fingerprinting.
-   - Do not link events across sessions.
-3. **No External Enrichment**:
-   - Do not enrich events using commercial tracking databases, geo-IP lookup providers, or advertising networks.
-4. **Data Retention Policy**:
-   - Raw individual events should have a retention limit of 90 days.
-   - After 90 days, events should be aggregated into statistical distributions (e.g., histograms, percentiles) and raw events permanently deleted.
+The database table `telemetry_events` stores only validated fields:
 
----
+```sql
+CREATE TABLE telemetry_events (
+    event_id VARCHAR(36) PRIMARY KEY,
+    received_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    schema_version INTEGER NOT NULL,
+    telemetry_level VARCHAR(16) NOT NULL,
+    event_type VARCHAR(32) NOT NULL,
+    timestamp_hour TIMESTAMP WITH TIME ZONE NOT NULL,
+    os_family VARCHAR(16) NOT NULL,
+    python_version VARCHAR(16) NOT NULL,
+    ai_dev_version VARCHAR(32) NOT NULL,
+    command_name VARCHAR(64) NOT NULL,
+    command_category VARCHAR(32) NOT NULL,
+    command_outcome VARCHAR(16) NOT NULL,
+    reason_code VARCHAR(64),
+    duration_bucket VARCHAR(32) NOT NULL,
+    duration_seconds DOUBLE PRECISION,
+    cache_hit BOOLEAN,
+    ai_client VARCHAR(32),
+    model VARCHAR(64),
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    total_tokens INTEGER,
+    cached_input_tokens INTEGER,
+    cache_read_input_tokens INTEGER,
+    cache_creation_input_tokens INTEGER,
+    tool_call_count INTEGER,
+    task_kind VARCHAR(32),
+    validation_result VARCHAR(16),
+    task_outcome VARCHAR(16),
+    repo_files_bucket VARCHAR(32),
+    repo_size_bucket VARCHAR(32),
+    retrieval_reason_code VARCHAR(64),
+    selection_reason_codes TEXT,
+    language_families TEXT,
+    cache_hit_ratio DOUBLE PRECISION,
+    semantic_cache_reuse DOUBLE PRECISION,
+    local_overhead_seconds DOUBLE PRECISION,
+    total_wall_time_seconds DOUBLE PRECISION,
+    origin VARCHAR(16)
+);
 
-## 4. Development & Mock Collector
-
-For integration tests or local development, a lightweight HTTP server can serve as a mock collector:
-
-```python
-import json
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-class MockCollector(BaseHTTPRequestHandler):
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
-        event = json.loads(body)
-        print(f"Received event {event.get('event_id')} [{event.get('telemetry_level')}]: {event.get('command_name')}")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"status": "accepted"}')
-
-if __name__ == "__main__":
-    server = HTTPServer(("127.0.0.1", 8080), MockCollector)
-    print("Mock collector running on http://127.0.0.1:8080 ...")
-    server.serve_forever()
+-- Indices for analytical aggregation and retention cleanup
+CREATE INDEX idx_telemetry_events_timestamp_hour ON telemetry_events (timestamp_hour);
+CREATE INDEX idx_telemetry_events_received_at ON telemetry_events (received_at);
+CREATE INDEX idx_telemetry_events_command ON telemetry_events (command_name, command_category);
+CREATE INDEX idx_telemetry_events_level ON telemetry_events (telemetry_level);
 ```
 
-To test against the local mock collector:
+---
+
+## 5. Deduplication & Idempotency
+
+The collector relies on `event_id` as a primary key constraint:
+- If a client retries due to network failure, the collector encounters an `IntegrityError` (or `ON CONFLICT DO NOTHING`).
+- The duplicate event is discarded without modifying the existing row.
+- The collector returns `200 OK` with `{"status": "accepted", "duplicate": true}`.
+- The client sees a successful HTTP 200, cleans up its local spool, and does not retry further.
+
+---
+
+## 6. Retention Policy (90 Days)
+
+Raw events older than 90 days are deleted using `collector/app/retention.py`:
+
 ```bash
-ai-dev telemetry sharing enable basic
-export AI_DEV_COMMUNITY_TELEMETRY_ENDPOINT="http://127.0.0.1:8080/events"
-ai-dev telemetry sharing flush
+# Dry run: check expired count without deleting
+python -m app.retention --days 90 --dry-run
+
+# Execute purge
+python -m app.retention --days 90
 ```
+
+Recommended automation: Schedule a daily cron job or systemd timer as detailed in [Deployment Guide](community-telemetry-deployment.md).
+
+---
+
+## 7. Analytical SQL Queries
+
+Below are read-only analytical queries for deriving community insights without compromising privacy:
+
+### 1. Daily Event Volume by Telemetry Level
+```sql
+SELECT
+    DATE_TRUNC('day', timestamp_hour) AS day,
+    telemetry_level,
+    event_type,
+    COUNT(*) AS event_count
+FROM telemetry_events
+GROUP BY 1, 2, 3
+ORDER BY 1 DESC, 2;
+```
+
+### 2. Command Execution Latency (P50, P90, P95)
+```sql
+SELECT
+    command_name,
+    COUNT(*) AS run_count,
+    ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY duration_seconds)::NUMERIC, 3) AS p50_seconds,
+    ROUND(PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY duration_seconds)::NUMERIC, 3) AS p90_seconds,
+    ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds)::NUMERIC, 3) AS p95_seconds
+FROM telemetry_events
+WHERE duration_seconds IS NOT NULL
+GROUP BY command_name
+HAVING COUNT(*) >= 10
+ORDER BY run_count DESC;
+```
+
+### 3. Token Consumption & Cache Efficiency
+```sql
+SELECT
+    model,
+    COUNT(*) AS session_count,
+    SUM(input_tokens) AS total_input_tokens,
+    SUM(output_tokens) AS total_output_tokens,
+    SUM(cached_input_tokens) AS total_cached_tokens,
+    ROUND(
+        (SUM(cached_input_tokens)::NUMERIC / NULLIF(SUM(input_tokens), 0)::NUMERIC) * 100, 2
+    ) AS cache_savings_pct
+FROM telemetry_events
+WHERE model IS NOT NULL AND input_tokens IS NOT NULL
+GROUP BY model
+ORDER BY session_count DESC;
+```
+
+### 4. Provider Usage Breakdown (MCP vs CLI Import)
+```sql
+SELECT
+    origin,
+    ai_client,
+    model,
+    COUNT(*) AS events_count,
+    SUM(total_tokens) AS total_tokens_used
+FROM telemetry_events
+WHERE event_type = 'provider_usage'
+GROUP BY origin, ai_client, model
+ORDER BY events_count DESC;
+```
+
+---
+
+## 8. Further Reading
+- [Deployment Guide](community-telemetry-deployment.md) for Caddy / Nginx configurations and production setup.
+- [Community Telemetry Specification](community-telemetry.md) for client privacy rules and telemetry level details.

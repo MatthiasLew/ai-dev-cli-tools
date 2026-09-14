@@ -40,12 +40,25 @@ semantic = [
   "tree-sitter-language-pack>=0.9",
 ]
 
+collector = [
+  "fastapi>=0.115",
+  "httpx>=0.27",
+  "pydantic>=2.8",
+  "sqlalchemy>=2.0",
+  "uvicorn>=0.30",
+]
+
 dev = [
   "build>=1.2",
   "coverage[toml]>=7.6",
+  "fastapi>=0.115",
+  "httpx>=0.27",
   "mypy>=1.11",
+  "pydantic>=2.8",
   "pytest>=8.3",
   "ruff>=0.6",
+  "sqlalchemy>=2.0",
+  "uvicorn>=0.30",
 ]
 
 [project.scripts]
@@ -87,8 +100,8 @@ module = "tree_sitter_language_pack.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = [".", "src"]
+testpaths = ["tests", "collector/tests"]
+pythonpath = [".", "src", "collector"]
 addopts = "-q -p no:pytestqt"
 
 [tool.coverage.run]
