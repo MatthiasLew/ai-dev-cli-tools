@@ -25,19 +25,24 @@ be safe for `ai-dev` to recreate.
 
 If you want to support development, you can optionally enable privacy-preserving opt-in telemetry without persistent user identifiers.
 
-Telemetry is **OFF by default**.
+Community Telemetry is **OFF by default**. Installation never automatically activates it.
 
-Example:
+### Commands
 
 ```bash
+ai-dev telemetry sharing status
 ai-dev telemetry sharing enable basic
-```
-
-or
-
-```bash
 ai-dev telemetry sharing enable research
+ai-dev telemetry sharing disable
+ai-dev telemetry sharing preview
+ai-dev telemetry sharing flush
 ```
+
+- **OFF**: Nothing is collected or sent.
+- **BASIC**: Minimal operational metrics (command name, category, outcome, duration bucket, OS family, Python version).
+- **RESEARCH**: BASIC metrics plus model provider usage (model name, token counts, task outcome, repo size bucket).
+
+Default production endpoint: `https://35.209.177.185.sslip.io/v1/events` (can be overridden with `AI_DEV_COMMUNITY_TELEMETRY_ENDPOINT`).
 
 Never shared:
 - source code
@@ -66,7 +71,7 @@ For complete details on data handling, allowed scalar metrics, and local queuein
 
 ```bash
 python -m pip install --upgrade pipx
-pipx install ai-dev-cli-tools==1.2.2
+pipx install ai-dev-cli-tools==1.3.0
 ai-dev --help
 ```
 

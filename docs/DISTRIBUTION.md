@@ -1,12 +1,11 @@
 # Distribution and Upgrade Policy
 
-Version 1.2.2 adds Gemini integration, Python 3.14 validation, and post-1.2.1 correctness and
-security maintenance. The planned product capability set remains complete as of 1.2.0.
-The recommended isolated installation is:
+Version 1.3.0 adds opt-in Community Telemetry, production collector integration, and validation
+hardening. The recommended isolated installation is:
 
 ```bash
 python -m pip install --upgrade pipx
-pipx install ai-dev-cli-tools==1.2.2
+pipx install ai-dev-cli-tools==1.3.0
 ai-dev --version
 ai-dev doctor
 ```
@@ -15,8 +14,8 @@ Until the release appears on PyPI, install the exact wheel from the matching Git
 pinned Git commit:
 
 ```bash
-python -m pip install ./dist/ai_dev_cli_tools-1.2.2-py3-none-any.whl
-pipx install "git+https://github.com/MatthiasLew/ai-dev-cli-tools.git@v1.2.2"
+python -m pip install ./dist/ai_dev_cli_tools-1.3.0-py3-none-any.whl
+pipx install "git+https://github.com/MatthiasLew/ai-dev-cli-tools.git@v1.3.0"
 ```
 
 Upgrades must pin a release tag or version, review `CHANGELOG.md`, and rerun `ai-dev doctor`.
@@ -50,7 +49,7 @@ not.
 
 1. Complete `docs/RELEASE_CHECKLIST.md` on a clean commit already present on `main`.
 2. Confirm the TestPyPI and PyPI Trusted Publisher records and GitHub environments above.
-3. Create and push an annotated tag `v1.2.2` from that exact commit. If the maintainer has already
+3. Create and push an annotated tag `v1.3.0` from that exact commit. If the maintainer has already
    configured a signing key, cryptographically sign the tag and verify its signature before push;
    release automation must not generate or select a maintainer credential implicitly.
 4. Approve the `testpypi` environment if configured to require review.

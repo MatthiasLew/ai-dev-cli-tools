@@ -25,6 +25,7 @@ from ai_dev_tools.community.schema import (
 )
 from ai_dev_tools.community.service import (
     enable_telemetry,
+    reset_autoflush_for_testing,
     start_background_autoflush,
     wait_for_autoflush,
 )
@@ -35,11 +36,14 @@ from ai_dev_tools.telemetry import import_usage
 
 @pytest.fixture(autouse=True)
 def isolate_telemetry_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_autoflush_for_testing()
     config_dir = tmp_path / "config"
     data_dir = tmp_path / "data"
     monkeypatch.setenv("AI_DEV_COMMUNITY_TELEMETRY_CONFIG_DIR", str(config_dir))
     monkeypatch.setenv("AI_DEV_COMMUNITY_TELEMETRY_DATA_DIR", str(data_dir))
     monkeypatch.delenv("AI_DEV_COMMUNITY_TELEMETRY_ENDPOINT", raising=False)
+    yield
+    reset_autoflush_for_testing()
 
 
 def test_smuggling_attempts_rejected_fail_closed_zero_network() -> None:
@@ -220,7 +224,9 @@ def test_mcp_delivery_workflow_autoflush(tmp_path: Path, monkeypatch: pytest.Mon
     assert "http://127.0.0.1:9999/events" in flushed_urls
 
 
-def test_mcp_telemetry_off_and_missing_endpoint_guards(tmp_path: Path) -> None:
+def test_mcp_telemetry_off_and_missing_endpoint_guards(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # 1. Telemetry OFF -> 0 events queued, 0 autoflush
     save_community_config("off", endpoint="http://127.0.0.1:9999/events")
     clear_queue()
@@ -241,6 +247,7 @@ def test_mcp_telemetry_off_and_missing_endpoint_guards(tmp_path: Path) -> None:
     assert thread is None
 
     # 2. Endpoint missing -> events queued locally, but 0 flush
+    monkeypatch.setattr("ai_dev_tools.community.config.DEFAULT_COMMUNITY_ENDPOINT", "")
     save_community_config("research", endpoint="")
     clear_queue()
 

@@ -28,6 +28,7 @@ from ai_dev_tools.community.service import (
     disable_telemetry,
     enable_telemetry,
     preview_telemetry,
+    reset_autoflush_for_testing,
     start_background_autoflush,
     wait_for_autoflush,
 )
@@ -38,11 +39,14 @@ from ai_dev_tools.telemetry import record_usage
 
 @pytest.fixture(autouse=True)
 def isolate_telemetry_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_autoflush_for_testing()
     config_dir = tmp_path / 'config'
     data_dir = tmp_path / 'data'
     monkeypatch.setenv('AI_DEV_COMMUNITY_TELEMETRY_CONFIG_DIR', str(config_dir))
     monkeypatch.setenv('AI_DEV_COMMUNITY_TELEMETRY_DATA_DIR', str(data_dir))
     monkeypatch.delenv('AI_DEV_COMMUNITY_TELEMETRY_ENDPOINT', raising=False)
+    yield
+    reset_autoflush_for_testing()
 
 
 # 1. Transport must reject invalid payload BEFORE network call

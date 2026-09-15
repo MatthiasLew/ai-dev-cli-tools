@@ -64,7 +64,7 @@ Minimal operational metrics concerning `ai-dev` execution itself.
 | `event_id` | string (UUIDv4) | Random UUID generated per event for deduplication |
 | `event_type` | string | Closed enum: `"command_run"` or `"provider_usage"` |
 | `telemetry_level` | string | `"basic"` |
-| `ai_dev_version` | string | Package version (e.g. `"1.2.2"`) |
+| `ai_dev_version` | string | Package version (e.g. `"1.3.0"`) |
 | `os_family` | string | Closed enum: `"windows"`, `"linux"`, `"macos"`, `"other"` |
 | `python_version` | string | Major.minor (e.g. `"3.12"`) |
 | `command_name` | string | Closed enum: `"check"`, `"scan"`, `"context"`, `"mcp"`, etc. |
@@ -191,7 +191,7 @@ If a custom endpoint override is specified, it is recorded under `"endpoint_over
 ### Endpoint Resolution Precedence
 1. Environment variable: `AI_DEV_COMMUNITY_TELEMETRY_ENDPOINT` (highest priority)
 2. User explicit override: `endpoint_override` in config file
-3. Package default: `DEFAULT_COMMUNITY_ENDPOINT` (currently empty — production collector not yet deployed)
+3. Package default: `DEFAULT_COMMUNITY_ENDPOINT` (`https://35.209.177.185.sslip.io/v1/events`)
 
 ---
 

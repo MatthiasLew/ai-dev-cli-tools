@@ -9,7 +9,7 @@ from typing import Any
 
 VALID_LEVELS = {"off", "basic", "research"}
 DEFAULT_LEVEL = "off"
-DEFAULT_COMMUNITY_ENDPOINT = ""
+DEFAULT_COMMUNITY_ENDPOINT = "https://35.209.177.185.sslip.io/v1/events"
 DEFAULT_ENDPOINT = DEFAULT_COMMUNITY_ENDPOINT  # Backward-compatible alias
 CONFIG_FILENAME = "community_telemetry.json"
 
@@ -18,7 +18,7 @@ CONFIG_FILENAME = "community_telemetry.json"
 class CommunityTelemetryConfig:
     telemetry_level: str = DEFAULT_LEVEL
     endpoint_override: str | None = None
-    default_endpoint: str = DEFAULT_COMMUNITY_ENDPOINT
+    default_endpoint: str | None = None
 
     @property
     def endpoint(self) -> str:
@@ -31,7 +31,12 @@ class CommunityTelemetryConfig:
             return env.strip()
         if self.endpoint_override and self.endpoint_override.strip():
             return self.endpoint_override.strip()
-        return self.default_endpoint or ""
+        eff = (
+            DEFAULT_COMMUNITY_ENDPOINT
+            if self.default_endpoint is None
+            else self.default_endpoint
+        )
+        return eff or ""
 
     @property
     def is_enabled(self) -> bool:
@@ -79,7 +84,7 @@ def get_user_data_dir() -> Path:
 
 
 def load_community_config(
-    default_endpoint: str = DEFAULT_COMMUNITY_ENDPOINT,
+    default_endpoint: str | None = None,
 ) -> CommunityTelemetryConfig:
     config_path = get_user_config_dir() / CONFIG_FILENAME
     level = DEFAULT_LEVEL

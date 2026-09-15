@@ -382,8 +382,9 @@ def test_transport_edge_cases() -> None:
         assert r500.retryable
 
 
-def test_service_edge_cases(tmp_path: Path) -> None:
+def test_service_edge_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # flush_telemetry when not configured
+    monkeypatch.setattr("ai_dev_tools.community.config.DEFAULT_COMMUNITY_ENDPOINT", "")
     save_community_config("basic", endpoint="")
     r_flush = flush_telemetry(tmp_path)
     assert r_flush.status == "warning"

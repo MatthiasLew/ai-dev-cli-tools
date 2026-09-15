@@ -48,7 +48,7 @@ def test_cli_telemetry_sharing_status(capsys: pytest.CaptureFixture[str]) -> Non
     assert exit_code == 0
     captured = capsys.readouterr().out
     assert "Community telemetry: OFF" in captured
-    assert "Endpoint: not configured" in captured
+    assert "Endpoint: configured" in captured
     assert "Queued events: 0" in captured
 
 

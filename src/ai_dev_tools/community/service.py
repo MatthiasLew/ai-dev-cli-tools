@@ -243,6 +243,16 @@ def wait_for_autoflush(timeout: float = 0.05) -> None:
     if _autoflush_thread is not None and _autoflush_thread.is_alive():
         with contextlib.suppress(Exception):
             _autoflush_thread.join(timeout=timeout)
+    if _autoflush_thread is not None and not _autoflush_thread.is_alive():
+        _autoflush_thread = None
+
+
+def reset_autoflush_for_testing() -> None:
+    global _autoflush_thread
+    if _autoflush_thread is not None and _autoflush_thread.is_alive():
+        with contextlib.suppress(Exception):
+            _autoflush_thread.join(timeout=0.1)
+    _autoflush_thread = None
 
 
 def record_command_event(

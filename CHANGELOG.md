@@ -1,18 +1,29 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 - 2026-09-15
 
-- Fix #78: recognize Node spec/TAP summaries without matching `recoverable` as coverage.
-- Fix #79: execute selected `.mjs`/`.cjs` tests, retain broad fallback commands, and fail
-  explicitly when selected tests have no runnable validation plan.
-- Fix #80: preserve source prefixes under small content budgets, document content-only
-  `max_chars`, measure actual artifact sizes, and distinguish receipt/content truncation.
-- Preserve numeric parser error counts and restrict pytest arguments to Python selections.
-- Prevent `finish` from approving incomplete, blocked or invalid validation.
-- Drain cancellable subprocess pipes while waiting and preserve output captured before timeout.
-- Add regression coverage and a repository audit with prioritized follow-up recommendations.
-
-## Unreleased
+- **Community Telemetry**: Add privacy-preserving, voluntary, opt-in telemetry (`OFF`, `BASIC`, `RESEARCH`).
+  - Strict client allowlist schema; source code, prompts, model responses, repository names, file paths, user identifiers, and credentials are never collected.
+  - Transparent user control via `ai-dev telemetry sharing` commands (`status`, `enable basic`, `enable research`, `disable`, `preview`, `flush`).
+  - Bounded local disk queue with automatic retention pruning (max 1,000 events, max 7 days, max 32 KB per event).
+  - Single-flight non-blocking background transport worker.
+  - Support for research-level provider usage metrics collected via MCP tool (`record_usage`) and CLI usage imports.
+- **Production Telemetry Collector**: Introduce the self-contained production backend collector (`collector/`):
+  - Fast, auditable FastAPI ingestion endpoint (`POST /v1/events`) with liveness (`/health`) and readiness (`/ready`) probes.
+  - Fail-closed payload validation and streaming body size enforcement (32 KB limit).
+  - In-memory bounded sliding-window rate limiter with single-IP trusted reverse proxy sanitization.
+  - Idempotent deduplication on primary key `event_id`.
+  - PostgreSQL 16 storage backed by versioned Alembic migrations.
+  - Automated 90-day retention cleanup.
+  - Privacy-safe logging with zero client input, path, or credential leakage.
+  - Configured default HTTPS production endpoint (`https://35.209.177.185.sslip.io/v1/events`).
+- **Validation & Runner Hardening**:
+  - Fix #78: Recognize Node spec/TAP summaries without matching `recoverable` as coverage.
+  - Fix #79: Execute selected `.mjs`/`.cjs` tests, retain broad fallback commands, and fail explicitly when selected tests have no runnable validation plan.
+  - Fix #80: Preserve source prefixes under small content budgets, document content-only `max_chars`, measure actual artifact sizes, and distinguish receipt/content truncation.
+  - Preserve numeric parser error counts and restrict pytest arguments to Python selections.
+  - Prevent `finish` from approving incomplete, blocked, or invalid validation.
+  - Drain cancellable subprocess pipes while waiting and preserve output captured before timeout.
 
 ## 1.2.2 - 2026-09-08
 
