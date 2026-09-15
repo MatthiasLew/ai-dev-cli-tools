@@ -239,7 +239,7 @@ def main() -> int:
 
     # MCP Usage Record
     mcp_server = LocalMcpServer(tmp_dir)
-    rpc_res = mcp_server._handle_tool_call(
+    rpc_res = mcp_server.handle(
         {
             "jsonrpc": "2.0",
             "id": "req-mcp-e2e-pg",
