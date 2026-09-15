@@ -8,6 +8,7 @@ Can also be executed locally:
 """
 from __future__ import annotations
 
+# ruff: noqa: E402
 import json
 import os
 import sys
@@ -16,6 +17,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker

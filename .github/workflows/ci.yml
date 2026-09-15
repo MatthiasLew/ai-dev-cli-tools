@@ -165,6 +165,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://telemetry_user:test_ci_password_123@localhost:5432/telemetry
           COLLECTOR_URL: http://127.0.0.1:8000
+          PYTHONPATH: .
         run: |
           docker run -d --name test-collector --network host \
             -e DATABASE_URL=postgresql+psycopg://telemetry_user:test_ci_password_123@localhost:5432/telemetry \
