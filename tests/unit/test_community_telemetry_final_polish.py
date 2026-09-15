@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -35,7 +36,7 @@ from ai_dev_tools.telemetry import import_usage
 
 
 @pytest.fixture(autouse=True)
-def isolate_telemetry_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def isolate_telemetry_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     reset_autoflush_for_testing()
     config_dir = tmp_path / "config"
     data_dir = tmp_path / "data"
