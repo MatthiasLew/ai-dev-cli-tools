@@ -16,7 +16,7 @@ TIMESTAMP_HOUR_REGEX = re.compile(
 )
 PYTHON_VERSION_REGEX = re.compile(r"^3\.\d+$")
 AI_DEV_VERSION_REGEX = re.compile(
-    r"^\d+\.\d+(?:\.\d+)?(?:(?:a|b|rc|alpha|beta|dev|post)\d*|\.(?:dev|post)\d*|-(?:a|b|rc|alpha|beta|dev|post)\.?\d*)*(?:\+[a-zA-Z0-9._-]+)?$"
+    r"^\d+\.\d+(?:\.\d+)?(?:[-.]?(?:a|b|rc|alpha|beta)\.?\d*)?(?:[-.]?(?:dev|post)\.?\d*)?(?:\+[a-zA-Z0-9._-]+)?$"
 )
 
 OS_FAMILIES = {"windows", "linux", "macos", "other"}
