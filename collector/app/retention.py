@@ -62,7 +62,6 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     with get_session() as session:
         purged = delete_expired_events(session, days=args.days, dry_run=args.dry_run)
         action = "would be purged" if args.dry_run else "purged"
@@ -71,4 +70,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     sys.exit(main())

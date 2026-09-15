@@ -93,5 +93,5 @@ def check_db_health(target_engine: Any = engine) -> bool:
             conn.execute(text("SELECT 1"))
         return True
     except Exception as exc:
-        logger.warning("Database health check failed: %s", exc)
+        logger.warning("Database readiness check failed: %s", type(exc).__name__)
         return False

@@ -8,13 +8,14 @@ Lightweight, privacy-preserving, fail-closed production collector for `ai-dev` C
 
 1. **No User Tracking**: Does not assign, store, or generate user IDs, device fingerprints, or machine identifiers.
 2. **No Persistent IP Logging**: IP addresses are used solely in transient in-memory token buckets for rate limiting and are never written to disk or database. Access logs must be disabled or sanitized at the edge reverse proxy.
-3. **Strict Trusted Proxy Model**: By default, `TRUST_PROXY_HEADERS=false` and client IP is extracted from the direct peer (`request.client.host`). `X-Forwarded-For` is only parsed if explicitly enabled and the connecting peer IP matches `TRUSTED_PROXY_IPS` / `TRUSTED_PROXY_NETWORKS`.
-4. **Hard-Bounded Rate Limiter**: Rate limiter state is backed by an `OrderedDict` with LRU and stale eviction, guaranteeing `len(_buckets) <= MAX_ENTRIES` under adversarial key generation.
+3. **Strict Trusted Proxy Model & Single-IP Defense-in-Depth**: By default, `TRUST_PROXY_HEADERS=false` and client IP is extracted from the direct peer (`request.client.host`). `X-Forwarded-For` is only parsed if explicitly enabled and the connecting peer IP matches `TRUSTED_PROXY_IPS` networks. Furthermore, the reverse proxy must sanitize `X-Forwarded-For: $remote_addr;` and the collector strictly accepts only a single forwarded IP (any multi-value comma-separated header is rejected and falls back to peer IP).
+4. **Hard-Bounded Rate Limiter**: Rate limiter state is backed by an `OrderedDict` with LRU and stale eviction, guaranteeing `len(_buckets) <= MAX_ENTRIES` (bounds: 100 to 1,000,000) under adversarial key generation.
 5. **Streaming Body Limit**: Request body is read incrementally via streaming chunks. Payloads exceeding 32 KB (`32,768 bytes`) are aborted immediately with `413 Content Too Large` without full buffer allocation.
 6. **Explicit Schema Migrations**: Managed by Alembic (`collector/alembic/`). Production startup never performs silent `create_all()` mutations.
 7. **No Code, Prompts, or Paths**: Strict fail-closed schema validation automatically rejects any payload containing unknown keys, file paths, code snippets, or prompt text.
-8. **90-Day Raw Retention**: Automated retention script purges raw records older than 90 days based strictly on server `received_at` timestamp.
-9. **Idempotent Ingestion**: `event_id` is an RFC 4122 UUIDv4 used exclusively as a deduplication primary key (`ON CONFLICT DO NOTHING`). Duplicate submissions return `200 OK` (`{"status": "accepted", "duplicate": true}`) without duplicate writes.
+8. **Privacy-Safe Application Logging**: Application logs never record raw payload contents, field values, model names, paths, emails, client IPs, or database credentials. Validation errors log controlled category codes only, and storage failures log exception type names only.
+9. **90-Day Raw Retention**: Automated retention script purges raw records older than 90 days based strictly on server `received_at` timestamp.
+10. **Idempotent Ingestion**: `event_id` is an RFC 4122 UUIDv4 used exclusively as a deduplication primary key (`ON CONFLICT DO NOTHING`). Duplicate submissions return `200 OK` (`{"status": "accepted", "duplicate": true}`) without duplicate writes.
 
 ---
 

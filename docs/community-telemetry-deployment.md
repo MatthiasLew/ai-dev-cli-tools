@@ -107,6 +107,8 @@ telemetry.ai-dev.example.com {
             output discard
         }
         reverse_proxy collector:8000 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
             transport http {
                 read_timeout 10s
                 write_timeout 10s
@@ -152,13 +154,15 @@ server {
     client_body_buffer_size 32k;
 
     # PRIVACY CRITICAL: Completely disable access log for /v1/events
+    # SECURITY CRITICAL: Sanitize X-Forwarded-For to prevent client-controlled spoofing.
+    # Use $remote_addr exclusively (DO NOT use $proxy_add_x_forwarded_for).
     location = /v1/events {
         access_log off;
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 10s;
         proxy_send_timeout 10s;
@@ -275,3 +279,7 @@ Before pointing production clients to this endpoint, verify each item:
 - [ ] **Deduplication**: Submitting the same `event_id` twice returns `200 OK` with `{"duplicate": true}` on the second call without creating a second record.
 - [ ] **Alembic Migrations**: `python -m alembic -c collector/alembic.ini current` reports `head`.
 - [ ] **Retention Job**: `python -m app.retention --dry-run` successfully connects and reports expired count based on `received_at`.
+- [ ] **XFF Sanitization**: Reverse proxy replaces `X-Forwarded-For` with `$remote_addr` (single IP), and collector rejects multi-IP chains.
+- [ ] **Privacy-Safe Logging**: Application logs never contain raw payload values, field contents, client IPs, or database credentials (controlled error categories only).
+- [ ] **Docker + PostgreSQL Ingestion E2E**: Verified end-to-end event ingestion against live PostgreSQL instance.
+

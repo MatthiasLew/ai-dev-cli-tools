@@ -87,14 +87,15 @@ def extract_transient_ip(request: Request) -> str:
     if not forwarded:
         return peer_ip
 
-    # Leftmost token represents the originating client IP in a standard proxy chain
-    candidate_ip = forwarded.split(",")[0].strip()
-    if not candidate_ip:
+    forwarded_clean = forwarded.strip()
+    # Defense-in-depth: require sanitized single-IP forwarded header.
+    # Multi-value headers (e.g. "spoofed, real") violate contract -> fallback to peer IP.
+    if "," in forwarded_clean:
         return peer_ip
 
     try:
-        ipaddress.ip_address(candidate_ip)
-        return candidate_ip
+        ipaddress.ip_address(forwarded_clean)
+        return forwarded_clean
     except ValueError:
         # Malformed X-Forwarded-For -> fallback to peer IP
         return peer_ip
@@ -163,14 +164,14 @@ async def ingest_event(
     try:
         payload = json.loads(body.decode("utf-8"))
     except Exception:
-        logger.info("Rejected event: malformed_json")
+        logger.info("Rejected telemetry event: malformed_json")
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"status": "rejected", "error": "validation_failed"},
         )
 
     if not isinstance(payload, dict):
-        logger.info("Rejected event: top-level payload not a JSON object")
+        logger.info("Rejected telemetry event: payload_not_dict")
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"status": "rejected", "error": "validation_failed"},
@@ -180,7 +181,7 @@ async def ingest_event(
     try:
         validate_ingest_payload(payload)
     except ValidationError as err:
-        logger.info("Rejected event validation failure [%s]: %s", err.category, err.message)
+        logger.info("Rejected telemetry event: %s", err.category)
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"status": "rejected", "error": "validation_failed"},
@@ -190,7 +191,7 @@ async def ingest_event(
     try:
         success, is_duplicate = insert_telemetry_event(payload)
     except Exception as exc:
-        logger.error("Failed to store telemetry event: %s", exc)
+        logger.error("Telemetry storage failure: %s", type(exc).__name__)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"status": "error", "error": "storage_failed"},

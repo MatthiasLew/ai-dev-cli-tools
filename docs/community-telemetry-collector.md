@@ -73,26 +73,38 @@ Readiness probe: confirms the collector can successfully query the backing datab
 The collector operates with zero client trust:
 
 1. **Streaming Body Size Limit**: Request body is read incrementally via streaming chunks. If total bytes exceed 32,768 bytes, the connection is immediately aborted with `413 Content Too Large` without full JSON buffer allocation.
-2. **Trusted Proxy Model**:
+2. **Trusted Proxy Model & Single-IP Defense-in-Depth**:
    - Default: `TRUST_PROXY_HEADERS=false`. The client IP is derived from the direct peer address (`request.client.host`).
-   - If `TRUST_PROXY_HEADERS=true`: `X-Forwarded-For` is only parsed if the direct peer IP belongs to `TRUSTED_PROXY_IPS` / `TRUSTED_PROXY_NETWORKS`. Otherwise, spoofed headers are ignored.
+   - If `TRUST_PROXY_HEADERS=true`: The reverse proxy MUST sanitize the header by setting `X-Forwarded-For: $remote_addr;`. The collector only trusts `X-Forwarded-For` if the direct peer IP belongs to `TRUSTED_PROXY_IPS` networks.
+   - Single-IP defense-in-depth: Collector strictly expects a single IP in `X-Forwarded-For`. Any comma-separated multi-value header (e.g. `"spoofed, real"`) is rejected and falls back to the direct peer IP.
 3. **Hard-Bounded Rate Limiter**:
-   - Stored in an `OrderedDict` with LRU eviction.
-   - Enforces an invariant that `len(_buckets) <= MAX_ENTRIES` (default 10,000) under any adversarial key flooding attack.
-4. **No Schema Coercion**: Types must match strictly (e.g. `true` is never coerced to `1`, `"120"` is never coerced to `120`).
-5. **Strict Top-Level Key Allowlist**:
+   - Stored in an `OrderedDict` with LRU eviction and stale bucket cleanup.
+   - Enforces an invariant that `len(_buckets) <= MAX_ENTRIES` (bounds: 100 to 1,000,000; default 10,000) under any adversarial key flooding attack.
+4. **Privacy-Safe Application Logging**:
+   - Application logs NEVER record raw event payloads, user data, client IPs, model names, paths, emails, or credentials.
+   - Validation failures log exclusively controlled error categories (e.g. `unexpected_keys`, `invalid_model`, `malformed_json`).
+   - Storage and database failures log only exception type names (e.g. `OperationalError`), never raw SQL or connection strings.
+5. **No Schema Coercion**: Types must match strictly (e.g. `true` is never coerced to `1`, `"120"` is never coerced to `120`).
+6. **Strict Top-Level Key Allowlist**:
    - `basic`: Exactly the 11 keys (`schema_version`, `event_id`, `event_type`, `timestamp_hour`, `os_family`, `python_version`, `ai_dev_version`, `command_name`, `command_category`, `command_outcome`, `duration_bucket`).
    - `research`: Only the approved 33 keys. Any unknown key causes immediate `400 Bad Request`.
-6. **Format & Identity Constraints**:
+7. **Configuration Bounds Enforcement**:
+   - `RATE_LIMIT_PER_MINUTE`: 1 to 10,000.
+   - `RATE_LIMIT_MAX_ENTRIES`: 100 to 1,000,000.
+   - `RETENTION_DAYS`: 1 to 3,650.
+   - `MAX_PAYLOAD_BYTES`: 1,024 to 1,048,576.
+   - Startup failure if `TRUST_PROXY_HEADERS=true` with empty `TRUSTED_PROXY_IPS` or invalid CIDRs.
+   - Startup failure if `ENVIRONMENT=production` and `database_url` uses SQLite.
+8. **Format & Identity Constraints**:
    - `schema_version`: Must strictly equal integer `1`.
    - `event_id`: Valid UUIDv4 string.
    - `timestamp_hour`: Must strictly match UTC hour format `YYYY-MM-DDTHH:00:00Z`.
    - `python_version`: Major.minor string `^3\.\d+$`.
    - `ai_dev_version`: PEP 440 semver string starting with digits, length 1–32.
-7. **Event Type Invariants**:
+9. **Event Type Invariants**:
    - `command_run`: Allowed levels `basic` or `research`. When `research`, `origin` must strictly be `null`.
    - `provider_usage`: Allowed level `research` only. `origin` must be one of `{"mcp", "import", "unknown"}`. `command_name` must be `"mcp"` or `"telemetry"`, and `command_category` must be `"telemetry"`.
-8. **Numeric Bounds & Token Consistency**:
+10. **Numeric Bounds & Token Consistency**:
    - Finite floats only: Reject `NaN`, `Infinity`, `-Infinity`.
    - `duration_seconds`: $0.0 \le x \le 604800.0$.
    - Tokens: $0 \le \text{tokens} \le 100,000,000$.

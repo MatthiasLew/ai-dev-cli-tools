@@ -34,19 +34,25 @@ class Settings:
                     networks.append(ipaddress.ip_network(cleaned, strict=False))
                 except ValueError as exc:
                     raise ValueError(f"Invalid trusted proxy IP/network: '{cleaned}'") from exc
+        if self.trust_proxy_headers and not networks:
+            raise ValueError("TRUST_PROXY_HEADERS is enabled but TRUSTED_PROXY_IPS is empty")
         object.__setattr__(self, "trusted_proxy_networks", tuple(networks))
 
     def validate(self) -> None:
-        if self.rate_limit_per_minute <= 0:
+        if self.rate_limit_per_minute < 1 or self.rate_limit_per_minute > 10_000:
             raise ValueError(
-                f"RATE_LIMIT_PER_MINUTE must be positive, got {self.rate_limit_per_minute}"
+                f"RATE_LIMIT_PER_MINUTE must be between 1 and 10000, "
+                f"got {self.rate_limit_per_minute}"
             )
-        if self.rate_limit_max_entries <= 0:
+        if self.rate_limit_max_entries < 100 or self.rate_limit_max_entries > 1_000_000:
             raise ValueError(
-                f"RATE_LIMIT_MAX_ENTRIES must be positive, got {self.rate_limit_max_entries}"
+                f"RATE_LIMIT_MAX_ENTRIES must be between 100 and 1000000, "
+                f"got {self.rate_limit_max_entries}"
             )
-        if self.retention_days <= 0:
-            raise ValueError(f"RETENTION_DAYS must be positive, got {self.retention_days}")
+        if self.retention_days < 1 or self.retention_days > 3650:
+            raise ValueError(
+                f"RETENTION_DAYS must be between 1 and 3650, got {self.retention_days}"
+            )
         if self.max_payload_bytes < 1024 or self.max_payload_bytes > 1_048_576:
             raise ValueError(
                 f"MAX_PAYLOAD_BYTES must be between 1024 and 1048576, got {self.max_payload_bytes}"
