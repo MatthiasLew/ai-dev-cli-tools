@@ -1,0 +1,80 @@
+# ==========================================================================
+# Production Docker Compose Template (Reference GCE / VPS Architecture)
+# ========================================================================
+# WARNING: Do NOT commit populated .env files with real credentials.
+# Ensure POSTGRES_PASSWORD and DATABASE_URL are loaded from /opt/ai-dev-collector/.env.
+#
+# Usage:
+#   docker compose -f docker-compose.production.yml up -d --build
+# ========================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_USER: telemetry_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - postgres_production_data:/var/lib/postgresql/data
+    networks:
+      - internal_net
+    # IMPORTANT: Do NOT publish port 5432 to host or public interfaces in production.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telemetry_user -d telemetry"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: collector/Dockerfile
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      ENVIRONMENT: production
+    networks:
+      - internal_net
+    command: ["alembic", "-c", "collector/alembic.ini", "upgrade", "head"]
+
+  collector:
+    build:
+      context: ../..
+      dockerfile: collector/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE*-60}
+      RATE_LIMIT_MAX_ENTRIES: ${RATE_LIMIT_MAX_ENTRIES:-10000}
+      RETENTION_DAYS: ${RETENTION_DAYS:-90}
+      MAX_PAYLOAD_BYTES: ${MAX_PAYLOAD_BYTES:-32768}
+      ENVIRONMENT: production
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1,172.16.0.0/12,10.0.0.0/8}
+    ports:
+      # Bound strictly to loopback interface for local reverse proxy (Caddy)
+      - "127.0.0.1:8000:8000"
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD-SHELLLb_SEP", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  internal_net:
+    driver: bridge
+
+volumes:
+  postgres_production_data:

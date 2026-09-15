@@ -1,0 +1,48 @@
+# ==========================================================================
+# Caddyfile Production Template
+# ==========================================================================
+# Replace with your domain or sslip.io host (e.g. 35.209.177.185.sslip.io)
+telemetry.example.com {
+    encode gzip zstd
+
+    # Enforce request body size limit at edge
+    request_body {
+        max_size 32KiB
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+
+    # PRIVACY-CRITICAL: Discard access logging for telemetry ingestion
+    @telemetry path /v1/events
+    handle @telemetry {
+        log {
+            output discard
+        }
+        reverse_proxy 127.0.0.1:8000 {
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+            transport http {
+                read_timeout 10s
+                write_timeout 10s
+            }
+        }
+    }
+
+    # Health & readiness probes
+    @health path /health /ready
+    handle @health {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Default deny
+    handle {
+        respond "Not Found" 404
+    }
+}

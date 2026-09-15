@@ -39,7 +39,7 @@ Community Telemetry strictly forbids and never includes:
 - File names, relative paths, absolute paths, or current working directory (`cwd`)
 - Hostnames, usernames, or email addresses
 - API keys, authentication tokens, credentials, or environment variables
-- IP addresses in payload fields
+- IP addresses in payload fields (client IP is never stored in the database; edge reverse proxy access logs for `/v1/events` are discarded, and transient IP is used solely in-memory for bounded rate limiting)
 - Raw CLI arguments or task prompt text
 - Issue, PR, or project titles
 - Arbitrary metadata from plugins, tools, or providers
@@ -160,7 +160,7 @@ Before any event is written to queue or sent over the network, `validate_communi
    - `event_id`: must be a valid UUIDv4.
    - `timestamp_hour`: must match exact UTC hour format `YYYY-MM-DDTHH:00:00Z`.
    - `python_version`: must match major.minor format `^3\.\d+$` (e.g. `3.11`, `3.12`).
-    - `ai_dev_version`: PEP 440 / semver format starting with digits (e.g. `1.2.2`, `1.3.0rc1`), bounded to 32 characters. Arbitrary identifiers or build strings are rejected.
+    - `ai_dev_version`: PEP 440 / semver format starting with digits (e.g. `1.3.0`, `1.3.0rc1`), bounded to 32 characters. Arbitrary identifiers or build strings are rejected.
 5. **Numeric Bounds & Types**:
    - Booleans are rejected as integers (`True` cannot be smuggled as `1`).
    - All token and count fields must be non-negative integers within safe upper bounds (e.g. tokens `<= 100_000_000`, tool calls `<= 100_000`, files `<= 1_000_000`).
@@ -178,7 +178,12 @@ Community Telemetry settings are stored at the user level, **not** inside projec
 
 - **Windows**: `%LOCALAPPDATA%\ai-dev\community_telemetry.json`
 - **Linux**: `$XDG_CONFIG_HOME/ai-dev/community_telemetry.json` (fallback: `~/.config/ai-dev/community_telemetry.json`)
-- **macOS**: `~/Library/Application Support/ai-dev/community_telemetry.json` (fallback: `~/.config/ai-dev/community_telemetry.json`)
+- **macOS**: `~/Library/Application Support/ai-dev/community_telemetry.json`
+
+Local event queues and spools are kept separate under user data paths:
+- **Windows**: `%LOCALAPPDATA%\ai-dev\community-telemetry\`
+- **Linux**: `$XDG_DATA_HOME/ai-dev/community-telemetry/` (fallback: `~/.local/share/ai-dev/community-telemetry/`)
+- **macOS**: `~/Library/Application Support/ai-dev/community-telemetry/`
 
 ### Configuration Content
 ```json

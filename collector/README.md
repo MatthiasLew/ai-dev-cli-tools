@@ -87,14 +87,18 @@ python -m alembic -c collector/alembic.ini upgrade head
 # 2. Run collector locally
 uvicorn collector.app.main:app --host 127.0.0.1 --port 8000
 ```
-Or with Docker Compose:
+Or with Docker Compose for local development:
 ```bash
 docker compose -f collector/docker-compose.yml up -d --build
 ```
 
+> [!NOTE]
+> `collector/docker-compose.yml` is strictly configured for local testing and CI (with localhost port bindings and dev fallback passwords). Never deploy it to production.
+
 ### Production Deployment (PostgreSQL Required)
 In production (`ENVIRONMENT=production`):
 - `DATABASE_URL` **must** be a PostgreSQL connection string (`postgresql+psycopg://...`). SQLite will fail fast on startup.
+- Follow the production architecture in [`docs/community-telemetry-deployment.md`](../docs/community-telemetry-deployment.md) and use the safe deployment templates in [`deploy/gce/`](../deploy/gce/).
 - Migrations **must** be executed before launching the collector:
   ```bash
   alembic -c collector/alembic.ini upgrade head

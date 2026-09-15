@@ -394,6 +394,6 @@ acceptance evidence required for future changes.
 - Auto-commit, auto-push, destructive cleanup, remote source transmission, and GUI are intentionally out of scope.
 
 ## Intentional Limits
-Version 1.2.0 does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
+ai-dev does not reset, clean, commit, push, merge, clone organizations, synchronize repositories, delete containers, publish releases, or remove user files.
 
 Shell completion scripts are generated with `ai-dev completion bash|zsh|fish|powershell` and can be sourced or installed using the normal mechanism for the selected shell.
