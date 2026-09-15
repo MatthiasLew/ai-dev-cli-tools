@@ -25,7 +25,10 @@ if str(ROOT_DIR) not in sys.path:
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
-from ai_dev_tools.community.builder import build_community_payload
+from ai_dev_tools.community.builder import (
+    build_community_payload,
+    build_provider_usage_payload,
+)
 from ai_dev_tools.community.config import save_community_config
 from ai_dev_tools.community.queue import clear_queue, enqueue_event, queue_size
 from ai_dev_tools.community.service import flush_telemetry
@@ -156,28 +159,16 @@ def main() -> int:
     # Step 5: Research provider_usage Event
     # --------------------------------------------------------------------------
     print("\n[Step 5] Ingesting valid RESEARCH provider_usage event...")
-    research_payload = {
-        "schema_version": 1,
-        "event_id": "b0000000-0000-4000-8000-000000000002",
-        "event_type": "provider_usage",
-        "telemetry_level": "research",
-        "timestamp_hour": "2026-09-14T20:00:00Z",
-        "os_family": "linux",
-        "python_version": "3.13",
-        "ai_dev_version": "1.2.2",
-        "command_name": "mcp",
-        "command_category": "telemetry",
-        "command_outcome": "success",
-        "duration_bucket": "0_to_1s",
-        "origin": "mcp",
-        "ai_client": "claude",
-        "model": "claude-3-5-sonnet",
-        "input_tokens": 1200,
-        "cached_input_tokens": 400,
-        "output_tokens": 300,
-        "total_tokens": 1500,
-        "tool_call_count": 5,
-    }
+    research_payload = build_provider_usage_payload(
+        client="claude",
+        model="claude-3-5-sonnet",
+        input_tokens=1200,
+        cached_input_tokens=400,
+        output_tokens=300,
+        origin="mcp",
+    )
+    research_payload["event_id"] = "b0000000-0000-4000-8000-000000000002"
+    research_payload["tool_call_count"] = 5
     research_id = research_payload["event_id"]
 
     status, body = _http_request("POST", EVENTS_ENDPOINT, payload=research_payload)
