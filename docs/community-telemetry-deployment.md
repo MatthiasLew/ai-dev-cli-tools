@@ -102,13 +102,17 @@ mkdir -p /opt/ai-dev-collector
 cd /opt/ai-dev-collector
 ```
 
-Copy the repository and create `/opt/ai-dev-collector/.env` outside Git:
+Copy the repository and configure the production environment file:
 ```bash
-cp deploy/gce/.env.example .env
-chmod 600 .env
+cp deploy/gce/.env.example deploy/gce/.env
+chmod 600 deploy/gce/.env
+
+# Generate a strong 32-byte hex password (hex avoids URL encoding issues)
+PASSWORD=$(openssl rand -hex 32)
+sed -i "s/GENERATE_STRONG_RANDOM_PASSWORD_HERE/${PASSWORD}/g" deploy/gce/.env
 ```
 
-Generate a strong random password and configure `.env`:
+Example configured `deploy/gce/.env`:
 ```env
 POSTGRES_PASSWORD=GENERATE_STRONG_RANDOM_PASSWORD_HERE
 DATABASE_URL=postgresql+psycopg://telemetry_user:GENERATE_STRONG_RANDOM_PASSWORD_HERE@db:5432/telemetry
@@ -129,8 +133,7 @@ In production, use the production compose template (`deploy/gce/docker-compose.p
 
 Launch services:
 ```bash
-cp deploy/gce/docker-compose.production.example.yml docker-compose.production.yml
-docker compose -f docker-compose.production.yml up -d --build
+docker compose --env-file deploy/gce/.env -f deploy/gce/docker-compose.production.example.yml up -d --build
 ```
 
 ### 4. Caddy Reverse Proxy Configuration (Edge TLS & Log Privacy)
@@ -210,7 +213,7 @@ The official Community Telemetry collector is deployed on Google Compute Engine 
 The collector includes an automated retention cleanup module (`collector/app/retention.py`).
 
 Raw events older than 90 days are purged based strictly on server `received_at`:
-- Client timestamps (`timestamp_hour`) do **never** control deletion.
+- Client timestamps (`timestamp_hour`) **never** control deletion.
 - Expired events are purged in batches to prevent database transaction locks.
 
 ### Running Retention Cleanup Manually
@@ -240,7 +243,7 @@ After=docker.service
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/ai-dev-collector
-ExecStart=/usr/bin/docker compose -f docker-compose.production.yml exec -T collector python -m collector.app.retention --days 90
+ExecStart=/usr/bin/docker compose --env-file deploy/gce/.env -f deploy/gce/docker-compose.production.example.yml exec -T collector python -m collector.app.retention --days 90
 ```
 
 ---

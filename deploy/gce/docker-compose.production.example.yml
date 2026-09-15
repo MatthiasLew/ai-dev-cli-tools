@@ -1,15 +1,16 @@
-# ==========================================================================
+# ==============================================================================
 # Production Docker Compose Template (Reference GCE / VPS Architecture)
-# ========================================================================
+# ==============================================================================
 # WARNING: Do NOT commit populated .env files with real credentials.
-# Ensure POSTGRES_PASSWORD and DATABASE_URL are loaded from /opt/ai-dev-collector/.env.
+# Ensure POSTGRES_PASSWORD and DATABASE_URL are loaded from .env.
 #
 # Usage:
-#   docker compose -f docker-compose.production.yml up -d --build
-# ========================================================================
+#   docker compose --env-file deploy/gce/.env -f deploy/gce/docker-compose.production.example.yml up -d --build
+# ==============================================================================
 
 services:
   db:
+    container_name: ai-dev-db
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -28,6 +29,7 @@ services:
       retries: 5
 
   migrate:
+    container_name: ai-dev-migrate
     build:
       context: ../..
       dockerfile: collector/Dockerfile
@@ -43,6 +45,7 @@ services:
     command: ["alembic", "-c", "collector/alembic.ini", "upgrade", "head"]
 
   collector:
+    container_name: ai-dev-collector
     build:
       context: ../..
       dockerfile: collector/Dockerfile
@@ -54,7 +57,7 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
-      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE*-60}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       RATE_LIMIT_MAX_ENTRIES: ${RATE_LIMIT_MAX_ENTRIES:-10000}
       RETENTION_DAYS: ${RETENTION_DAYS:-90}
       MAX_PAYLOAD_BYTES: ${MAX_PAYLOAD_BYTES:-32768}
@@ -67,7 +70,7 @@ services:
     networks:
       - internal_net
     healthcheck:
-      test: ["CMD-SHELLLb_SEP", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
       timeout: 3s
       retries: 3

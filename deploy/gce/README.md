@@ -1,6 +1,6 @@
 # Reference Production Deployment Guide (GCE / VPS)
 
-This directory contains safe, auditable production templates for deploying the **ai-dev Community Telemetry Collector** on a Linux VPS (e.g. Google Compute Engine, Hetzner, AWS EC2) behind Caddy with strict log discards
+This directory contains safe, auditable production templates for deploying the **ai-dev Community Telemetry Collector** on a Linux VPS (e.g. Google Compute Engine, Hetzner, AWS EC2) behind Caddy with strict log discards.
 
 ---
 
@@ -27,29 +27,38 @@ cd /opt/ai-dev-collector
 Copy the repository and create a production `.env` file outside Git:
 
 ```bash
-cp deploy/gce/.env.example .official_env
-#edit .official_env and generate a strong random password:
-PASSWORD=$(openssl rand -base64 32)
-sed -i "s/GENERATE_STRONG_RANDOM_PASSWORD_HERE/${PASSWORD}/g" .official_env
-mv .official_env .env
-chmod 600 .env
-```J
+cp deploy/gce/.env.example deploy/gce/.env
+chmod 600 deploy/gce/.env
+
+# Generate a strong 32-byte hex password (hex avoids URL encoding issues)
+PASSWORD=$(openssl rand -hex 32)
+sed -i "s/GENERATE_STRONG_RANDOM_PASSWORD_HERE/${PASSWORD}/g" deploy/gce/.env
+```
+
+Review `deploy/gce/.env` to ensure `POSTGRES_PASSWORD` and `DATABASE_URL` match your deployment settings.
 
 ### 2. Launch Production Containers
 
-Rename or copy the production compose file:
+Run Docker Compose directly using the production template:
 
 ```bash
-cp deploy/gce/docker-compose.production.example.yml docker-compose.production.yml
-docker compose -f docker-compose.production.yml up -d --build
-```J
+docker compose --env-file deploy/gce/.env -f deploy/gce/docker-compose.production.example.yml up -d --build
+```
+
+Verify that all containers are healthy:
+
+```bash
+docker compose --env-file deploy/gce/.env -f deploy/gce/docker-compose.production.example.yml ps
+```
 
 ### 3. Configure Caddy
 
-Copy `Cyddyfile.example` to `/etc/caddy/Caddyfile`, update your domain, and reload Caddy:
+Copy `Caddyfile.example` to `/etc/caddy/Caddyfile`, replace `telemetry.example.com` with your actual domain or static IP DNS mapping (e.g. `35.209.177.185.sslip.io`), and reload Caddy:
 
 ```bash
-sodo systemctl reload caddy
+sudo cp deploy/gce/Caddyfile.example /etc/caddy/Caddyfile
+# Edit /etc/caddy/Caddyfile with your hostname
+sudo systemctl reload caddy
 ```
 
 ### 4. Automated 90-Day Retention Job
@@ -59,11 +68,11 @@ Add a daily cron job on the host to purge raw events older than 90 days based on
 ```bash
 # /etc/cron.d/ai-dev-telemetry-retention
 0 3 * * * root docker exec ai-dev-collector python -m collector.app.retention --days 90 >> /var/log/telemetry-retention.log 2>&1
-```J
+```
 
 ### 5. Operational Verification
 
-Test liveness and readiness probes:
+Test liveness and readiness probes through the public HTTPS endpoint:
 
 ```bash
 curl -i https://telemetry.example.com/health
