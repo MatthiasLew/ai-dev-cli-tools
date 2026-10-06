@@ -61,7 +61,7 @@ REQUIRED_STEPS = [
 REQUIRED_AGENT_REPORT_TOKENS = [
     "security-events: write",
     "persist-credentials: false",
-    "github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63",
+    "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2",
     "github.event.pull_request.head.repo.full_name == github.repository",
 ]
 
