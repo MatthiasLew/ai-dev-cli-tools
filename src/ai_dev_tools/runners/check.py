@@ -275,13 +275,12 @@ def run_check(
     return report
 
 
-def _project_python(root: Path) -> str:
-    win_python = root / ".venv" / "Scripts" / "python.exe"
-    if win_python.is_file():
-        return str(win_python)
-    posix_python = root / ".venv" / "bin" / "python"
-    if posix_python.is_file():
-        return str(posix_python)
+def _project_python(root: Path, configured_venv: str = ".venv") -> str:
+    for directory in dict.fromkeys((configured_venv, ".venv", "venv")):
+        for suffix in (Path("Scripts") / "python.exe", Path("bin") / "python"):
+            candidate = root / directory / suffix
+            if candidate.is_file():
+                return str(candidate)
     return sys.executable
 
 
@@ -291,7 +290,7 @@ def build_validation_plan(
     if settings.commands:
         return _configured_plan(settings.commands)
     root = settings.project_root
-    python_bin = _project_python(root)
+    python_bin = _project_python(root, settings.bootstrap.python_venv)
     tasks: list[CheckTask] = []
     if (root / "pyproject.toml").exists() or (root / "requirements.txt").exists():
         text = (

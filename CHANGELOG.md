@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix #97: Use the configured bootstrap Python environment, `.venv`, or `venv`
+  for detected validation commands on Windows and POSIX, preserving explicit commands.
+
 ## 1.3.0 - 2026-09-15
 
 - **Community Telemetry**: Add privacy-preserving, voluntary, opt-in telemetry (`OFF`, `BASIC`, `RESEARCH`).

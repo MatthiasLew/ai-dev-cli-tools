@@ -24,22 +24,92 @@ def test_build_validation_plan_detects_python_tools(tmp_path: Path) -> None:
     assert {task.name for task in plan} == {"black", "ruff", "mypy", "pytest"}
 
 
-def test_build_validation_plan_prefers_local_venv_python(tmp_path: Path) -> None:
-    import os
-
+@pytest.mark.parametrize("directory", [".venv", "venv", "custom-env"])
+@pytest.mark.parametrize("suffix", ["Scripts/python.exe", "bin/python"])
+def test_build_validation_plan_prefers_local_venv_python(
+    tmp_path: Path, directory: str, suffix: str
+) -> None:
     (tmp_path / "pyproject.toml").write_text(
-        "[project]\nname='demo'\n[project.optional-dependencies]\ndev=['ruff','mypy']\n",
+        "[project]\nname='demo'\n[project.optional-dependencies]\ndev=['ruff','mypy','black']\n",
         encoding="utf-8",
     )
-    if os.name == "nt":
-        venv_python = tmp_path / ".venv" / "Scripts" / "python.exe"
-    else:
-        venv_python = tmp_path / ".venv" / "bin" / "python"
+    (tmp_path / "tests").mkdir()
+    (tmp_path / ".ai-dev-tools.toml").write_text(
+        f'[bootstrap.python]\nvenv="{directory}"\n', encoding="utf-8"
+    )
+    venv_python = tmp_path / directory / suffix
     venv_python.parent.mkdir(parents=True)
     venv_python.write_text("", encoding="utf-8")
 
     plan = build_validation_plan(load_settings(tmp_path))
-    assert plan[0].command[0] == str(venv_python)
+    assert len(plan) == 4
+    assert all(task.command[0] == str(venv_python) for task in plan)
+
+
+@pytest.mark.parametrize(
+    ("configured", "available", "expected"),
+    [
+        ("custom-env", ["custom-env", ".venv", "venv"], "custom-env"),
+        ("custom-env", [".venv", "venv"], ".venv"),
+        ("custom-env", ["venv"], "venv"),
+        (".venv", [".venv", "venv"], ".venv"),
+        (".venv", ["venv"], "venv"),
+        ("venv", [".venv", "venv"], "venv"),
+        ("custom-env", [], None),
+    ],
+)
+def test_validation_python_environment_precedence(
+    tmp_path: Path, configured: str, available: list[str], expected: str | None
+) -> None:
+    import sys
+
+    (tmp_path / "requirements.txt").touch()
+    (tmp_path / "tests").mkdir()
+    settings = load_settings(tmp_path)
+    settings.bootstrap.python_venv = configured
+    for directory in available:
+        interpreter = tmp_path / directory / "bin" / "python"
+        interpreter.parent.mkdir(parents=True)
+        interpreter.touch()
+    plan = build_validation_plan(settings)
+    expected_python = str(tmp_path / expected / "bin" / "python") if expected else sys.executable
+    assert plan[0].command == [expected_python, "-m", "pytest"]
+
+
+def test_validation_preserves_explicit_commands_with_custom_environment(tmp_path: Path) -> None:
+    settings = load_settings(tmp_path)
+    settings.bootstrap.python_venv = "custom-env"
+    settings.commands = {"test": "explicit-python -m pytest -q"}
+    plan = build_validation_plan(settings)
+    assert plan[0].command == ["explicit-python", "-m", "pytest", "-q"]
+
+
+def test_validation_supports_absolute_environment_path(tmp_path: Path) -> None:
+    (tmp_path / "requirements.txt").touch()
+    (tmp_path / "tests").mkdir()
+    interpreter = tmp_path / "external-env" / "bin" / "python"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.touch()
+    settings = load_settings(tmp_path)
+    settings.bootstrap.python_venv = str(interpreter.parent.parent)
+    assert build_validation_plan(settings)[0].command[0] == str(interpreter)
+
+
+def test_validation_uses_each_workspace_environment(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"workspaces": ["packages/*"]}', encoding="utf-8"
+    )
+    child = tmp_path / "packages" / "api"
+    child.mkdir(parents=True)
+    (child / "requirements.txt").touch()
+    (child / "tests").mkdir()
+    interpreter = child / "venv" / "Scripts" / "python.exe"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.touch()
+    plan = build_validation_plan(load_settings(tmp_path))
+    assert len(plan) == 1
+    assert plan[0].command == [str(interpreter), "-m", "pytest"]
+    assert plan[0].workspace == "packages/api"
 
 
 
