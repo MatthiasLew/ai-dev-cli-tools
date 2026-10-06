@@ -4,6 +4,26 @@ import ai_dev_tools.runners.check as check
 from ai_dev_tools.utils.subprocess import CommandResult
 
 
+def test_check_preserves_executed_duration_in_json(tmp_path: Path) -> None:
+    import json
+
+    (tmp_path / "delay.py").write_text(
+        "import time\ntime.sleep(0.2)\nprint('duration probe passed')\n", encoding="utf-8"
+    )
+    (tmp_path / ".ai-dev-tools.toml").write_text(
+        "[commands]\ntest = 'python delay.py'\n", encoding="utf-8"
+    )
+    report = check.run_check(tmp_path, "full", use_cache=False)
+    result = report.summary["results"][0]
+    assert report.status == "success"
+    assert result["reuse"] == "executed"
+    assert result["cached"] is False
+    assert result["duration_seconds"] >= 0.2
+    report_path = tmp_path / ".ai/reports/check-full-latest.json"
+    saved = json.loads(report_path.read_text(encoding="utf-8"))
+    assert saved["summary"]["results"][0]["duration_seconds"] == result["duration_seconds"]
+
+
 def test_check_uses_configured_commands(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     (tmp_path / ".ai-dev-tools.toml").write_text(
         "[commands]\nlint='python --version'\ntest='python --version'\n", encoding="utf-8"

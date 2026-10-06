@@ -5,6 +5,31 @@ from ai_dev_tools.detectors import environment
 from ai_dev_tools.utils.subprocess import CommandResult
 
 
+def test_doctor_runs_resolved_executable(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    paths = {"python": "C:/PATH Python/python.exe", "docker": "C:/bin/docker.exe"}
+    monkeypatch.setattr(shutil, "which", paths.get)
+    monkeypatch.setattr(
+        environment,
+        "TOOLS",
+        (
+            environment.ToolSpec("python", "python", ["python", "--version"], required=True),
+            environment.ToolSpec("docker_compose", "docker", ["docker", "compose", "version"]),
+        ),
+    )
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], root: Path, timeout_seconds: int = 20) -> CommandResult:
+        calls.append(command)
+        version = "Python 3.14.0" if command[0] == paths["python"] else "Python 3.13.15"
+        return CommandResult(command, 0, version, "", 0.01)
+
+    monkeypatch.setattr(environment, "run_command", fake_run)
+    report = environment.run_doctor(tmp_path)
+    assert calls == [[paths["python"], "--version"], [paths["docker"], "compose", "version"]]
+    assert report.summary["tools"]["python"]["path"] == paths["python"]
+    assert report.summary["tools"]["python"]["version"] == "Python 3.14.0"
+
+
 def test_doctor_reports_missing_and_available(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(shutil, "which", lambda exe: "C:/bin/tool" if exe == "git" else None)
     monkeypatch.setattr(

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix #98: Detect tool versions using the resolved executable path, preserving
+  subcommand arguments and avoiding mismatched Python versions on Windows.
+- Fix #99: Preserve measured per-check durations in reports instead of replacing
+  them with the output parser's placeholder duration.
+
 - Fix #97: Use the configured bootstrap Python environment, `.venv`, or `venv`
   for detected validation commands on Windows and POSIX, preserving explicit commands.
 

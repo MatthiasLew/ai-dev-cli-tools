@@ -59,7 +59,7 @@ def run_doctor(project_root: Path) -> Report:
                 "required": spec.required,
             }
             continue
-        result = run_command(spec.version_command, project_root, timeout_seconds=20)
+        result = run_command([path, *spec.version_command[1:]], project_root, timeout_seconds=20)
         version = (
             mask_text(result.stdout or result.stderr).splitlines()[0]
             if result.combined_output

@@ -617,7 +617,6 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
         "workspace": task.workspace,
         "command": " ".join(result.command),
         "exit_code": result.exit_code,
-        "duration_seconds": result.duration_seconds,
         "timed_out": result.timed_out,
         "cancelled": result.cancelled,
         "failure_class": result.failure_class,
@@ -633,6 +632,7 @@ def _result_summary(task: CheckTask, result: CommandResult) -> dict[str, object]
         "failure_signature": failure_signature,
         "focused_rerun": (focused_rerun(task, initial_parsed) if failure_signature else None),
         **parsed,
+        "duration_seconds": result.duration_seconds,
     }
 
 
