@@ -4,6 +4,26 @@ Cross-platform Python CLI helpers for AI coding agents and humans who want conci
 
 `ai-dev` runs repeatable project checks locally, stores full logs under `.ai/logs/`, and returns compact Markdown/JSON summaries under `.ai/reports/`.
 
+## Ecosystem integrations
+
+### HOL Guard
+
+[HOL Guard](https://github.com/hashgraph-online/hol-guard) includes an opt-in
+`command.ai-dev` safety extension for reviewing sensitive `ai-dev` commands.
+The integration was [merged upstream in PR #2943](https://github.com/hashgraph-online/hol-guard/pull/2943)
+on October 12, 2026.
+
+The extension provides structured evidence for policy review of:
+
+- `ai-dev integrations install --force` — forced integration configuration overwrites.
+- `ai-dev index daemon start` / `stop` — background indexer lifecycle changes.
+- `ai-dev agents claim` / `release` — agent task coordination changes.
+
+It is registered as an **external, opt-in extension** in HOL Guard. See the
+[extension descriptor](https://github.com/hashgraph-online/hol-guard/blob/main/contributions/extensions/command.ai-dev.json)
+and [command rules](https://github.com/hashgraph-online/hol-guard/blob/main/contributions/command-sources/command.ai-dev.json)
+for the integration contract.
+
 ## Problem
 
 AI coding agents often spend tokens reading full test output, repository trees, dependency noise, repeated warnings, and raw Git diffs. This project follows one rule:
