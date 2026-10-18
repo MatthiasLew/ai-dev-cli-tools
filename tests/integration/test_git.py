@@ -114,7 +114,14 @@ def test_git_status_single_subprocess_call(tmp_path: Path, monkeypatch) -> None:
     report = inspect_git(tmp_path, detailed=False, write_reports=False)
 
     assert len(git_commands) == 1
-    assert git_commands[0] == ["git", "status", "--porcelain=v2", "--branch", "-z"]
+    assert git_commands[0] == [
+        "git",
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--untracked-files=all",
+        "-z",
+    ]
     assert report.summary["untracked_files"] == ["test.txt"]
     assert "DIRTY" in report.summary["states"]
 
@@ -217,4 +224,21 @@ def test_git_states_and_large_files(tmp_path: Path) -> None:
     assert res == ["big.bin"]
 
 
+def test_git_inspect_expands_nested_untracked_files(tmp_path: Path) -> None:
+    run_command(["git", "init", "-b", "main"], tmp_path, 30)
+    nested = tmp_path / "src" / "new package"
+    nested.mkdir(parents=True)
+    source = nested / "service.py"
+    source.write_text("def calculate():\n    return 1\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("ignored/\n", encoding="utf-8")
+    ignored = tmp_path / "ignored"
+    ignored.mkdir()
+    (ignored / "secret.py").write_text("VALUE = 1\n", encoding="utf-8")
 
+    report = inspect_git(tmp_path, detailed=True, write_reports=False)
+
+    assert "src/new package/service.py" in report.summary["untracked_files"]
+    assert "src/new package/service.py" in report.summary["changed_files"]
+    assert "src/" not in report.summary["changed_files"]
+    assert all(not path.startswith("ignored/") for path in report.summary["changed_files"])
+    assert any(symbol["name"] == "calculate" for symbol in report.summary["changed_symbols"])
