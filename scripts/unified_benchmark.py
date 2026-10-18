@@ -21,14 +21,39 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sized
 from pathlib import Path
+from typing import TypedDict, cast
 
 from ai_dev_tools.cache.repository import read_repository_index
 from ai_dev_tools.context import ContextOptions, build_context
 from ai_dev_tools.git.inspect import inspect_git
 from ai_dev_tools.runners.index import run_index
 from ai_dev_tools.semantic import run_semantic
+
+
+class BenchmarkEntry(TypedDict):
+    command: str
+    mode: str
+    process: dict[str, float]
+    internal: dict[str, float]
+    cli_process_overhead_ms: float
+
+
+class BenchmarkMetadata(TypedDict):
+    platform: str
+    architecture: str
+    python_version: str
+    python_baseline_startup_ms: float
+    repo_files: int
+    timestamp: str
+    samples_per_command: int
+    context_benchmark_modes_documentation: dict[str, str]
+
+
+class BenchmarkReport(TypedDict):
+    metadata: BenchmarkMetadata
+    benchmarks: list[BenchmarkEntry]
 
 
 def calc_stats(samples_ms: list[float]) -> dict[str, float]:
@@ -102,13 +127,13 @@ def _reset_context_cold(root: Path) -> None:
         idx.unlink()
 
 
-def run_benchmarks(project_root: Path, iterations: int = 10) -> dict[str, object]:
+def run_benchmarks(project_root: Path, iterations: int = 10) -> BenchmarkReport:
     resolved_root = project_root.resolve()
-    results: list[dict[str, object]] = []
+    results: list[BenchmarkEntry] = []
 
     # Pre-warm repository index
     idx = read_repository_index(resolved_root)
-    file_count = len(idx.get("entries", [])) if idx else 0
+    file_count = len(cast(Sized, idx.get("entries", []))) if idx else 0
     python_baseline_ms = _measure_python_baseline_startup(5)
 
     # 1. git status
@@ -298,7 +323,7 @@ def run_benchmarks(project_root: Path, iterations: int = 10) -> dict[str, object
         "cli_process_overhead_ms": round(p_ci["median_ms"] - i_ci["median_ms"], 2),
     })
 
-    report = {
+    report: BenchmarkReport = {
         "metadata": {
             "platform": f"{platform.system()} {platform.release()} ({platform.machine()})",
             "architecture": platform.machine(),
@@ -335,7 +360,7 @@ def main() -> None:
         print(f"Report written to {args.output}")
 
     print("=" * 115)
-    meta = report["metadata"]  # type: ignore[index]
+    meta = report["metadata"]
     baseline_str = f"pure startup baseline: {meta['python_baseline_startup_ms']} ms"
     print(
         f"Platform: {meta['platform']} | Python: {meta['python_version']} ({baseline_str}) | "
@@ -347,7 +372,7 @@ def main() -> None:
         f"{'Internal p95':>12} | {'Proc Med':>10} | {'Proc p95':>10} | {'CLI Overhead':>12}"
     )
     print("-" * 115)
-    for b in report["benchmarks"]:  # type: ignore[union-attr]
+    for b in report["benchmarks"]:
         im = b["internal"]["median_ms"]
         ip = b["internal"]["p95_ms"]
         pm = b["process"]["median_ms"]
