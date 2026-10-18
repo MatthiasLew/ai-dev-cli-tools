@@ -92,7 +92,11 @@ def test_smuggling_attempts_rejected_fail_closed_zero_network() -> None:
             mock_urlopen.assert_not_called()
 
 
-def test_cli_import_vs_mcp_controlled_origin(tmp_path: Path) -> None:
+def test_cli_import_vs_mcp_controlled_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # This test inspects queued events; background uploads would race those assertions.
+    monkeypatch.setenv("AI_DEV_COMMUNITY_TELEMETRY_NO_AUTO_FLUSH", "1")
     enable_telemetry("research")
     clear_queue()
 
