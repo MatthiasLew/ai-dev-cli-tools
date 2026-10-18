@@ -22,7 +22,7 @@ def inspect_git(
         command="git inspect" if detailed else "git status", project_root=settings.project_root
     )
     status_cmd = run_command(
-        ["git", "status", "--porcelain=v2", "--branch", "-z"],
+        ["git", "status", "--porcelain=v2", "--branch", "--untracked-files=all", "-z"],
         settings.project_root,
         30,
     )

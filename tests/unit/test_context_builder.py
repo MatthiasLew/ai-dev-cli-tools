@@ -357,3 +357,22 @@ def test_context_hierarchical_refinement_reports_rounds_and_limits(tmp_path: Pat
     assert refinement["added_count"] == 2
     selected = {item["path"] for item in report.summary["selected_files"]}
     assert {"app.py", "helper.py", "leaf.py"} <= selected
+
+
+def test_changed_only_context_includes_nested_untracked_source(tmp_path: Path) -> None:
+    from ai_dev_tools.utils.subprocess import run_command
+
+    run_command(["git", "init", "-b", "main"], tmp_path, 30)
+    (tmp_path / "src" / "new_package").mkdir(parents=True)
+    (tmp_path / "src" / "new_package" / "service.py").write_text(
+        "def calculate():\n    return 1\n", encoding="utf-8"
+    )
+
+    report = build_context(
+        tmp_path,
+        ContextOptions(changed_only=True, explain=True, task="review new service"),
+    )
+
+    selected = {item["path"]: item for item in report.summary["selected_files"]}
+    assert "src/new_package/service.py" in selected
+    assert selected["src/new_package/service.py"]["reason_code"] == "CHANGED_FILE"
