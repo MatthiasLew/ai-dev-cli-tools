@@ -22,7 +22,9 @@ jobs:
       - name: Validate tag and source version
         run: python scripts/validate_release.py --tag "$GITHUB_REF_NAME"
       - name: Install release tooling
-        run: python -m pip install --upgrade build twine
+        run: |
+          python -m pip install --upgrade build twine
+          python -m pip install -c requirements-dev.lock ruff
       - name: Build wheel and source distribution
         run: python -m build
       - name: Validate distributions
