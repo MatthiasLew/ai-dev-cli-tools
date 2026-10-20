@@ -121,6 +121,39 @@ def _smoke_entrypoint(entrypoint: Path, cwd: Path) -> None:
     mcp_response = json.loads(mcp_result.stdout)
     if mcp_response.get("result", {}).get("serverInfo", {}).get("name") != "ai-dev-cli-tools":
         raise SmokeError("installed MCP entrypoint did not initialize")
+    _smoke_check_duration(entrypoint, cwd)
+
+
+def _smoke_check_duration(entrypoint: Path, cwd: Path) -> None:
+    # Run real Ruff from the development environment through the installed wheel.
+    # The wheel's venv remains independent and contains no editable source install.
+    (cwd / "sample.py").write_text("value = 1\n", encoding="utf-8")
+    (cwd / ".ai-dev-tools.toml").write_text(
+        '[commands]\nlint = "python -m ruff check sample.py"\n', encoding="utf-8"
+    )
+    result = _run(
+        [str(entrypoint), "--json", "check", "--mode", "fast", "--no-cache"], cwd,
+        env={
+            **os.environ,
+            "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""),
+        },
+    )
+    _assert_report_json(result.stdout, "check")
+    payload = json.loads(result.stdout)
+    checks = payload["summary"]["results"]
+    if len(checks) != 1:
+        raise SmokeError(f"expected one installed Ruff check, found {len(checks)}")
+    check = checks[0]
+    duration = check.get("duration_seconds", 0)
+    if check.get("cached") is not False or duration <= 0:
+        raise SmokeError("installed non-cached Ruff check lost measured subprocess duration")
+    aggregate = payload["summary"]["execution"]["aggregate_subprocess_seconds"]
+    if duration != aggregate:
+        raise SmokeError("installed per-check duration differs from subprocess aggregate")
+    saved = json.loads((cwd / ".ai/reports/check-fast-latest.json").read_text(encoding="utf-8"))
+    if saved["summary"]["results"][0]["duration_seconds"] != duration:
+        raise SmokeError("saved report lost installed check duration")
+    print(f"Installed Ruff duration verified: {duration}s")
 
 
 def _assert_report_json(output: str, command: str) -> None:
@@ -137,7 +170,8 @@ def _assert_report_json(output: str, command: str) -> None:
 
 
 def _run(
-    command: list[str], cwd: Path, *, input_text: str | None = None
+    command: list[str], cwd: Path, *, input_text: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         command,
@@ -147,6 +181,7 @@ def _run(
         errors="replace",
         capture_output=True,
         input=input_text,
+        env=env,
         shell=False,
         timeout=180,
     )
