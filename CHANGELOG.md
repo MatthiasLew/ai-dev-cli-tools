@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.3.1 - 2026-10-20
+
+- Fix #111: Ship the measured check-duration correction missing from 1.3.0 and
+  verify a real non-cached Ruff invocation through the installed release wheel.
+- Include untracked source files in context and restore strict typing (#109).
+
 - Fix #110: Reject invalid context token budgets with a concise usage error and
   exit code 2, including supported categories, before generating artifacts.
 
