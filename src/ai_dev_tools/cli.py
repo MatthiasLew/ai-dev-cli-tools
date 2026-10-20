@@ -379,6 +379,16 @@ def main(argv: list[str] | None = None) -> int:
     command_started = time.monotonic()
     parser = build_parser()
     args = parser.parse_args(_normalize_global_flags(argv))
+    if args.command == "context" and args.context_command == "build":
+        from ai_dev_tools.context.tokens import CATEGORIES, parse_token_budgets
+
+        try:
+            parse_token_budgets(tuple(args.token_budget))
+        except ValueError as exc:
+            parser.error(
+                f"--token-budget: {exc}; expected category=N with a non-negative integer "
+                f"and no repeated categories; allowed categories: {', '.join(CATEGORIES)}"
+            )
     project_root = args.project.resolve()
     startup_seconds = time.monotonic() - command_started
     if args.command == "mcp" and args.mcp_command == "serve":

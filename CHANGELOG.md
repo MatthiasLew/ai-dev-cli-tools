@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix #110: Reject invalid context token budgets with a concise usage error and
+  exit code 2, including supported categories, before generating artifacts.
+
 - Fix #98: Detect tool versions using the resolved executable path, preserving
   subcommand arguments and avoiding mismatched Python versions on Windows.
 - Fix #99: Preserve measured per-check durations in reports instead of replacing
