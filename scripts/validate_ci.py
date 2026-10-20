@@ -61,13 +61,13 @@ REQUIRED_STEPS = [
 REQUIRED_AGENT_REPORT_TOKENS = [
     "security-events: write",
     "persist-credentials: false",
-    "github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2",
+    "github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee",
     "github.event.pull_request.head.repo.full_name == github.repository",
 ]
 
 REQUIRED_PINNED_TOOLCHAIN_ACTIONS = [
     "dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c",
-    "shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240",
+    "shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962",
 ]
 
 
