@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix #125: Ignore zero-error summaries when selecting failure diagnostics while
+  preserving actual errors, including those printed by successful commands.
+- Fix #126: Execute the PATH-resolved Windows executable for configured checks,
+  including cancellable checks, instead of relying on CreateProcess search order.
+
 ## 1.3.1 - 2026-10-20
 
 - Fix #111: Ship the measured check-duration correction missing from 1.3.0 and

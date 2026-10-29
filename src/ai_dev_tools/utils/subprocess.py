@@ -155,4 +155,5 @@ def _windows_batch_command(command: list[str]) -> list[str]:
         comspec = os.environ.get("COMSPEC", "cmd.exe")
         executable_command = [resolved, *command[1:]]
         return [comspec, "/d", "/c", *executable_command]
-    return command
+    # CreateProcess may search the parent interpreter's directory before PATH.
+    return [resolved, *command[1:]]
