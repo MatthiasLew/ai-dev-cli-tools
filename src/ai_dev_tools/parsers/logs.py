@@ -13,6 +13,7 @@ from ai_dev_tools.reporters.writer import write_json, write_markdown
 from ai_dev_tools.utils.subprocess import CommandResult
 
 ERROR_MARKERS = ("error", "failed", "failure", "traceback", "assertionerror", "exception")
+ZERO_ERROR_SUMMARY_PATTERN = re.compile(r"\berrors?\s*:\s*0\b(?!\.\d)", re.IGNORECASE)
 ANSI_PATTERN = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 PROGRESS_PATTERN = re.compile(r"\r[^\n]*")
 WARNING_PATTERN = re.compile(r"\bwarning\b", re.IGNORECASE)
@@ -367,7 +368,13 @@ def _parsed_from_output(
 def _summary_parts(output: str) -> dict[str, object]:
     lines = [line.strip() for line in clean_output(output).splitlines() if line.strip()]
     grouped = Counter(lines)
-    errors = [line for line in lines if any(marker in line.lower() for marker in ERROR_MARKERS)]
+    errors = [
+        line
+        for line in lines
+        if any(
+            marker in ZERO_ERROR_SUMMARY_PATTERN.sub("", line).lower() for marker in ERROR_MARKERS
+        )
+    ]
     frames = _project_frames("\n".join(lines))
     test_counts = parse_test_counts(output)
     tests_total = sum(test_counts.values())
