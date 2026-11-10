@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-  "watchdog>=4,<7",
+  "watchdog>=4,<8",
 ]
 
 [project.urls]
