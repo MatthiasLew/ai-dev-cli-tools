@@ -42,6 +42,8 @@ ai-dev benchmark gate <baseline.json> <candidate.json> --require-reported-tokens
 The corpus includes a repeated MCP `build_context` task that compares a forced full refresh with
 an explicitly acknowledged unchanged receipt. Both variants must retain the same outcome,
 precision, and recall while the receipt satisfies the configured token-reduction threshold.
+The context acknowledgement, adaptive selection and feedback delta suites store their trial
+evidence for a separate validator. Their fixture version is 2 to reflect the stricter oracles.
 
 Cold and warm results are compared within the same cache state. Give a suite an optional
 `warmup_command` array to prime the cache after each reset and before each measured warm trial.

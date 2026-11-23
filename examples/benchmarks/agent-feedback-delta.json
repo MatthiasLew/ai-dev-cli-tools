@@ -1,7 +1,7 @@
 {
     "schema_version": "1.0",
     "name": "agent-feedback-delta",
-    "fixture_version": "1",
+    "fixture_version": "2",
     "working_directory": "examples/benchmarks/fixtures/agent-workflow",
     "reset_command": [
         "python",

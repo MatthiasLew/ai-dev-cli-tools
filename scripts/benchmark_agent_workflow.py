@@ -15,6 +15,7 @@ from ai_dev_tools.runners.feedback_delta import apply_feedback_delta
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "examples" / "benchmarks" / "fixtures" / "agent-workflow"
 ADAPTIVE_FIXTURE = FIXTURE / ".ai" / "adaptive-context"
+TRIAL_EVIDENCE = FIXTURE / ".ai" / "benchmark-evidence.json"
 PRICING = FIXTURE / "src" / "pricing.py"
 FIXED = "return subtotal + tax"
 BROKEN = "return subtotal - tax"
@@ -246,6 +247,7 @@ def _adaptive(variant: str, started: float) -> int:
     visible = json.dumps(report.summary, separators=(",", ":"))
     selected = _selected_paths(report.summary)
     actionable = time.monotonic() - started
+    _write_evidence("adaptive", variant, report.summary)
     print(visible)
     _metrics(
         commands=3,
@@ -268,6 +270,7 @@ def _feedback_delta(variant: str, started: float) -> int:
     )
     visible = json.dumps(summary, separators=(",", ":"))
     actionable = time.monotonic() - started
+    _write_evidence("feedback-delta", variant, summary)
     print(visible)
     _metrics(
         commands=1,
@@ -280,14 +283,7 @@ def _feedback_delta(variant: str, started: float) -> int:
 
 def _validate(scenario: str) -> int:
     if scenario in {"adaptive", "feedback-delta"}:
-        if scenario == "feedback-delta":
-            print("verified:feedback-delta:semantic-state-preserved")
-            return 0
-        if not ADAPTIVE_FIXTURE.is_dir():
-            print("adaptive context fixture was not created", file=sys.stderr)
-            return 1
-        print("verified:adaptive:complete-selection")
-        return 0
+        return _validate_evidence(scenario)
     if scenario == "repair" and BROKEN in PRICING.read_text(encoding="utf-8"):
         print("repair was not applied", file=sys.stderr)
         return 1
@@ -297,6 +293,49 @@ def _validate(scenario: str) -> int:
         print(result.stderr, file=sys.stderr)
         return result.returncode
     print(f"verified:{scenario}:all-tests")
+    return 0
+
+
+def _write_evidence(scenario: str, variant: str, summary: dict[str, object]) -> None:
+    TRIAL_EVIDENCE.parent.mkdir(parents=True, exist_ok=True)
+    TRIAL_EVIDENCE.write_text(
+        json.dumps({"scenario": scenario, "variant": variant, "summary": summary}), encoding="utf-8"
+    )
+
+
+def _validate_evidence(scenario: str) -> int:
+    if not TRIAL_EVIDENCE.is_file():
+        print(f"Missing benchmark evidence for {scenario}.", file=sys.stderr)
+        return 1
+    evidence = json.loads(TRIAL_EVIDENCE.read_text(encoding="utf-8"))
+    assert evidence["scenario"] == scenario
+    summary = evidence["summary"]
+    adaptive_variant = evidence["variant"] == "ai-dev"
+    if scenario == "adaptive":
+        expected = {f"module-{index}.md": f"# Public module {index}" for index in range(1, 5)}
+        selected = {row["path"]: row["content"] for row in summary["selected_files"]}
+        assert selected.keys() == expected.keys()
+        assert all(selected[path].startswith(heading) for path, heading in expected.items())
+        assert summary["adaptive_context"]["enabled"] is adaptive_variant
+    else:
+        validation = summary["validation"]
+        context = summary["context"]
+        assert summary["decision"]["ready"] is True
+        assert summary["changes"]["files"] == ["src/app.py"]
+        assert validation["status"] == context["status"] == "success"
+        assert validation["checks_total"] == 24 and validation["checks_failed"] == 0
+        assert context["incremental"]["context_id"] == "stable-context"
+        assert summary["delta"]["state_fingerprint"] == "stable-state"
+        assert summary["delta"]["reused"] is adaptive_variant
+        if adaptive_variant:
+            assert validation["result_count"] == 24
+            assert context["selected_file_count"] == 1
+            assert summary["observations"]["current_evidence_id"] == "observation:stable"
+        else:
+            assert len(validation["results"]) == 24
+            assert [row["path"] for row in context["selected_files"]] == ["src/app.py"]
+            assert summary["observations"]["current"]["evidence_id"] == "observation:stable"
+    print(f"Verified {scenario} fixture outcome")
     return 0
 
 

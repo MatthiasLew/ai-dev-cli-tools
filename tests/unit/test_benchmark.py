@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from ai_dev_tools.cli import main
 from ai_dev_tools.runners.benchmark import (
     METRICS_PREFIX,
@@ -15,6 +17,7 @@ from ai_dev_tools.runners.benchmark import (
     run_benchmark,
 )
 from ai_dev_tools.utils.subprocess import CommandResult
+from scripts import benchmark_agent_workflow, benchmark_mcp_context_ack
 
 
 def _suite(root: Path) -> Path:
@@ -225,3 +228,43 @@ def test_versioned_agent_workflow_manifests_share_the_final_fixture() -> None:
         assert spec["working_directory"].name == "agent-workflow"
         assert set(spec["variants"]) == {"baseline", "ai-dev"}
         assert spec["validation_command"][-2:] == [scenario, "validate"]
+
+
+@pytest.mark.parametrize("scenario", ["adaptive", "feedback-delta"])
+def test_scripted_corpus_rejects_missing_trial_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str
+) -> None:
+    monkeypatch.setattr(benchmark_agent_workflow, "ADAPTIVE_FIXTURE", tmp_path)
+    monkeypatch.setattr(benchmark_agent_workflow, "TRIAL_EVIDENCE", tmp_path / "evidence.json")
+
+    assert benchmark_agent_workflow._validate(scenario) == 1
+
+
+def test_context_ack_oracle_rejects_acknowledged_empty_selection(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "variant": "ai-dev",
+                "first": {
+                    "status": "success",
+                    "summary": {"delta": {"state_fingerprint": "same"}, "selected_files": []},
+                },
+                "second": {
+                    "status": "success",
+                    "summary": {
+                        "delta": {
+                            "state_fingerprint": "same",
+                            "acknowledged_fingerprint": "same",
+                            "reused": True,
+                        },
+                        "context_receipt": {"selected_file_count": 0},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AssertionError):
+        benchmark_mcp_context_ack.validate(evidence)
