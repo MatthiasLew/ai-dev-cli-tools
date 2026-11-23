@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "name": "real-agent-repair",
+  "fixture_version": "1",
+  "working_directory": ".",
+  "reset_command": [
+    "python",
+    "scripts/benchmark_real_agent.py",
+    "reset"
+  ],
+  "validation_command": [
+    "python",
+    "scripts/benchmark_real_agent.py",
+    "validate"
+  ],
+  "variants": {
+    "baseline": [
+      "python",
+      "scripts/benchmark_real_agent.py",
+      "baseline"
+    ],
+    "ai-dev": [
+      "python",
+      "scripts/benchmark_real_agent.py",
+      "ai-dev"
+    ]
+  }
+}

@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from ai_dev_tools.cli import main
 from ai_dev_tools.runners.benchmark import (
     METRICS_PREFIX,
@@ -15,6 +17,7 @@ from ai_dev_tools.runners.benchmark import (
     run_benchmark,
 )
 from ai_dev_tools.utils.subprocess import CommandResult
+from scripts import benchmark_agent_workflow, benchmark_mcp_context_ack
 
 
 def _suite(root: Path) -> Path:
@@ -46,8 +49,9 @@ def test_benchmark_runs_and_compares_equivalent_variants(tmp_path: Path) -> None
 
     assert baseline.status == "success"
     assert baseline.summary["correct_trials"] == 2
-    assert baseline.summary["statistics"]["median_agent_visible_bytes"] > (
-        candidate.summary["statistics"]["median_agent_visible_bytes"]
+    assert (
+        baseline.summary["statistics"]["median_agent_visible_bytes"]
+        > (candidate.summary["statistics"]["median_agent_visible_bytes"])
     )
     baseline_path = Path(next(item.path for item in baseline.artifacts if item.kind == "json"))
     candidate_path = Path(next(item.path for item in candidate.artifacts if item.kind == "json"))
@@ -67,9 +71,7 @@ def test_benchmark_labels_client_and_can_require_provider_reported_tokens(tmp_pa
     baseline_path = Path(next(item.path for item in baseline.artifacts if item.kind == "json"))
     candidate_path = Path(next(item.path for item in candidate.artifacts if item.kind == "json"))
 
-    gated = gate_benchmarks(
-        tmp_path, baseline_path, candidate_path, require_reported_tokens=True
-    )
+    gated = gate_benchmarks(tmp_path, baseline_path, candidate_path, require_reported_tokens=True)
 
     assert candidate.summary["client"] == "codex"
     assert candidate.summary["statistics"]["reported_token_trials"] == 0
@@ -131,6 +133,50 @@ def test_compare_requires_different_variants_and_matching_cache_state(tmp_path: 
     assert compared.summary["reason_code"] == "INCOMPARABLE_BENCHMARK_RUNS"
 
 
+def test_benchmark_primes_warm_trials_after_each_reset(tmp_path: Path) -> None:
+    suite = _suite(tmp_path)
+    spec = json.loads(suite.read_text(encoding="utf-8"))
+    spec["reset_command"] = [
+        sys.executable,
+        "-c",
+        "from pathlib import Path; Path('cache').unlink(missing_ok=True)",
+    ]
+    spec["warmup_command"] = [
+        sys.executable,
+        "-c",
+        "from pathlib import Path; Path('cache').touch(exist_ok=False)",
+    ]
+    spec["variants"]["ai-dev"] = [
+        sys.executable,
+        "-c",
+        "from pathlib import Path; print(Path('cache').is_file())",
+    ]
+    spec["validation_command"] = [sys.executable, "-c", "print('verified')"]
+    suite.write_text(json.dumps(spec), encoding="utf-8")
+
+    cold = run_benchmark(tmp_path, suite, "ai-dev", trials=2, cache_state="cold")
+    warm = run_benchmark(tmp_path, suite, "ai-dev", trials=2, cache_state="warm")
+
+    assert cold.status == warm.status == "success"
+    assert cold.summary["trials"][0]["agent_visible_bytes"] == len(b"False\nverified")
+    for row in warm.summary["trials"]:
+        assert row["agent_visible_bytes"] == len(b"True\nverified")
+        assert row["exit_codes"]["warmup"] == 0
+    assert warm.summary["statistics"]["p95_seconds"] >= warm.summary["statistics"]["median_seconds"]
+
+
+def test_benchmark_does_not_measure_after_failed_warmup(tmp_path: Path) -> None:
+    suite = _suite(tmp_path)
+    spec = json.loads(suite.read_text(encoding="utf-8"))
+    spec["warmup_command"] = [sys.executable, "-c", "raise SystemExit(7)"]
+    suite.write_text(json.dumps(spec), encoding="utf-8")
+
+    report = run_benchmark(tmp_path, suite, "ai-dev", trials=1, cache_state="warm")
+
+    assert report.status == "failed"
+    assert report.summary["trials"][0]["exit_codes"]["warmup"] == 7
+
+
 def test_trial_uses_private_execution_metrics_without_counting_them_as_visible_output() -> None:
     reset = CommandResult(["reset"], 0, "", "", 0.1, False)
     execution = CommandResult(
@@ -169,6 +215,7 @@ def test_invalid_execution_metrics_remain_visible_and_do_not_override_defaults()
     assert f"{METRICS_PREFIX}[1, 2]" in visible
     assert "warning" in visible
 
+
 def test_versioned_agent_workflow_manifests_share_the_final_fixture() -> None:
     root = Path(__file__).resolve().parents[2]
     scenarios = ("repair", "affected", "multiturn", "monorepo")
@@ -181,3 +228,43 @@ def test_versioned_agent_workflow_manifests_share_the_final_fixture() -> None:
         assert spec["working_directory"].name == "agent-workflow"
         assert set(spec["variants"]) == {"baseline", "ai-dev"}
         assert spec["validation_command"][-2:] == [scenario, "validate"]
+
+
+@pytest.mark.parametrize("scenario", ["adaptive", "feedback-delta"])
+def test_scripted_corpus_rejects_missing_trial_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str
+) -> None:
+    monkeypatch.setattr(benchmark_agent_workflow, "ADAPTIVE_FIXTURE", tmp_path)
+    monkeypatch.setattr(benchmark_agent_workflow, "TRIAL_EVIDENCE", tmp_path / "evidence.json")
+
+    assert benchmark_agent_workflow._validate(scenario) == 1
+
+
+def test_context_ack_oracle_rejects_acknowledged_empty_selection(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "variant": "ai-dev",
+                "first": {
+                    "status": "success",
+                    "summary": {"delta": {"state_fingerprint": "same"}, "selected_files": []},
+                },
+                "second": {
+                    "status": "success",
+                    "summary": {
+                        "delta": {
+                            "state_fingerprint": "same",
+                            "acknowledged_fingerprint": "same",
+                            "reused": True,
+                        },
+                        "context_receipt": {"selected_file_count": 0},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AssertionError):
+        benchmark_mcp_context_ack.validate(evidence)

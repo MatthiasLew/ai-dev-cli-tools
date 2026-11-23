@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "name": "repository-monorepo",
+  "fixture_version": "1",
+  "working_directory": ".",
+  "reset_command": [
+    "python",
+    "scripts/benchmark_repository.py",
+    "monorepo",
+    "reset"
+  ],
+  "warmup_command": [
+    "python",
+    "scripts/benchmark_repository.py",
+    "monorepo",
+    "warmup"
+  ],
+  "validation_command": [
+    "python",
+    "scripts/benchmark_repository.py",
+    "monorepo",
+    "validate"
+  ],
+  "variants": {
+    "baseline": [
+      "python",
+      "scripts/benchmark_repository.py",
+      "monorepo",
+      "baseline"
+    ],
+    "ai-dev": [
+      "python",
+      "scripts/benchmark_repository.py",
+      "monorepo",
+      "ai-dev"
+    ]
+  }
+}

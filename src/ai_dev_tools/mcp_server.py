@@ -107,7 +107,14 @@ class LocalMcpServer:
         return None
 
     def _call_tool(self, params: JsonObject) -> JsonObject:
-        _validate_keys(params, {"name", "arguments"})
+        _validate_keys(params, {"name", "arguments", "_meta"})
+        metadata = params.get("_meta", {})
+        if not isinstance(metadata, dict):
+            raise ToolInputError("Request metadata must be an object.")
+        if "progressToken" in metadata:
+            token = metadata["progressToken"]
+            if isinstance(token, bool) or not isinstance(token, (str, int, float)):
+                raise ToolInputError("Progress token must be a string or number.")
         name = params.get("name")
         if not isinstance(name, str) or name not in self._tools:
             raise ToolInputError("Unknown MCP tool.")

@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "name": "repository-small",
+  "fixture_version": "1",
+  "working_directory": ".",
+  "reset_command": [
+    "python",
+    "scripts/benchmark_repository.py",
+    "small",
+    "reset"
+  ],
+  "warmup_command": [
+    "python",
+    "scripts/benchmark_repository.py",
+    "small",
+    "warmup"
+  ],
+  "validation_command": [
+    "python",
+    "scripts/benchmark_repository.py",
+    "small",
+    "validate"
+  ],
+  "variants": {
+    "baseline": [
+      "python",
+      "scripts/benchmark_repository.py",
+      "small",
+      "baseline"
+    ],
+    "ai-dev": [
+      "python",
+      "scripts/benchmark_repository.py",
+      "small",
+      "ai-dev"
+    ]
+  }
+}

@@ -57,16 +57,12 @@ def test_benchmark_gate_enforces_efficiency_and_quality_thresholds(tmp_path: Pat
     assert failed.summary["rollback_advised"] is True
 
     _run(candidate, "ai-dev", seconds=11, tokens=90)
-    reduced = gate_benchmarks(
-        tmp_path, baseline, candidate, min_token_reduction=15
-    )
+    reduced = gate_benchmarks(tmp_path, baseline, candidate, min_token_reduction=15)
     assert reduced.status == "failed"
     assert reduced.summary["checks"]["token_reduction"] is False
 
     _run(candidate, "ai-dev", seconds=11, tokens=80)
-    reduced = gate_benchmarks(
-        tmp_path, baseline, candidate, min_token_reduction=15
-    )
+    reduced = gate_benchmarks(tmp_path, baseline, candidate, min_token_reduction=15)
     assert reduced.status == "success"
 
 
@@ -78,13 +74,41 @@ def test_gate_advises_adoption_only_for_faster_lower_token_candidate(
     _run(baseline, "baseline", seconds=10, tokens=100)
     _run(candidate, "ai-dev", seconds=8, tokens=75)
 
-    report = gate_benchmarks(
-        tmp_path, baseline, candidate, min_token_reduction=20
-    )
+    report = gate_benchmarks(tmp_path, baseline, candidate, min_token_reduction=20)
 
     assert report.status == "success"
     assert report.summary["decision"] == "adopt_candidate"
     assert report.summary["requires_human_approval"] is True
+
+
+def test_gate_requires_usage_on_both_sides_and_checks_output_tokens(tmp_path: Path) -> None:
+    baseline, candidate = (tmp_path / name for name in ("baseline.json", "candidate.json"))
+    _run(baseline, "baseline", seconds=10, tokens=100)
+    _run(candidate, "ai-dev", seconds=10, tokens=100)
+
+    def add_usage(path: Path, output_tokens: int) -> None:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["summary"]["statistics"].update(
+            reported_token_trials=1,
+            median_reported_input_tokens=80,
+            median_reported_output_tokens=output_tokens,
+        )
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    add_usage(candidate, 80)
+    missing = gate_benchmarks(tmp_path, baseline, candidate, require_reported_tokens=True)
+    assert missing.status == "failed"
+    assert missing.summary["checks"]["reported_tokens"] is False
+
+    add_usage(baseline, 40)
+    larger = gate_benchmarks(tmp_path, baseline, candidate, require_reported_tokens=True)
+    assert larger.status == "failed"
+    assert larger.summary["checks"]["reported_token_regression"] is False
+
+    add_usage(candidate, 40)
+    assert gate_benchmarks(tmp_path, baseline, candidate, require_reported_tokens=True).status == (
+        "success"
+    )
 
 
 def test_corpus_runs_every_suite_and_aggregates_gates(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

@@ -42,6 +42,9 @@ NODE_SUMMARY_PATTERN = re.compile(
     r"[ \t]+(?P<count>\d+)[ \t]*$",
     re.MULTILINE,
 )
+NODE_NON_FAILURE_PATTERN = re.compile(r"^(?:[✔﹣]\s|ok\s+\d+\b|# Subtest:)")
+NODE_LOSSY_SPEC_PATTERN = re.compile(r"^\?\s.+ \(\d+(?:\.\d+)?ms\)$")
+NODE_FAIL_PATTERN = re.compile(r"^(?:✖\s|not ok\s+\d+\b)")
 
 TEST_KINDS = {
     "passed": "passed",
@@ -186,10 +189,10 @@ class GenericParser:
 
 
 BUILTIN_PARSERS: tuple[ToolOutputParser, ...] = (
+    NodeTestParser(),
     RegexToolParser("ruff", ("ruff", "would reformat"), "high"),
     RegexToolParser("mypy", ("mypy", "success: no issues found", "checked 1 source file"), "high"),
     RegexToolParser("pytest", ("pytest", "failed tests/", "= short test summary info ="), "high"),
-    NodeTestParser(),
     RegexToolParser("coverage", ("coverage", "fail_under"), "medium"),
     RegexToolParser("jest", ("jest", "test suites:", "fail src/"), "high"),
     RegexToolParser("vitest", ("vitest", "test files", "duration"), "high"),
@@ -340,7 +343,7 @@ def _parsed_from_output(
     tool: str, parser: str, confidence: str, command: CommandResult
 ) -> ParsedToolResult:
     cleaned = clean_output(command.combined_output)
-    summary = _summary_parts(cleaned)
+    summary = _summary_parts(cleaned, node_test=parser == "node-test")
     failed = _as_int(summary.get("failed")) + _as_int(summary.get("errors"))
     status = "failed" if command.exit_code != 0 or failed else "success"
     first_failure = _first_failure(tool, cleaned, summary)
@@ -365,18 +368,21 @@ def _parsed_from_output(
     )
 
 
-def _summary_parts(output: str) -> dict[str, object]:
+def _summary_parts(output: str, *, node_test: bool = False) -> dict[str, object]:
     lines = [line.strip() for line in clean_output(output).splitlines() if line.strip()]
     grouped = Counter(lines)
-    errors = [
-        line
-        for line in lines
-        if any(
-            marker in ZERO_ERROR_SUMMARY_PATTERN.sub("", line).lower() for marker in ERROR_MARKERS
-        )
-    ]
-    frames = _project_frames("\n".join(lines))
     test_counts = parse_test_counts(output)
+    diagnostics = lines
+    if node_test:
+        diagnostics = [
+            line
+            for line in lines
+            if not NODE_NON_FAILURE_PATTERN.match(line)
+            # A lossy console can render both success and failure glyphs as '?'.
+            and not (test_counts["failed"] == 0 and NODE_LOSSY_SPEC_PATTERN.match(line))
+        ]
+    errors = [line for line in diagnostics if _is_error_line(line, node_test=node_test)]
+    frames = _project_frames("\n".join(lines))
     tests_total = sum(test_counts.values())
     js = JEST_VITEST_PATTERN.search(output)
     if js and js.group("total"):
@@ -398,8 +404,15 @@ def _summary_parts(output: str) -> dict[str, object]:
     }
 
 
+def _is_error_line(line: str, *, node_test: bool) -> bool:
+    if node_test and NODE_FAIL_PATTERN.match(line):
+        return True
+    text = ZERO_ERROR_SUMMARY_PATTERN.sub("", line).lower()
+    return any(marker in text for marker in ERROR_MARKERS)
+
+
 def _first_failure(tool: str, output: str, summary: dict[str, object]) -> FailureDetails | None:
-    match = PYTEST_FAILURE_PATTERN.search(output)
+    match = None if tool == "node-test" else PYTEST_FAILURE_PATTERN.search(output)
     if match:
         message = match.group("message") or _string_or_none(summary.get("first_failure_reason"))
         return FailureDetails(

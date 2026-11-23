@@ -113,14 +113,25 @@ def _smoke_entrypoint(entrypoint: Path, cwd: Path) -> None:
             "params": {"protocolVersion": "2025-06-18"},
         }
     )
+    project_status = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "project_status", "_meta": {"progressToken": "wheel-smoke"}},
+        }
+    )
     mcp_result = _run(
         [str(entrypoint), "--project", str(cwd), "mcp", "serve"],
         cwd,
-        input_text=initialize + "\n",
+        input_text=f"{initialize}\n{project_status}\n",
     )
-    mcp_response = json.loads(mcp_result.stdout)
-    if mcp_response.get("result", {}).get("serverInfo", {}).get("name") != "ai-dev-cli-tools":
+    initialized, status_response = (json.loads(line) for line in mcp_result.stdout.splitlines())
+    if initialized.get("result", {}).get("serverInfo", {}).get("name") != "ai-dev-cli-tools":
         raise SmokeError("installed MCP entrypoint did not initialize")
+    status = status_response.get("result", {})
+    if status.get("isError") is not False or "structuredContent" not in status:
+        raise SmokeError("installed MCP entrypoint did not accept tools/call request metadata")
     _smoke_check_duration(entrypoint, cwd)
 
 

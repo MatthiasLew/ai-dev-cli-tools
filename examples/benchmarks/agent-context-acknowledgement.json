@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0",
   "name": "agent-context-acknowledgement",
-  "fixture_version": "1",
+  "fixture_version": "2",
   "working_directory": ".",
-  "reset_command": ["python", "-c", "pass"],
-  "validation_command": ["python", "-c", "print('unchanged-context-confirmed')"],
+  "reset_command": ["python", "scripts/benchmark_mcp_context_ack.py", "reset"],
+  "validation_command": ["python", "scripts/benchmark_mcp_context_ack.py", "validate"],
   "variants": {
     "baseline": ["python", "scripts/benchmark_mcp_context_ack.py", "baseline"],
     "ai-dev": ["python", "scripts/benchmark_mcp_context_ack.py", "ai-dev"]

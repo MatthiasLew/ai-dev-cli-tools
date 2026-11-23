@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from ai_dev_tools.mcp_server import (
     MCP_PROTOCOL_VERSION,
     SERVER_INSTRUCTIONS,
@@ -93,6 +95,15 @@ def test_stdio_transport_returns_json_lines_and_ignores_notifications(tmp_path: 
             "params": {},
         },
         _request("ping", request_id=2),
+        _request(
+            "tools/call",
+            {
+                "name": "project_status",
+                "arguments": {},
+                "_meta": {"progressToken": "request-3", "example.com/client": {"trace": 1}},
+            },
+            request_id=3,
+        ),
     ]
     reader = io.StringIO("\n".join(json.dumps(item) for item in messages) + "\n")
     writer = io.StringIO()
@@ -100,8 +111,41 @@ def test_stdio_transport_returns_json_lines_and_ignores_notifications(tmp_path: 
     assert serve_mcp(tmp_path, reader, writer) == 0
 
     responses = [json.loads(line) for line in writer.getvalue().splitlines()]
-    assert [item["id"] for item in responses] == [1, 2]
+    assert [item["id"] for item in responses] == [1, 2, 3]
     assert responses[1]["result"] == {}
+    assert responses[2]["result"]["isError"] is False
+    assert responses[2]["result"]["structuredContent"]["command"] == "project status"
+
+
+@pytest.mark.parametrize("metadata", [{}, {"progressToken": 0}])
+def test_tools_call_accepts_request_metadata(tmp_path: Path, metadata: object) -> None:
+    response = LocalMcpServer(tmp_path).handle(
+        _request("tools/call", {"name": "project_status", "_meta": metadata})
+    )
+    assert response is not None
+    assert response["result"]["isError"] is False
+
+
+@pytest.mark.parametrize(
+    ("params", "error"),
+    [
+        ({"_meta": None}, "Request metadata must be an object."),
+        ({"_meta": []}, "Request metadata must be an object."),
+        ({"_meta": {"progressToken": True}}, "Progress token must be a string or number."),
+        ({"_meta": {"progressToken": None}}, "Progress token must be a string or number."),
+        ({"_meta": {}, "unexpected": True}, "Unknown tool arguments: unexpected"),
+        ({"_meta": {}, "arguments": {"unexpected": True}}, "Unknown tool arguments: unexpected"),
+        ({"_meta": {}, "arguments": {"_meta": {}}}, "Unknown tool arguments: _meta"),
+    ],
+)
+def test_tools_call_rejects_invalid_metadata_and_arguments(
+    tmp_path: Path, params: dict[str, object], error: str
+) -> None:
+    response = LocalMcpServer(tmp_path).handle(
+        _request("tools/call", {"name": "project_status", **params})
+    )
+    assert response is not None
+    assert response["error"] == {"code": -32602, "message": error}
 
 
 def test_stdio_transport_reports_parse_and_method_errors(tmp_path: Path) -> None:
