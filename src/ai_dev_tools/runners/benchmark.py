@@ -61,11 +61,17 @@ def run_benchmark(
 
     rows: list[dict[str, Any]] = []
     working = Path(spec["working_directory"])
+    warmup_command = spec["warmup_command"] if cache_state == "warm" else None
     for number in range(1, trials + 1):
         reset = run_command(spec["reset_command"], working, timeout_seconds)
+        warmup = (
+            run_command(warmup_command, working, timeout_seconds)
+            if warmup_command is not None and reset.exit_code == 0
+            else None
+        )
         execution = (
             run_command(variants[variant], working, timeout_seconds)
-            if reset.exit_code == 0
+            if reset.exit_code == 0 and (warmup is None or warmup.exit_code == 0)
             else _skipped(variants[variant])
         )
         validation = (
@@ -73,7 +79,12 @@ def run_benchmark(
             if reset.exit_code == 0 and execution.exit_code == 0
             else _skipped(spec["validation_command"])
         )
-        rows.append(_trial_row(number, reset, execution, validation))
+        row = _trial_row(number, reset, execution, validation)
+        if warmup is not None:
+            row["exit_codes"]["warmup"] = warmup.exit_code
+            row["warmup_seconds"] = round(warmup.duration_seconds, 3)
+            row["timed_out"] |= warmup.timed_out
+        rows.append(row)
 
     correct = sum(bool(row["correct"]) for row in rows)
     report.status = "success" if correct == len(rows) else "failed"
@@ -85,6 +96,7 @@ def run_benchmark(
         "variant": variant,
         "client": client,
         "cache_state": cache_state,
+        "cache_preparation": "reset_and_warmup" if warmup_command is not None else "reset_only",
         "trials": rows,
         "statistics": _statistics(rows),
         "correct_trials": correct,
@@ -223,6 +235,7 @@ def gate_benchmarks(
         report.issues.extend(comparison.issues)
         return report
     try:
+        baseline_summary = _load_run(project_root, baseline)["summary"]
         candidate_run = _load_run(project_root, candidate)
         stats = candidate_run["summary"]["statistics"]
     except (OSError, ValueError, json.JSONDecodeError, KeyError) as exc:
@@ -245,12 +258,22 @@ def gate_benchmarks(
             _stat_value(stats, "total_false_negative_items") <= max_false_negatives
         ),
         "reported_tokens": (
-            _stat_value(stats, "reported_token_trials") == len(candidate_run["summary"]["trials"])
+            _stat_value(baseline_summary["statistics"], "reported_token_trials")
+            == len(baseline_summary["trials"])
+            and _stat_value(stats, "reported_token_trials")
+            == len(candidate_run["summary"]["trials"])
             if require_reported_tokens
             else True
         ),
         "reported_token_regression": (
-            _percent_within(metrics["median_reported_input_tokens"], max_token_regression)
+            all(
+                _percent_within(metrics[f"median_reported_{kind}_tokens"], max_token_regression)
+                and (
+                    metrics[f"median_reported_{kind}_tokens"]["baseline"] > 0
+                    or metrics[f"median_reported_{kind}_tokens"]["candidate"] == 0
+                )
+                for kind in ("input", "output")
+            )
             if require_reported_tokens
             else True
         ),
@@ -388,6 +411,9 @@ def _load_spec(project_root: Path, path: Path) -> dict[str, Any]:
         "working_directory": working,
         "variants": variants,
         "reset_command": _command(data.get("reset_command"), "reset_command"),
+        "warmup_command": (
+            _command(data["warmup_command"], "warmup_command") if "warmup_command" in data else None
+        ),
         "validation_command": _command(data.get("validation_command"), "validation_command"),
     }
 
@@ -429,6 +455,7 @@ def _trial_row(
             reset.duration_seconds + execution.duration_seconds + validation.duration_seconds,
             3,
         ),
+        "execution_seconds": round(execution.duration_seconds, 3),
         "time_to_actionable_result_seconds": round(reset.duration_seconds + float(actionable), 3),
         "commands": int(commands),
         "validation_subprocesses": int(validation_subprocesses),
@@ -519,8 +546,12 @@ def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
         return [float(row[key]) for row in rows]
 
     durations = values("duration_seconds")
+    execution = values("execution_seconds")
     return {
         "median_seconds": round(statistics.median(durations), 3),
+        "p95_seconds": _p95(durations),
+        "median_execution_seconds": round(statistics.median(execution), 3),
+        "p95_execution_seconds": _p95(execution),
         "duration_stdev_seconds": (
             round(statistics.stdev(durations), 3) if len(durations) > 1 else 0.0
         ),
@@ -546,12 +577,15 @@ def _statistics(rows: list[dict[str, Any]]) -> dict[str, float]:
             sum(
                 1
                 for row in rows
-                if int(row["reported_input_tokens"]) > 0
-                or int(row["reported_output_tokens"]) > 0
+                if int(row["reported_input_tokens"]) > 0 or int(row["reported_output_tokens"]) > 0
             ),
             3,
         ),
     }
+
+
+def _p95(values: list[float]) -> float:
+    return round(sorted(values)[math.ceil(0.95 * len(values)) - 1], 3)
 
 
 def _stat_value(stats: dict[str, Any], key: str) -> float:
@@ -615,6 +649,10 @@ def _validate_comparable(left: dict[str, Any], right: dict[str, Any]) -> None:
         raise ValueError("Benchmark variants must differ")
     if left["summary"].get("client", "generic") != right["summary"].get("client", "generic"):
         raise ValueError("Benchmark client differs")
+    if left["summary"].get("cache_preparation", "reset_only") != right["summary"].get(
+        "cache_preparation", "reset_only"
+    ):
+        raise ValueError("Benchmark cache preparation differs")
 
 
 def _outcomes(summary: dict[str, Any]) -> list[str]:

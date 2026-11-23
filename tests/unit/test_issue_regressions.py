@@ -48,6 +48,61 @@ def test_numeric_error_counts_survive_summary() -> None:
     assert parsed["status"] == "failed"
 
 
+@pytest.mark.parametrize(
+    "passing_line",
+    [
+        "✔ storage failure rolls back (1ms)",
+        "? storage failure rolls back (1ms)",
+        "  ✔ ignores FAILED tests/x.py - example (1ms)",
+    ],
+)
+def test_node_passing_case_is_not_failure_evidence(passing_line: str) -> None:
+    output = f"{passing_line}\nℹ tests 1\nℹ pass 1\nℹ fail 0\nℹ skipped 0\n"
+    parsed = parse_tool_output("npm test", output, 0)
+
+    assert parsed["parser"] == "node-test"
+    assert parsed["status"] == "success"
+    assert parsed["passed"] == 1
+    assert parsed["failed"] == 0
+    assert parsed["line_count"] == 5
+    assert parsed["first_failure"] is None
+    assert parsed["first_failure_reason"] is None
+
+
+def test_node_tap_subtest_descriptions_are_not_failure_evidence() -> None:
+    output = (
+        "TAP version 13\n# Subtest: storage failure rolls back\n"
+        "ok 1 - storage failure rolls back\n1..1\n# tests 1\n# pass 1\n# fail 0\n"
+    )
+    parsed = parse_tool_output("node --test", output)
+
+    assert parsed["status"] == "success"
+    assert parsed["first_failure"] is None
+    assert parsed["first_failure_reason"] is None
+
+
+@pytest.mark.parametrize(
+    ("failure_line", "exit_code", "failures"),
+    [
+        ("✖ writes a record (1ms)", 1, 1),
+        ("not ok 2 - writes a record", 1, 1),
+        ("Error: process terminated", 2, 0),
+    ],
+)
+def test_node_reports_real_failures_after_passing_case(
+    failure_line: str, exit_code: int, failures: int
+) -> None:
+    output = (
+        f"✔ handles storage failure (1ms)\n{failure_line}\n"
+        f"ℹ tests {1 + failures}\nℹ pass 1\nℹ fail {failures}\nℹ skipped 0\n"
+    )
+    parsed = parse_tool_output("npm test", output, exit_code)
+
+    assert parsed["status"] == "failed"
+    assert parsed["failed"] == failures
+    assert parsed["first_failure_reason"] == failure_line
+
+
 @pytest.mark.parametrize("extension", ["mjs", "cjs", "js", "unknown"])
 def test_selected_tests_keep_broad_command(extension: str) -> None:
     plan = [CheckTask("npm test", "unit_tests", ["npm", "test"], "medium", "detected")]

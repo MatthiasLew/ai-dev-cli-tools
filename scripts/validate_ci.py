@@ -41,7 +41,7 @@ REQUIRED_PYPI_PUBLISH_TOKENS = [
 ]
 REQUIRED_STEPS = [
     "ruff check .",
-    "mypy src tests",
+    "mypy src tests scripts",
     "coverage run -m pytest",
     "coverage report --fail-under=90",
     "python -m build",

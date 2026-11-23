@@ -95,6 +95,10 @@ than running it as an unsupervised background daemon.
 
 ## Compatibility and testing
 
+`tools/call` accepts the optional MCP `params._meta` object. The server validates the shape of
+the optional `progressToken` and accepts extension metadata. Tool handlers receive only the
+validated `params.arguments`. The server does not send progress notifications.
+
 The source test suite verifies initialization, tool discovery, notifications, parse errors,
 strict arguments, preview defaults, read-only status behavior, concise structured results, CLI
 wiring, and installed-wheel initialization. MCP tool names and required input fields should
