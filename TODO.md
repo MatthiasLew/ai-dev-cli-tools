@@ -14,7 +14,7 @@ current acceptance criteria. The roadmap documents the capabilities shipped in t
 
 | Priority | Issues |
 | --- | --- |
-| P0 | [MCP metadata #131](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/131), [correctness gate #134](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/134), [agent measurement #133](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/133) |
+| P0 | [MCP metadata #131](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/131), [correctness gate #134](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/134), [agent measurement #133](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/133), [managed stop race #146](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/146) |
 | P1 | [Node diagnostics #128](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/128), [repository navigation #136](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/136), [MCP symbol lookup #137](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/137), [module responsibilities #135](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/135), [adoption #138](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/138), [failure loops #139](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/139), [affected tests #140](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/140) |
 | P2 | [Verified repository knowledge #141](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/141), [FTS5 evaluation #142](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/142), [native profiling #143](https://github.com/MatthiasLew/ai-dev-cli-tools/issues/143) |
 

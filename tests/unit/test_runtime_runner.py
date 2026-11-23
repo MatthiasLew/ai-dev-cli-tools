@@ -354,6 +354,29 @@ def test_stop_explain_and_timeout(monkeypatch, tmp_path: Path) -> None:  # type:
     assert timed_out.issues[0].code == "STOP_TIMEOUT"
 
 
+def test_stop_observes_metadata_published_between_reads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    metadata = tmp_path / ".ai" / "runtime" / "process.json"
+    metadata.parent.mkdir(parents=True)
+    pending = metadata.with_suffix(".json.tmp")
+    pending.write_text('{"status": "running", "token": "owned-runtime"}', encoding="utf-8")
+    read = runner._read_json
+
+    def read_during_publication(path: Path) -> dict[str, object]:
+        if path == pending:
+            pending.replace(metadata)
+        return read(path)
+
+    monkeypatch.setattr(runner, "_read_json", read_during_publication)
+
+    report = stop_application(tmp_path, explain=True)
+
+    assert report.status == "success"
+    assert report.summary["status"] == "would_request_stop"
+    assert "token" not in report.summary["state"]
+
+
 def test_resolve_run_plan_handles_invalid_and_yarn_packages(tmp_path: Path) -> None:
     package = tmp_path / "package.json"
     package.write_text("{", encoding="utf-8")

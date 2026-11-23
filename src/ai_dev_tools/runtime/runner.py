@@ -484,7 +484,8 @@ def _read_control_state(path: Path) -> dict[str, object]:
         )
     ):
         return pending
-    return state
+    # The supervisor may publish the temporary file between the two reads.
+    return state or _read_json(path)
 
 
 def _heartbeat_is_fresh(state: dict[str, object]) -> bool:
